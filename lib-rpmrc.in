@@ -4,6 +4,7 @@
 dbpath:		@varprefix@/lib/rpm
 topdir:		@prefix@/src/redhat
 tmppath:	@tmpdir@
+cpiobin:	@CPIOBIN@
 gzipbin:	@GZIPBIN@
 defaultdocdir:  @prefix@/doc
 fixperms:	@FIXPERMS@
@@ -21,8 +22,6 @@ optflags: alpha -O2
 optflags: sparc -O2
 optflags: m68k -O2 -fomit-frame-pointer
 optflags: ppc -O2 -fsigned-char
-optflags: hppa1.0 -O2 -mpa-risc-1-0
-optflags: hppa1.1 -O2 -mpa-risc-1-0
 
 #############################################################
 # Canonical arch names and numbers
@@ -39,13 +38,17 @@ arch_canon: 	sparc:	sparc	3
 arch_canon: 	sun4:	sparc	3
 arch_canon: 	sun4m:	sparc	3
 arch_canon: 	sun4c:	sparc	3
-arch_canon:     sun4d:  sparc   3
 # This is really a place holder for MIPS.
 arch_canon:	mips:	mips	4
 arch_canon:	ppc:	ppc	5
+# This is really a place holder for 68000
 arch_canon:	m68k:	m68k	6
+# This is wrong. We really need globbing in here :-(
 arch_canon:	IP:	sgi	7
-arch_canon:     rs6000: rs6000  8
+arch_canon:     IP22:   sgi     7
+
+# I don't know what this number is, but...
+arch_canon:    000050703700:   rs6000  8
 
 arch_canon:    9000/712:       hppa1.1 9
 
@@ -66,9 +69,6 @@ os_canon:        HP-UX: hpux10  6
 os_canon:         OSF1: osf1    7
 os_canon:      FreeBSD: FreeBSD 8
 os_canon:       SCO_SV: SCO_SV3.2v5.0.2  9
-os_canon:	IRIX64: Irix64  10
-os_canon:     NEXTSTEP: NextStep 11
-os_canon:       BSD/OS: BSD_OS 12
 
 #############################################################
 # For a given uname().machine, the default build arch
@@ -118,23 +118,3 @@ arch_compat: usparc: sparc
 arch_compat: sparc: noarch
 
 arch_compat: ppc: noarch
-arch_compat: mips: noarch
-
-arch_compat: hppa1.1: hppa1.0
-arch_compat: hppa1.0: noarch
-
-os_compat:   IRIX64: IRIX
-
-buildarch_compat: i986: i886
-buildarch_compat: i886: i786
-buildarch_compat: i786: i686
-buildarch_compat: i686: i586
-buildarch_compat: i586: i486
-buildarch_compat: i486: i386
-buildarch_compat: i386: noarch
-
-buildarch_compat: sparc: noarch
-buildarch_compat: alpha: noarch
-buildarch_compat: m68k: noarch
-buildarch_compat: ppc: noarch
-buildarch_compat: mips: noarch
