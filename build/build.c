@@ -3,12 +3,8 @@
  * build.c - routines for preparing and building the sources
  */
 
-#include "miscfn.h"
-
 #include <stdlib.h>
 #include <stdio.h>
-#include <sys/time.h>
-#include <sys/resource.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -27,7 +23,6 @@
 #include "misc.h"
 #include "pack.h"
 #include "popt/popt.h"
-#include "config.h"
 
 #include "names.h"
 
@@ -56,21 +51,16 @@ struct Script *openScript(Spec spec, int builddir, char *name)
 {
     struct Script *script = malloc(sizeof(struct Script));
     struct PackageRec *main_package = spec->packages;
-    char *s, * arch, * os;
-    int fd;
+    char *s;
     int_32 foo;
-
-    rpmGetArchInfo(&arch, NULL);
-    rpmGetOsInfo(&os, NULL);
 
     if (! main_package) {
 	rpmError(RPMERR_INTERNAL, "Empty main package");
 	exit(RPMERR_INTERNAL);
     }
     
-    if (makeTempFile(NULL, &script->name, &fd))
-	exit(1);
-    script->file = fdopen(fd, "w");
+    script->name = tempnam(rpmGetVar(RPMVAR_TMPPATH), "rpmbuild");
+    script->file = fopen(script->name, "w");
 
     /* Prepare the script */
     fprintf(script->file,
@@ -80,8 +70,8 @@ struct Script *openScript(Spec spec, int builddir, char *name)
     fprintf(script->file, "RPM_BUILD_DIR=\"%s\"\n", rpmGetVar(RPMVAR_BUILDDIR));
     fprintf(script->file, "RPM_DOC_DIR=\"%s\"\n", rpmGetVar(RPMVAR_DEFAULTDOCDIR));
     fprintf(script->file, "RPM_OPT_FLAGS=\"%s\"\n", rpmGetVar(RPMVAR_OPTFLAGS));
-    fprintf(script->file, "RPM_ARCH=\"%s\"\n", arch);
-    fprintf(script->file, "RPM_OS=\"%s\"\n", os);
+    fprintf(script->file, "RPM_ARCH=\"%s\"\n", rpmGetArchName());
+    fprintf(script->file, "RPM_OS=\"%s\"\n", rpmGetOsName());
     if (rpmGetVar(RPMVAR_ROOT)) {
 	fprintf(script->file, "RPM_ROOT_DIR=\"%s\"\n", rpmGetVar(RPMVAR_ROOT));
     } else {
@@ -118,17 +108,6 @@ struct Script *openScript(Spec spec, int builddir, char *name)
 	fprintf(script->file, "cd %s\n\n", build_subdir);
     }
 
-    /* We do a litte sanity check here just to make sure we do not wipe */
-    /* the system by accident...                                        */
-    if (rpmGetVar(RPMVAR_BUILDROOT)) {
-	fprintf(script->file, "if [ -z \"$RPM_BUILD_ROOT\" -o \"$RPM_BUILD_ROOT\" = \"/\" ]; then\n");
-	fprintf(script->file, "  echo\n");
-	fprintf(script->file, "  echo 'Warning: Spec contains BuildRoot: tag that is either empty or is set to \"/\"'\n");
-	fprintf(script->file, "  echo\n");
-	fprintf(script->file, "  exit 1\n");
-	fprintf(script->file, "fi\n");
-    }
-    
     return script;
 }
 
@@ -256,7 +235,6 @@ static int doSetupMacro(Spec spec, StringBuf sb, char *line)
 	    { NULL, 'n', POPT_ARG_STRING, &dirName, 0 },
 	    { NULL, 'T', 0, &skipDefaultAction, 0 },
 	    { NULL, 'q', 0, &quietly, 0 },
-	    { 0, 0, 0, 0, 0 }
     };
 
     if ((rc = poptParseArgvString(line, &argc, &argv))) {
@@ -422,11 +400,11 @@ static char *do_untar(Spec spec, int c, int quietly)
     
     if (isCompressed(file)) {
 	sprintf(buf,
-		"%s -dc %s | tar %s -\n"
+		"gzip -dc %s | tar %s -\n"
 		"if [ $? -ne 0 ]; then\n"
 		"  exit $?\n"
 		"fi",
-		rpmGetVar(RPMVAR_GZIPBIN), file, taropts);
+		file, taropts);
     } else {
 	sprintf(buf, "tar %s %s", taropts, file);
     }
@@ -461,10 +439,7 @@ static char *do_patch(Spec spec, int c, int strip, char *db,
 
     args[0] = '\0';
     if (db) {
-#if HAVE_OLDPATCH_21 == 0
 	strcat(args, "-b ");
-#endif
-	strcat(args, "--suffix ");
 	strcat(args, db);
     }
     if (reverse) {
@@ -477,11 +452,11 @@ static char *do_patch(Spec spec, int c, int strip, char *db,
     if (isCompressed(file)) {
 	sprintf(buf,
 		"echo \"Patch #%d:\"\n"
-		"%s -dc %s | patch -p%d %s -s\n"
+		"gzip -dc %s | patch -p%d %s -s\n"
 		"if [ $? -ne 0 ]; then\n"
 		"  exit $?\n"
 		"fi",
-		c, rpmGetVar(RPMVAR_GZIPBIN), file, strip, args);
+		c, file, strip, args);
     } else {
 	sprintf(buf,
 		"echo \"Patch #%d:\"\n"
@@ -693,10 +668,6 @@ int doBuild(Spec s, int flags, char *passPhrase)
     test = flags & RPMBUILD_TEST;
 
     strcpy(build_subdir, ".");
-
-    if (s->buildArch) {
-	rpmSetMachine(s->buildArch, NULL);
-    }
 
     /* We always need to parse the %prep section */
     if (execPrep(s, (flags & RPMBUILD_PREP), test)) {
