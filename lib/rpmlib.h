@@ -66,8 +66,8 @@ extern const struct headerSprintfExtension rpmHeaderFormats[];
 #define RPMTAG_ROOT                     1038
 #define RPMTAG_FILEUSERNAME             1039
 #define RPMTAG_FILEGROUPNAME            1040
-#define RPMTAG_EXCLUDE                  1041 /* not used - depricated */
-#define RPMTAG_EXCLUSIVE                1042 /* not used - depricated */
+#define RPMTAG_EXCLUDE                  1041 /* not used - internal */
+#define RPMTAG_EXCLUSIVE                1042 /* not used - internal */
 #define RPMTAG_ICON                     1043
 #define RPMTAG_SOURCERPM                1044
 #define RPMTAG_FILEVERIFYFLAGS          1045
@@ -100,20 +100,6 @@ extern const struct headerSprintfExtension rpmHeaderFormats[];
 #define RPMTAG_CHANGELOGNAME            1081
 #define RPMTAG_CHANGELOGTEXT            1082
 #define RPMTAG_BROKENMD5                1083 /* internal */
-#define RPMTAG_PREREQ                   1084 /* internal */
-#define RPMTAG_PREINPROG                1085
-#define RPMTAG_POSTINPROG               1086
-#define RPMTAG_PREUNPROG                1087
-#define RPMTAG_POSTUNPROG               1088
-#define RPMTAG_BUILDARCHS               1089
-#define RPMTAG_OBSOLETES                1090
-#define RPMTAG_VERIFYSCRIPTPROG         1091
-#define RPMTAG_TRIGGERSCRIPTPROGS       1092
-#define RPMTAG_DOCDIR                   1093 /* internal */
-#define RPMTAG_COOKIE                   1094
-#define RPMTAG_FILEDEVICES              1095
-#define RPMTAG_FILEINODES               1096
-#define RPMTAG_FILELANGS                1097
 
 #define RPMTAG_EXTERNAL_TAG		1000000
 
@@ -125,11 +111,9 @@ extern const struct headerSprintfExtension rpmHeaderFormats[];
 /* these can be ORed together */
 #define RPMFILE_CONFIG			(1 << 0)
 #define RPMFILE_DOC			(1 << 1)
-#define RPMFILE_DONOTUSE                (1 << 2)
+#define RPMFILE_SPECFILE                (1 << 2)
 #define RPMFILE_MISSINGOK               (1 << 3)
 #define RPMFILE_NOREPLACE               (1 << 4)
-#define RPMFILE_SPECFILE                (1 << 5)
-#define RPMFILE_GHOST                   (1 << 6)
     
 #define RPMINSTALL_REPLACEPKG           (1 << 0)
 #define RPMINSTALL_REPLACEFILES         (1 << 1)
@@ -140,13 +124,9 @@ extern const struct headerSprintfExtension rpmHeaderFormats[];
 #define RPMINSTALL_NOSCRIPTS            (1 << 6)
 #define RPMINSTALL_NOARCH               (1 << 7)
 #define RPMINSTALL_NOOS                 (1 << 8)
-#define RPMINSTALL_ALLFILES             (1 << 9)
-#define RPMINSTALL_JUSTDB               (1 << 10)
-#define RPMINSTALL_KEEPOBSOLETE         (1 << 11)
 
 #define RPMUNINSTALL_TEST               (1 << 0)
 #define RPMUNINSTALL_NOSCRIPTS          (1 << 1)
-#define RPMUNINSTALL_JUSTDB             (1 << 2)
 
 #define RPMVERIFY_NONE             0
 #define RPMVERIFY_MD5              (1 << 0)
@@ -166,10 +146,7 @@ extern const struct headerSprintfExtension rpmHeaderFormats[];
 #define RPMSENSE_EQUAL           (1 << 3)
 #define RPMSENSE_PROVIDES        (1 << 4) /* only used internally by builds */
 #define RPMSENSE_CONFLICTS       (1 << 5) /* only used internally by builds */
-#define RPMSENSE_PREREQ          (1 << 6)
-#define RPMSENSE_OBSOLETES       (1 << 7) /* only used internally by builds */
-#define RPMSENSE_SENSEMASK       15       /* Mask to get senses, ie serial, */
-                                          /* less, greater, equal.          */
+#define RPMSENSE_SENSEMASK       15       /* Mask to get senses */
 
 #define RPMSENSE_TRIGGER_IN      (1 << 16)
 #define RPMSENSE_TRIGGER_UN      (1 << 17)
@@ -207,45 +184,32 @@ extern const struct headerSprintfExtension rpmHeaderFormats[];
 #define RPMVAR_PACKAGER                 28
 #define RPMVAR_FTPPROXY                 29
 #define RPMVAR_TMPPATH                  30
-/* #define RPMVAR_CPIOBIN                  31 -- No longer used */
+#define RPMVAR_CPIOBIN                  31
 #define RPMVAR_FTPPORT			32
 #define RPMVAR_NETSHAREDPATH		33
 #define RPMVAR_DEFAULTDOCDIR		34
 #define RPMVAR_FIXPERMS			35
 #define RPMVAR_GZIPBIN     		36
-#define RPMVAR_RPMFILENAME     		37
-#define RPMVAR_PROVIDES     		38
+#define RPMVAR_LASTVAR	                37 /* IMPORTANT to keep right! */
 
-#define RPMVAR_NUM			39     /* number of RPMVAR entries */
-
-char * rpmGetVar(int var);
+char *rpmGetVar(int var);
 int rpmGetBooleanVar(int var);
 void rpmSetVar(int var, char *val);
 
 /** rpmrc.c **/
 
-#define RPM_MACHTABLE_INSTARCH		0
-#define RPM_MACHTABLE_INSTOS		1
-#define RPM_MACHTABLE_BUILDARCH		2
-#define RPM_MACHTABLE_BUILDOS  		3
-#define RPM_MACHTABLE_COUNT		4	/* number of arch/os tables */
-
-/* rpmReadConfigFiles() is for backwards compatibility only! It won't
-   work if building is true! */
 int rpmReadConfigFiles(char * file, char * arch, char * os, int building);
-int rpmReadRC(char * file);
-void rpmGetArchInfo(char ** name, int * num);
-void rpmGetOsInfo(char ** name, int * num);
-int rpmMachineScore(int type, char * name);
+int rpmGetOsNum(void);
+int rpmGetArchNum(void);
+char *rpmGetOsName(void);
+char *rpmGetArchName(void);
 int rpmShowRC(FILE *f);
-void rpmSetTables(int archTable, int osTable);  /* only used by build code */
-/* if either are NULL, they are set to the default value (munged uname())
-   pushed through a translation table (if appropriate) */
-void rpmSetMachine(char * arch, char * os);
+int rpmArchScore(char * arch);
+int rpmOsScore(char * os);
 
 /** **/
 
-typedef struct rpmdb_s * rpmdb;
+typedef struct rpmdb * rpmdb;
 
 typedef void (*rpmNotifyFunction)(const unsigned long amount,
 			       const unsigned long total);
@@ -268,13 +232,8 @@ int rpmdbFindByProvides(rpmdb db, char * provides, dbiIndexSet * matches);
 int rpmdbFindByRequiredBy(rpmdb db, char * requires, dbiIndexSet * matches);
 int rpmdbFindByConflicts(rpmdb db, char * conflicts, dbiIndexSet * matches);
 
-/* these are just convience functions */
-int rpmdbFindByLabel(rpmdb db, char * label, dbiIndexSet * matches);
-int rpmdbFindByHeader(rpmdb db, Header h, dbiIndexSet * matches);
-
 int rpmInstallSourcePackage(char * root, int fd, char ** specFile,
-			    rpmNotifyFunction notify, char * labelFormat,
-			    char ** cookie);
+			    rpmNotifyFunction notify, char * labelFormat);
 int rpmInstallPackage(char * rootdir, rpmdb db, int fd, char * prefix, 
 		      int flags, rpmNotifyFunction notify, char * labelFormat,
 		      char * netsharedPath);
@@ -299,19 +258,12 @@ struct rpmDependencyConflict {
 } ;
 
 rpmDependencies rpmdepDependencies(rpmdb db); 	       /* db may be NULL */
-void rpmdepAddPackage(rpmDependencies rpmdep, Header h, void * key);
+void rpmdepAddPackage(rpmDependencies rpmdep, Header h);
 void rpmdepAvailablePackage(rpmDependencies rpmdep, Header h, void * key);
-void rpmdepUpgradePackage(rpmDependencies rpmdep, Header h, void * key);
+void rpmdepUpgradePackage(rpmDependencies rpmdep, Header h);
 void rpmdepRemovePackage(rpmDependencies rpmdep, int dboffset);
-
-/* this checks for dependency satisfaction, but *not* ordering */
 int rpmdepCheck(rpmDependencies rpmdep, 
 		struct rpmDependencyConflict ** conflicts, int * numConflicts);
-/* Orders items, returns error on circle, finals keys[] is NULL. No dependency
-   check is done, use rpmdepCheck() for that. If dependencies are not 
-   satisfied a "best-try" ordering is returned. */
-int rpmdepOrder(rpmDependencies order, void *** keysListPtr);
-
 void rpmdepDone(rpmDependencies rpmdep);
 void rpmdepFreeConflicts(struct rpmDependencyConflict * conflicts, int
 			 numConflicts);
@@ -414,8 +366,6 @@ rpmErrorCallBackType rpmErrorSetCallback(rpmErrorCallBackType);
 #define RPMERR_MTAB		-35	/* failed to read mount table */
 #define RPMERR_STAT		-36	/* failed to stat something */
 #define RPMERR_BADDEV		-37	/* file on device not listed in mtab */
-#define RPMMESS_ALTNAME         -38     /* file written as .rpmnew */
-#define RPMMESS_PREREQLOOP      -39     /* loop in prerequisites */
 
 /* spec.c build.c pack.c */
 #define RPMERR_UNMATCHEDIF      -107    /* unclosed %ifarch or %ifos */
@@ -430,7 +380,6 @@ rpmErrorCallBackType rpmErrorSetCallback(rpmErrorCallBackType);
 #define RPMERR_GZIP             -117
 #define RPMERR_BADSPEC          -118
 #define RPMERR_LDD              -119    /* couldn't understand ldd output */
-#define RPMERR_BADFILENAME	-120
 
 #define RPMERR_BADSIGTYPE       -200    /* Unknown signature type */
 #define RPMERR_SIGGEN           -201    /* Error generating signature */
@@ -470,7 +419,7 @@ void rpmFreeSignature(Header h);
 int rpmVerifySignature(char *file, int_32 sigTag, void *sig, int count,
 		       char *result);
 
-int rpmGetFilesystemList(char *** listptr, int * num);
+int rpmGetFilesystemList(char *** listptr);
 int rpmGetFilesystemUsage(char ** filelist, int_32 * fssizes, int numFiles,
 			  uint_32 ** usagesPtr, int flags);
 
