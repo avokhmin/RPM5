@@ -1,11 +1,6 @@
 /* The very final packaging steps */
 
-#include "config.h"
 #include "miscfn.h"
-
-#if HAVE_ALLOCA_H
-# include <alloca.h>
-#endif
 
 #include <stdlib.h>
 #include <unistd.h>
@@ -22,7 +17,6 @@
 
 #include <sys/time.h>  /* For 'select()' interfaces */
 
-#include "cpio.h"
 #include "pack.h"
 #include "header.h"
 #include "spec.h"
@@ -71,16 +65,17 @@ static int generateRPM(char *name,       /* name-version-release         */
 		   &archiveSize, 1);
 
     /* Write the header */
-    if (makeTempFile(NULL, &sigtarget, &fd))
+    sigtarget = tempnam(rpmGetVar(RPMVAR_TMPPATH), "rpmbuild");
+    if ((fd = open(sigtarget, O_WRONLY|O_CREAT|O_TRUNC, 0644)) == -1) {
+	fprintf(stderr, "Could not open %s\n", sigtarget);
 	return 1;
-
+    }
     headerWrite(fd, header, HEADER_MAGIC_YES);
     
     /* Write the archive and get the size */
     if (cpio_gzip(fd, stempdir, fileList, &archiveSize, prefix)) {
 	close(fd);
 	unlink(sigtarget);
-	free(sigtarget);
 	return 1;
     }
 
@@ -98,14 +93,12 @@ static int generateRPM(char *name,       /* name-version-release         */
     if ((fd = open(filename, O_WRONLY|O_CREAT|O_TRUNC, 0644)) == -1) {
 	fprintf(stderr, "Could not open %s\n", filename);
 	unlink(sigtarget);
-	free(sigtarget);
 	unlink(filename);
 	return 1;
     }
     if (writeMagic(fd, name, type)) {
 	close(fd);
 	unlink(sigtarget);
-	free(sigtarget);
 	unlink(filename);
 	return 1;
     }
@@ -123,7 +116,6 @@ static int generateRPM(char *name,       /* name-version-release         */
     if (rpmWriteSignature(fd, sig)) {
 	close(fd);
 	unlink(sigtarget);
-	free(sigtarget);
 	unlink(filename);
 	rpmFreeSignature(sig);
 	return 1;
@@ -138,7 +130,6 @@ static int generateRPM(char *name,       /* name-version-release         */
 	    close(ifd);
 	    close(fd);
 	    unlink(sigtarget);
-	    free(sigtarget);
 	    unlink(filename);
 	    return 1;
         }
@@ -147,7 +138,6 @@ static int generateRPM(char *name,       /* name-version-release         */
 	    close(ifd);
 	    close(fd);
 	    unlink(sigtarget);
-	    free(sigtarget);
 	    unlink(filename);
 	    return 1;
         }
@@ -155,7 +145,6 @@ static int generateRPM(char *name,       /* name-version-release         */
     close(ifd);
     close(fd);
     unlink(sigtarget);
-    free(sigtarget);
 
     rpmMessage(RPMMESS_VERBOSE, "Wrote: %s\n", filename);
     
@@ -166,20 +155,15 @@ static int writeMagic(int fd, char *name,
 		      unsigned short type)
 {
     struct rpmlead lead;
-    int arch, os;
-
-    rpmGetArchInfo(NULL, &arch);
-    rpmGetOsInfo(NULL, &os);
 
     /* There are the Major and Minor numbers */
     lead.major = 3;
     lead.minor = 0;
     lead.type = type;
-    lead.archnum = arch;
-    lead.osnum = os;
+    lead.archnum = rpmGetArchNum();
+    lead.osnum = rpmGetOsNum();
     lead.signature_type = RPMSIG_HEADERSIG;  /* New-style signature */
     strncpy(lead.name, name, sizeof(lead.name));
-    memset(lead.reserved, 0, sizeof(lead.reserved));
 
     writeLead(fd, &lead);
 
@@ -189,57 +173,88 @@ static int writeMagic(int fd, char *name,
 static int cpio_gzip(int fd, char *tempdir, char *writePtr,
 		     int *archiveSize, char *prefix)
 {
-    int gzipPID;
+    int cpioPID, gzipPID;
+    int cpioDead, gzipDead;
+    int toCpio[2];
+    int fromCpio[2];
     int toGzip[2];
-    int rc;
+    char * cpiobin;
     char * gzipbin;
-    char * writebuf;
-    char * chptr;
-    int numMappings;
-    struct cpioFileMapping * cpioList;
+
+    int writeBytesLeft, bytesWritten;
+
+    int bytes;
+    unsigned char buf[8192];
+    fd_set read_fds, read_ok, write_fds, write_ok;
+    int num_fds, max_fd;
+    struct stat fd_info;
+
     int status;
     void *oldhandler;
-    char savecwd[1024];
-    char * failedFile;
 
+    cpiobin = rpmGetVar(RPMVAR_CPIOBIN);
     gzipbin = rpmGetVar(RPMVAR_GZIPBIN);
+ 
+    *archiveSize = 0;
+    
+    pipe(toCpio);
+    pipe(fromCpio);
+    
+    oldhandler = signal(SIGPIPE, SIG_IGN);
 
-    numMappings = 0;
-    chptr = writePtr;
-    while (chptr && *chptr) {
-	numMappings++;
-	chptr = strchr(chptr, '\n');
-	if (chptr) *chptr++ = '\n';
-    }
+    /* CPIO */
+    if (!(cpioPID = fork())) {
+	close(0);
+	close(1);
+	close(toCpio[1]);
+	close(fromCpio[0]);
+	close(fd);
+	
+	dup2(toCpio[0], 0);   /* Make stdin the in pipe */
+	dup2(fromCpio[1], 1); /* Make stdout the out pipe */
 
-    writebuf = alloca(strlen(writePtr) + 1);
-    strcpy(writebuf, writePtr);
-
-    cpioList = alloca(sizeof(*cpioList) * numMappings);
-    chptr = writebuf;
-    numMappings = 0;
-    while (chptr && *chptr) {
-	cpioList[numMappings].fsPath = chptr;
-	cpioList[numMappings].mapFlags = tempdir ? CPIO_FOLLOW_SYMLINKS : 0;
-
-	chptr = strchr(chptr, '\n');
-	if (chptr) *chptr++ = '\0';
-
-	/* hack */
-	if (!strlen(cpioList[numMappings].fsPath)) {
-	    cpioList[numMappings].fsPath = ".";
+	if (tempdir) {
+	    chdir(tempdir);
+	} else if (rpmGetVar(RPMVAR_ROOT)) {
+	    if (chdir(rpmGetVar(RPMVAR_ROOT))) {
+		rpmError(RPMERR_EXEC, "Couldn't chdir to %s",
+		      rpmGetVar(RPMVAR_ROOT));
+		exit(RPMERR_EXEC);
+	    }
+	} else {
+	    /* This is important! */
+	    chdir("/");
+	}
+	if (prefix) {
+	    if (chdir(prefix)) {
+		rpmError(RPMERR_EXEC, "Couldn't chdir to %s", prefix);
+		_exit(RPMERR_EXEC);
+	    }
 	}
 
-	numMappings++;
+	execlp(cpiobin, cpiobin,
+	       (rpmIsVerbose()) ? "-ov" : "-o",
+	       (tempdir) ? "-LH" : "-H",
+	       "crc", NULL);
+	rpmError(RPMERR_EXEC, "Couldn't exec cpio");
+	_exit(RPMERR_EXEC);
     }
- 
-    oldhandler = signal(SIGPIPE, SIG_IGN);
+    if (cpioPID < 0) {
+	rpmError(RPMERR_FORK, "Couldn't fork cpio");
+	return RPMERR_FORK;
+    }
 
     pipe(toGzip);
     
     /* GZIP */
     if (!(gzipPID = fork())) {
+	close(0);
+	close(1);
 	close(toGzip[1]);
+	close(toCpio[0]);
+	close(toCpio[1]);
+	close(fromCpio[0]);
+	close(fromCpio[1]);
 	
 	dup2(toGzip[0], 0);  /* Make stdin the in pipe       */
 	dup2(fd, 1);         /* Make stdout the passed-in fd */
@@ -253,50 +268,108 @@ static int cpio_gzip(int fd, char *tempdir, char *writePtr,
 	return RPMERR_FORK;
     }
 
+    close(toCpio[0]);
+    close(fromCpio[1]);
     close(toGzip[0]);
 
-    getcwd(savecwd, 1024);
+    /* It is OK to block writing to gzip.  But it is not OK */
+    /* to block reading or writing from/to cpio.            */
+    fcntl(fromCpio[0], F_SETFL, O_NONBLOCK);
+    fcntl(toCpio[1], F_SETFL, O_NONBLOCK);
+    writeBytesLeft = strlen(writePtr);
+
+    /* Set up to use 'select()' to multiplex this I/O stream */
+    FD_ZERO(&read_fds);
+    FD_SET(fromCpio[0], &read_fds);
+    max_fd = fromCpio[0];
+    FD_ZERO(&write_fds);
+    FD_SET(toCpio[1], &write_fds);
+    if (toCpio[1] > max_fd) max_fd = toCpio[1];
     
-    if (tempdir) {
-	chdir(tempdir);
-    } else if (rpmGetVar(RPMVAR_ROOT)) {
-	if (chdir(rpmGetVar(RPMVAR_ROOT))) {
-	    rpmError(RPMERR_EXEC, "Couldn't chdir to %s",
-		  rpmGetVar(RPMVAR_ROOT));
-	    exit(RPMERR_EXEC);
+    cpioDead = 0;
+    gzipDead = 0;
+    bytes = 0;
+    do {
+	if (waitpid(cpioPID, &status, WNOHANG)) {
+	    cpioDead = 1;
 	}
-    } else {
-	/* This is important! */
-	chdir("/");
-    }
-    if (prefix) {
-	if (chdir(prefix)) {
-	    rpmError(RPMERR_EXEC, "Couldn't chdir to %s", prefix);
-	    _exit(RPMERR_EXEC);
+	if (waitpid(gzipPID, &status, WNOHANG)) {
+	    gzipDead = 1;
 	}
+
+	/* Pause here until we could perform some I/O */
+	read_ok = read_fds;
+	write_ok = write_fds;
+	if ((num_fds = select(max_fd+1, &read_ok, &write_ok, 
+			      (fd_set *)NULL, (struct timeval *)NULL)) < 0) {
+		/* One or more file connections has broken */
+		if (fstat(fromCpio[0], &fd_info) < 0) {
+			FD_CLR(fromCpio[0], &read_fds);
+		}
+		if (fstat(toCpio[1], &fd_info) < 0) {
+			FD_CLR(toCpio[1], &write_fds);
+		}
+		continue;
+	}
+
+	/* Write some stuff to the cpio process if possible */
+        if (FD_ISSET(toCpio[1], &write_ok)) {
+		if (writeBytesLeft) {
+			if ((bytesWritten =
+			     write(toCpio[1], writePtr,
+				   (1024<writeBytesLeft) ? 1024 : writeBytesLeft)) < 0) {
+				if (errno != EAGAIN) {
+					perror("Damn!");
+					exit(1);
+				}
+				bytesWritten = 0;
+			}
+			writeBytesLeft -= bytesWritten;
+			writePtr += bytesWritten;
+		} else {
+			close(toCpio[1]);
+			FD_CLR(toCpio[1], &write_fds);
+		}
+	}
+	
+	/* Read any data from cpio, write it to gzip */
+	bytes = 0;  /* So end condition works OK */
+	if (FD_ISSET(fromCpio[0], &read_ok)) {
+		bytes = read(fromCpio[0], buf, sizeof(buf));
+		while (bytes > 0) {
+			*archiveSize += bytes;
+			write(toGzip[1], buf, bytes);
+			bytes = read(fromCpio[0], buf, sizeof(buf));
+		}
+	}
+
+	/* while cpio is running, or we are writing to gzip */
+	/* terminate if gzip dies on us in the middle       */
+    } while (((!cpioDead) || bytes) && (!gzipDead));
+
+    if (gzipDead) {
+	rpmError(RPMERR_GZIP, "gzip died");
+	return 1;
     }
-
-    rc = cpioBuildArchive(toGzip[1], cpioList, numMappings, NULL, NULL, 
-			  archiveSize, &failedFile);
-
-    chdir(savecwd);
-
+    
     close(toGzip[1]); /* Terminates the gzip process */
+    close(toCpio[1]);
+    close(fromCpio[0]);
     
     signal(SIGPIPE, oldhandler);
 
+    if (writeBytesLeft) {
+	rpmError(RPMERR_CPIO, "failed to write all data to cpio");
+	return 1;
+    }
+    waitpid(cpioPID, &status, 0);
+    if (!WIFEXITED(status) || WEXITSTATUS(status)) {
+	rpmError(RPMERR_CPIO, "cpio failed");
+	return 1;
+    }
     waitpid(gzipPID, &status, 0);
     if (!WIFEXITED(status) || WEXITSTATUS(status)) {
 	rpmError(RPMERR_GZIP, "gzip failed");
-	return 1;
-    }
-
-    if (rc) {
-	if (rc & CPIO_CHECK_ERRNO)
-	    rpmError(RPMERR_CPIO, "cpio failed on file %s: %d: %s", failedFile, 
-			rc, strerror(errno));
-	else
-	    rpmError(RPMERR_CPIO, "cpio failed on file %s: %d", failedFile, rc);
 	return 1;
     }
 
@@ -326,14 +399,12 @@ int packageBinaries(Spec s, char *passPhrase, int doPackage)
     char *packager;
     char *packageVersion, *packageRelease;
     char *prefix, *prefixSave;
-    char * arch, * os;
     char * binformat, * errorString;
     int prefixLen;
     int size;
     StringBuf cpioFileList;
     char **farray, *file;
     int count;
-    int *fflagarray;
     
     if (!headerGetEntry(s->packages->header, RPMTAG_VERSION, NULL,
 		  (void *) &version, NULL)) {
@@ -416,10 +487,6 @@ int packageBinaries(Spec s, char *passPhrase, int doPackage)
 	      case RPMTAG_POSTIN:
 	      case RPMTAG_PREUN:
 	      case RPMTAG_POSTUN:
-	      case RPMTAG_PREINPROG:
-	      case RPMTAG_POSTINPROG:
-	      case RPMTAG_PREUNPROG:
-	      case RPMTAG_POSTUNPROG:
 	      case RPMTAG_VERIFYSCRIPT:
 		  continue;
 		  break;  /* Shouldn't need this */
@@ -430,15 +497,10 @@ int packageBinaries(Spec s, char *passPhrase, int doPackage)
 	    }
 	}
 	headerFreeIterator(headerIter);
-
-	headerRemoveEntry(outHeader, RPMTAG_BUILDARCHS);
-
-	rpmGetArchInfo(&arch, NULL);
-	rpmGetOsInfo(&os, NULL);
 	
 	/* Add some final entries to the header */
-	headerAddEntry(outHeader, RPMTAG_OS, RPM_STRING_TYPE, os, 1);
-	headerAddEntry(outHeader, RPMTAG_ARCH, RPM_STRING_TYPE, arch, 1);
+	headerAddEntry(outHeader, RPMTAG_OS, RPM_STRING_TYPE, rpmGetOsName(), 1);
+	headerAddEntry(outHeader, RPMTAG_ARCH, RPM_STRING_TYPE, rpmGetArchName(), 1);
 	headerAddEntry(outHeader, RPMTAG_BUILDTIME, RPM_INT32_TYPE, getBuildTime(), 1);
 	headerAddEntry(outHeader, RPMTAG_BUILDHOST, RPM_STRING_TYPE, buildHost(), 1);
 	headerAddEntry(outHeader, RPMTAG_SOURCERPM, RPM_STRING_TYPE, sourcerpm, 1);
@@ -499,13 +561,11 @@ int packageBinaries(Spec s, char *passPhrase, int doPackage)
 	    return 1;
 	}
 
-	if (!headerGetEntry(outHeader, RPMTAG_FILENAMES, NULL,
-			    (void **) &farray, &count)) {
+	if (!headerGetEntry(outHeader, RPMTAG_FILENAMES, NULL, (void **) &farray,
+		      &count)) {
 	    /* count may already be 0, but this is safer */
 	    count = 0;
 	}
-	headerGetEntry(outHeader, RPMTAG_FILEFLAGS, NULL,
-		       (void **) &fflagarray, NULL);
 
 	cpioFileList = newStringBuf();
 	while (count--) {
@@ -519,16 +579,9 @@ int packageBinaries(Spec s, char *passPhrase, int doPackage)
 			  prefix, file);
 		    return 1;
 		}
-		file += prefixLen;
-		if (*file) {
-		    file++;  /* 1 for "/" */
-		}
+		file += prefixLen + 1; /* 1 for "/" */
 	    }
-
-	    if (! (*fflagarray & RPMFILE_GHOST)) {
-		appendLineStringBuf(cpioFileList, file);
-	    }
-	    fflagarray++;
+	    appendLineStringBuf(cpioFileList, file);
 	}
 	
 	/* Generate any automatic require/provide entries */
@@ -603,7 +656,6 @@ int packageSource(Spec s, char *passPhrase)
     int size;
     char **sources;
     char **patches;
-    char * arch, * os;
     int scount, pcount;
     int skipi;
     int_32 *skip;
@@ -686,12 +738,9 @@ int packageSource(Spec s, char *passPhrase)
 	return RPMERR_BADSPEC;
     }
 
-    rpmGetArchInfo(&arch, NULL);
-    rpmGetOsInfo(&os, NULL);
-
     outHeader = headerCopy(s->packages->header);
-    headerAddEntry(outHeader, RPMTAG_OS, RPM_STRING_TYPE, os, 1);
-    headerAddEntry(outHeader, RPMTAG_ARCH, RPM_STRING_TYPE, arch, 1);
+    headerAddEntry(outHeader, RPMTAG_OS, RPM_STRING_TYPE, rpmGetOsName(), 1);
+    headerAddEntry(outHeader, RPMTAG_ARCH, RPM_STRING_TYPE, rpmGetArchName(), 1);
     headerAddEntry(outHeader, RPMTAG_BUILDTIME, RPM_INT32_TYPE, getBuildTime(), 1);
     headerAddEntry(outHeader, RPMTAG_BUILDHOST, RPM_STRING_TYPE, buildHost(), 1);
     headerAddEntry(outHeader, RPMTAG_RPMVERSION, RPM_STRING_TYPE, VERSION, 1);
