@@ -1,6 +1,3 @@
-3.0.4 -> 3.1
-	- use DIRNAMES/BASENAMES/DIRINDICES not FILENAMES in packages and db.
-
 3.0.3 -> 3.0.4
 	- use compressed filenames on install side.
 	- start unifying FD types, CFD_t now gone.
@@ -75,6 +72,7 @@
 	- portability: splats in rpm.spec to find /usr/{share,lib}/locale/* .
 	- fix: better filter in linux.req to avoid ARM specific objdump output.
 	- fix: use glibc 2.1 glob/fnmatch everywhere.
+	- fix: noLibio = 0 on Red Hat 4.x and 5.x.
 
 3.0.2 -> 3.0.3
 	- add --eval to find result of macro expansion.
