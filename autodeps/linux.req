@@ -1,137 +1,40 @@
-#!/bin/bash
+#!/bin/sh
 
-OBJDUMP="${OBJDUMP:-objdump}"
-usrlibrpm="${usrlibrpm:-/usr/lib/rpm}"
-
-#
-# Auto-generate requirements for executables (both ELF and a.out) and library
-# sonames, script interpreters, and perl modules.
-#
+# note this works for both a.out and ELF executables
+# it also auto-generates requirment lines for shell scripts
 
 ulimit -c 0
 
-#
-# --- Set needed to 0 for traditional find-requires behavior.
-needed=1
-if [ X"$1" = Xldd ]; then
-    needed=0
-elif [ X"$1" = Xobjdump ]; then
-    needed=1
-fi
+filelist=`sed "s/['\"]/\\\&/g"`
+exelist=`echo $filelist | xargs -r file | grep ":.*executable" | cut -d: -f1 `
+scriptlist=`echo $filelist | xargs -r file | egrep ":.* (commands|script) " | cut -d: -f1 `
+liblist=`echo $filelist | xargs -r file | grep ":.*shared object" | cut -d : -f1 `
 
-#
-# --- Grab the file manifest and classify files.
-#filelist=`sed "s/['\"]/\\\&/g"`
-filelist=`sed "s/[]['\"*?{}]/\\\\\&/g"`
-exelist=`echo $filelist | xargs -r file | egrep -v ":.* (commands|script) " | \
-	grep ":.*executable" | cut -d: -f1`
-scriptlist=`echo $filelist | xargs -r file | \
-	egrep ":.* (commands|script) " | cut -d: -f1`
-liblist=`echo $filelist | xargs -r file | \
-	grep ":.*shared object" | cut -d : -f1`
+for f in $exelist; do
+    if [ -x $f ]; then
+	ldd $f | awk '/=>/ { print $1 }'
+    fi
+done | sort -u | sed "s/['\"]/\\\&/g" | xargs -r -n 1 basename | grep -v 'libNoVersion.so' | sort -u
 
-interplist=
-perllist=
-pythonlist=
-tcllist=
+for f in $liblist; do
+    ldd $f | awk '/=>/ { print $1 }'
+done | sort -u | sed "s/['\"]/\\\&/g" | xargs -r -n 1 basename | grep -v 'libNoVersion.so' | sort -u
 
-#
-# --- Alpha does not mark 64bit dependencies
-case `uname -m` in
-  alpha*)	mark64="" ;;
-  *)		mark64="()(64bit)" ;;
-esac
-
-if [ "$needed" -eq 0 ]; then
-#
-# --- Executable dependency sonames.
-  for f in $exelist; do
-    [ -r $f -a -x $f ] || continue
-    lib64=`if file -L $f 2>/dev/null | \
-	grep "ELF 64-bit" >/dev/null; then echo "$mark64"; fi`
-    ldd $f | awk '/=>/ {
-	if ($1 !~ /libNoVersion.so/ && $1 !~ /4[um]lib.so/ && $1 !~ /libredhat-kernel.so/) {
-	    gsub(/'\''"/,"\\&",$1);
-	    printf "%s'$lib64'\n", $1
-	}
-    }'
-  done | xargs -r -n 1 basename | sort -u
-
-#
-# --- Library dependency sonames.
-  for f in $liblist; do
-    [ -r $f ] || continue
-    lib64=`if file -L $f 2>/dev/null | \
-	grep "ELF 64-bit" >/dev/null; then echo "$mark64"; fi`
-    ldd $f | awk '/=>/ {
-	if ($1 !~ /libNoVersion.so/ && $1 !~ /4[um]lib.so/ && $1 !~ /libredhat-kernel.so/) {
-	    gsub(/'\''"/,"\\&",$1);
-	    printf "%s'$lib64'\n", $1
-	}
-    }'
-  done | xargs -r -n 1 basename | sort -u
-fi
-
-#
-# --- Script interpreters.
 for f in $scriptlist; do
-    [ -r $f -a -x $f ] || continue
-    interp=`head -n 1 $f | sed -e 's/^\#\![ 	]*//' | cut -d" " -f1`
-    interplist="$interplist $interp"
-    case $interp in
-    */perl)	perllist="$perllist $f" ;;
-    esac
-done
-[ -n "$interplist" ] && { echo "$interplist" | tr '[:blank:]' \\n | sort -u ; }
+    if [ -x $f ]; then
+	head -1 $f | sed -e 's/^\#\![ 	]*//' | cut -d" " -f1
+    fi
+done | sort -u
 
-#
-# --- Add perl module files to perllist.
-for f in $filelist; do
-    [ -r $f -a "${f%.pm}" != "${f}" ] && perllist="$perllist $f"
-done
-
-#
-# --- Weak symbol versions (from glibc).
-[ -n "$mark64" ] && mark64="(64bit)"
 for f in $liblist $exelist ; do
-    [ -r $f ] || continue
-    lib64=`if file -L $f 2>/dev/null | \
-	grep "ELF 64-bit" >/dev/null; then echo "$mark64"; fi`
-    $OBJDUMP -p $f | awk 'BEGIN { START=0; LIBNAME=""; needed='$needed'; }
-	/^$/ { START=0; }
-	/^Dynamic Section:$/ { START=1; }
-	(START==1) && /NEEDED/ {
-	    if (needed) {
-		if ("'$lib64'" != "") {
-		    sub(/$/, "()'$lib64'", $2) ;
-		}
-		print $2 ;
-	    }
-	}
-	/^Version References:$/ { START=2; }
-	(START==2) && /required from/ {
+    objdump -p $f | awk '
+	BEGIN { START=0; LIBNAME=""; }
+	/Version References:/ { START=1; }
+	/required from/ && (START==1) {
 	    sub(/:/, "", $3);
 	    LIBNAME=$3;
 	}
-	(START==2) && (LIBNAME!="") && ($4!="") {
-	    print LIBNAME "(" $4 ")'$lib64'";
-	}
+	(START==1) && (LIBNAME!="") && ($4~/^GLIBC_*/) { print LIBNAME "(" $4 ")"; }
+	/^$/ { START=0; }
     '
 done | sort -u
-
-#
-# --- Perl modules.
-[ -x "$usrlibrpm/perl.req" -a -n "$perllist" ] && \
-    echo $perllist | tr '[:blank:]' \\n | "$usrlibrpm/perl.req" | sort -u
-
-#
-# --- Python modules.
-[ -x "$usrlibrpm/python.req" -a -n "$pythonlist" ] && \
-    echo $pythonlist | tr '[:blank:]' \\n | "$usrlibrpm/python.req" | sort -u
-
-#
-# --- Tcl modules.
-[ -x "$usrlibrpm/tcl.req" -a -n "$tcllist" ] && \
-    echo $tcllist | tr '[:blank:]' \\n | "$usrlibrpm/tcl.req" | sort -u
-
-exit 0
