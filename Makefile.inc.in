@@ -9,15 +9,15 @@ RANLIB = @RANLIB@
 OPTS = @DEFS@
 LIBRPMRC_FILENAME=$(libdir)/rpmrc
 LIBRPMALIAS_FILENAME=$(libdir)/rpmpopt
-RPMNLSDIR=@datadir@/locale
+RPMNLSDIR=$(prefix)/share/locale
 RPMNLSPACKAGE=rpm
 CFLAGS = @CFLAGS@ @INCPATH@ $(WARNINGS) $(OPTS) -I$(topdir) \
 	-I$(topdir)/lib -I$(topdir)/misc -Wall -Wstrict-prototypes \
 	-DLIBRPMRC_FILENAME="\"$(LIBRPMRC_FILENAME)"\" \
 	-DLIBRPMALIAS_FILENAME="\"$(LIBRPMALIAS_FILENAME)"\" \
 	-DVERSION=\"$(VERSION)\" 
-LDFLAGS = @LDFLAGS@ -Llib -Lbuild -Lmisc -L$(topdir)/lib \
+LDFLAGS = @LDFLAGS@ @LIBS@ -Llib -Lbuild -Lmisc -L$(topdir)/lib \
 		-L$(topdir)/build -L$(topdir)/misc
-VERSION = 2.4.12
+VERSION = 2.3.12
 CC = @CC@
 
