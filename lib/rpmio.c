@@ -31,7 +31,7 @@ typedef	unsigned int		uint32_t;
 
 #endif	/* __LCLINT__ */
 
-#if HAVE_HERRNO && defined(__hpux) /* XXX HP-UX w/o -D_XOPEN_SOURCE needs */
+#if !defined(HAVE_HERRNO) && defined(__hpux) /* XXX HP-UX w/o -D_XOPEN_SOURCE needs */
 extern int h_errno;
 #endif
 
@@ -451,17 +451,11 @@ DBGIO(fd, (stderr, "==> fdFdopen(%p,\"%s\") fdno %d -> fp %p fdno %d\n", cookie,
 }
 #endif
 
-#undef	fdRead
-#undef	fdWrite
-#undef	fdSeek
-#undef	fdClose
 #if 0
 #undef	fdLink
 #undef	fdFree
 #undef	fdNew
 #endif
-#undef	fdFileno
-#undef	fdOpen
 
 /* =============================================================== */
 static inline FD_t XfdLink(void * cookie, const char *msg, const char *file, unsigned line) {
@@ -524,14 +518,14 @@ static inline /*@null@*/ FD_t XfdNew(const char *msg, const char *file, unsigned
     return XfdLink(fd, msg, file, line);
 }
 
-static inline int fdFileno(void * cookie) {
+int fdFileno(void * cookie) {
     FD_t fd;
     if (cookie == NULL) return -2;
     fd = c2f(cookie);
     return fd->fps[0].fdno;	/* XXX WRONG but expedient */
 }
 
-static inline ssize_t fdRead(void * cookie, /*@out@*/ char * buf, size_t count) {
+ssize_t fdRead(void * cookie, /*@out@*/ char * buf, size_t count) {
     FD_t fd = c2f(cookie);
     ssize_t rc;
 
@@ -546,7 +540,7 @@ DBGIO(fd, (stderr, "==>\tfdRead(%p,%p,%ld) rc %ld %s\n", cookie, buf, (long)coun
     return rc;
 }
 
-static inline ssize_t fdWrite(void * cookie, const char * buf, size_t count) {
+ssize_t fdWrite(void * cookie, const char * buf, size_t count) {
     FD_t fd = c2f(cookie);
     int fdno = fdFileno(fd);
     ssize_t rc;
@@ -597,7 +591,7 @@ DBGIO(fd, (stderr, "==>\tfdSeek(%p,%ld,%d) rc %lx %s\n", cookie, pos, whence, (l
     return rc;
 }
 
-static inline int fdClose( /*@only@*/ void * cookie) {
+int fdClose( /*@only@*/ void * cookie) {
     FD_t fd;
     int fdno;
     int rc;
@@ -618,7 +612,7 @@ DBGIO(fd, (stderr, "==>\tfdClose(%p) rc %lx %s\n", fd, (long)rc, fdbg(fd)));
     return rc;
 }
 
-static inline /*@null@*/ FD_t fdOpen(const char *path, int flags, mode_t mode) {
+/*@null@*/ FD_t fdOpen(const char *path, int flags, mode_t mode) {
     FD_t fd;
     int fdno;
 
@@ -1726,7 +1720,7 @@ void * ufdGetUrlinfo(FD_t fd) {
 static ssize_t ufdRead(void * cookie, /*@out@*/ char * buf, size_t count) {
     FD_t fd = c2f(cookie);
     int bytesRead;
-    int total;
+    int total = 0;
 
     /* XXX preserve timedRead() behavior */
     if (fdGetIo(fd) == fdio) {
@@ -2348,6 +2342,16 @@ FDIO_t gzdio = /*@-compmempass@*/ &gzdio_s /*@=compmempass@*/ ;
 
 #include <bzlib.h>
 
+#ifdef HAVE_BZ2_1_0
+# define bzopen  BZ2_bzopen
+# define bzclose BZ2_bzclose
+# define bzdopen BZ2_bzdopen
+# define bzerror BZ2_bzerror
+# define bzflush BZ2_bzflush
+# define bzread  BZ2_bzread
+# define bzwrite BZ2_bzwrite
+#endif /* HAVE_BZ2_1_0 */
+
 static inline /*@dependent@*/ /*@null@*/ void * bzdFileno(FD_t fd) {
     void * rc = NULL;
     int i;
@@ -2602,10 +2606,20 @@ DBGIO(fd, (stderr, "==> Fclose(%p) %s\n", fd, fdbg(fd)));
 		if (noLibio)
 		    fdSetFp(fd, NULL);
 	    } else {
+		fflush(fp);	/* XXX possibly paranoia. */
 		rc = fclose(fp);
 		if (fpno == -1) {
 		    fd = fdFree(fd, "fopencookie (Fclose)");
 		    fdPop(fd);
+
+		    /*
+		     * XXX Red Hat 6.0 glibc-2.1.1 returns -1 and does not
+		     * XXX call the close libio vector. Do that now.
+		     */
+		    if (rc == -1 && fd->fps[fd->nfps].fdno >= 0) {
+			fdio_close_function_t * _close = FDIOVEC(fd, close);
+			rc = _close(fd);
+		    }
 		}
 	    }
 	} else {
@@ -2691,13 +2705,6 @@ static inline void cvtfmode (const char *m,
 	*f = flags;
 }
 
-#if _USE_LIBIO
-#if defined(__GLIBC__) && __GLIBC__ == 2 && __GLIBC_MINOR__ == 0
-/* XXX retrofit glibc-2.1.x typedef on glibc-2.0.x systems */
-typedef _IO_cookie_io_functions_t cookie_io_functions_t;
-#endif
-#endif
-
 FD_t Fdopen(FD_t ofd, const char *fmode)
 {
     char stdio[20], other[20], zstdio[20];
@@ -2767,7 +2774,7 @@ fprintf(stderr, "*** Fdopen fpio fp %p\n", fp);
 	FILE * fp = NULL;
 
 #if _USE_LIBIO
-	{   cookie_io_functions_t ciof;
+	{   _IO_cookie_io_functions_t ciof;
 	    ciof.read = iof->read;
 	    ciof.write = iof->write;
 	    ciof.seek = iof->seek;
