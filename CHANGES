@@ -1,5 +1,5 @@
-2.4.11 -> 2.5:
-	- added many more i18n strings
+2.4.12 -> 2.4.13:
+	- fixed memory leak in rpmdbFindByLabel()
 
 2.4.11 -> 2.4.12:
 	- intialize reserved portion of lead when writing packages
