@@ -1,5 +1,3 @@
-4.0 -> 4.1
-
 3.0.5 -> 4.0
 	- use DIRNAMES/BASENAMES/DIRINDICES not FILENAMES in packages and db.
 	- API: change dbi to pass by reference, not value.
@@ -91,6 +89,7 @@
 	- fix: popt POST callbacks typo.
 	- fix: -Va broken, make db cursors per-iterator, not per-dbi.
 	- fix: segfault when globbing on "" (#15593).
+	- fix: rebuild db1 -> db3 ate 1st header (#16263).
 
 3.0.4 -> 3.0.5
 	- configure.in fiddles for BSD systems (Patrick Schoo).

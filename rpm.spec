@@ -6,9 +6,9 @@
 
 Summary: The Red Hat package management system.
 Name: rpm
-%define version 4.1
+%define version 4.0
 Version: %{version}
-Release: 0.1
+Release: 0.68
 Group: System Environment/Base
 Source: ftp://ftp.rpm.org/pub/rpm/dist/rpm-3.0.x/rpm-%{version}.tar.gz
 Copyright: GPL
@@ -266,6 +266,9 @@ fi
 %{__prefix}/include/popt.h
 
 %changelog
+* Wed Aug 16 2000 Jeff Johnson <jbj@redhat.com>
+- fix: rebuild db1 -> db3 ate 1st header (#16263).
+
 * Mon Aug 14 2000 Jeff Johnson <jbj@redhat.com>
 - disable rpmlib(VersionedDependencies) by defining _noVersionedDependencies.
 - man page fixes.
