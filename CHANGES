@@ -1,3 +1,36 @@
+3.0.4 -> 3.0.5
+	- handle version 4 packaging as input.
+	- builds against bzip2 1.0
+	- fix: resurrect symlink unique'ifying property of finger prints.
+	- fix: broken glob test with empty build directory (Geoff Keating).
+	- fix: create per-platform directories correctly.
+	- update brp-* scripts from rpm-4.0, enable in per-platform config.
+	- alpha: add -mieee to default optflags.
+	- add RPMTAG_OPTFLAGS, configured optflags when package was built.
+	- add RPMTAG_DISTURL for rpmfind-like tools (content unknown yet).
+	- teach brp-compress about /usr/info and /usr/share/info as well.
+	- update macros.in from rpm-4.0 (w/o dbi configuration).
+        - fix: don't expand macros in false branch of %if (kasal@suse.cz).
+        - fix: macro expansion problem and clean up (#11484) (kasal@suse.cz).
+	- uname on i370 has s390 as arch (#11456).
+	- python: initdb binding (Dan Burcaw <dburcaw@terraplex.com>).
+	- internalize --freshen (Gordon Messmer <yinyang@eburg.com>).
+	- support for separate source/binary compression policy.
+	- support for bzip payloads.
+	- fix: payload compression tag not nul terminated.
+	- identify package when install scriptlet fails (#12448).
+	- remove (unused) RPMTAG_CAPABILITY.
+	- remove (legacy) use of RPMTAG_{OBSOLETES,PROVIDES} internally.
+	- remove (legacy) support for version 1 packaging.
+	- remove (legacy) support for converting gdbm databases.
+	- eliminate unused headerGz{Read,Write}.
+	- support for rpmlib(...) internal feature dependencies.
+	- display rpmlib provides when invoked with --showrc.
+	- fix: compare versions if doing --freshen.
+	- fix: Red Hat 6.0 (5.2 also?) glibc-2.1.1 fclose fails using libio.
+	- add /usr/kerberos/man to brp-compress.
+	- build rpm with necessary autoconf options to get linux config correct.
+
 3.0.3 -> 3.0.4
 	- use compressed filenames on install side.
 	- start unifying FD types, CFD_t now gone.

@@ -1,86 +1,42 @@
 #!/bin/sh
 
-#   configure the requirements
-AMV="automake (GNU automake) 1.11"
-ACV="autoconf (GNU Autoconf) 2.63"
-LTV="libtoolize (GNU libtool) 2.2.6"
-GTT="gettextize (GNU gettext-tools) 0.17"
+export CFLAGS
+export LDFLAGS
+
+LTV="libtoolize (GNU libtool) 1.3.5"
+ACV="Autoconf version 2.13"
+AMV="automake (GNU automake) 1.4"
 USAGE="
-To build RPM from plain CVS sources the following
-installed developer tools are mandatory:
-    $AMV
-    $ACV
-    $LTV
-    $GTT
+You need to install:
+	libtool-1.3.5
+	autoconf-2.13
+	automake-1.4
 "
 
-#   wrapper for running GNU libtool's libtoolize(1)
-libtoolize () {
-    _libtoolize=`which glibtoolize 2>/dev/null`
-    _libtoolize_args="$*"
-    case "$_libtoolize" in
-        /* ) ;;
-        *  ) _libtoolize=`which libtoolize 2>/dev/null`
-             case "$_libtoolize" in
-                 /* ) ;;
-                 *  ) _libtoolize="libtoolize" ;;
-             esac
-             ;;
-    esac
-    _libtoolize_version="`$_libtoolize --version | sed -e '1q' | sed -e 's;^[^0-9]*;;'`"
-    case "$_libtoolize_version" in
-        1.* ) _libtoolize_args=`echo "X$_libtoolize_args" | sed -e 's;^X;;' -e 's;--quiet;;' -e 's;--install;;'` ;;
-    esac
-    eval $_libtoolize $_libtoolize_args
-}
+[ "`libtoolize --version`" != "$LTV" ] && echo "$USAGE" && exit 1
+[ "`autoconf --version`" != "$ACV" ] && echo "$USAGE" && exit 1
+[ "`automake --version | head -1 | sed -e 's/1\.4[a-z]/1.4/'`" != "$AMV" ] && echo "$USAGE" && exit 1
 
-#   requirements sanity check
-[ "`automake   --version | head -1`" != "$AMV" ] && echo "$USAGE" # && exit 1
-[ "`autoconf   --version | head -1`" != "$ACV" ] && echo "$USAGE" # && exit 1
-[ "`libtoolize --version | head -1`" != "$LTV" ] && echo "$USAGE" # && exit 1
-[ "`gettextize --version | head -1 | sed -e 's;^.*/\\(gettextize\\);\\1;'`" != "$GTT" ] && echo "$USAGE" # && exit 1
+(cd popt; ./autogen.sh --noconfigure "$@")
+libtoolize --copy --force
+aclocal
+autoheader
+automake
+autoconf
 
-echo "===> pcre"
-( cd pcre && sh ./autogen.sh --noconfigure "$@" )
-echo "<=== pcre"
-echo "===> xz"
-( cd xz && sh ./autogen.sh --noconfigure "$@" )
-echo "<=== xz"
-echo "===> file"
-( cd file && sh ./autogen.sh --noconfigure "$@" )
-echo "<=== file"
-
-if [ -d rc ]; then
-    echo "===> rc"
-    ( cd rc && sh ./autogen.sh --noconfigure "$@" )
-    echo "<=== rc"
-fi
-if [ -d bash ]; then
-    echo "===> bash"
-    ( cd bash && sh ./autogen.sh --noconfigure "$@" )
-    echo "<=== bash"
+if [ "$1" = "--noconfigure" ]; then 
+    exit 0;
 fi
 
-echo "===> syck"
-( cd syck && sh ./autogen.sh --noconfigure "$@" )
-echo "<=== syck"
-echo "===> xar"
-( cd xar && sh ./autogen.sh --noconfigure "$@" )
-echo "<=== xar"
-
-echo "===> rpm"
-rm -rf autom4te.cache || true
-echo "---> generate files via GNU libtool (libtoolize)"
-libtoolize --quiet --copy --force --install
-echo "---> generate files via GNU gettext (autopoint)"
-autopoint --force
-echo "---> generate files via GNU autoconf (aclocal, autoheader)"
-rm -f aclocal.m4
-aclocal -I m4
-autoheader -I m4
-echo "---> generate files via GNU automake (automake)"
-automake -Wall -Wno-override -a -c
-echo "---> generate files via GNU autoconf (autoconf)"
-autoconf -I m4
-echo "<=== rpm"
-
+if [ X"$@" = X  -a "X`uname -s`" = "XLinux" ]; then
+    if [ -d /usr/share/man ]; then
+	mandir=/usr/share/man
+	infodir=/usr/share/info
+    else
+	mandir=/usr/man
+	infodir=/usr/info
+    fi
+    ./configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var --infodir=${infodir} --mandir=${mandir} "$@"
+else
+    ./configure "$@"
+fi
