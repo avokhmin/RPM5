@@ -116,13 +116,14 @@ static struct poptOption optionsTable[] = {
  { "build", 'b', POPT_ARG_STRING, 0, 'b',	NULL, NULL},
  { "checksig", 'K', 0, 0, 'K',			NULL, NULL},
  { "dbpath", '\0', POPT_ARG_STRING, 0, GETOPT_DBPATH,		NULL, NULL},
- { "define", '\0', POPT_ARG_STRING, &noUsageMsg, GETOPT_DEFINEMACRO,NULL, NULL},
+ { "define", '\0', POPT_ARG_STRING, 0, GETOPT_DEFINEMACRO,NULL, NULL},
  { "dirtokens", '\0', POPT_ARG_VAL, &_noDirTokens, 0,	NULL, NULL},
  { "erase", 'e', 0, 0, 'e',			NULL, NULL},
- { "eval", '\0', POPT_ARG_STRING, &noUsageMsg, GETOPT_EVALMACRO, NULL, NULL},
+ { "eval", '\0', POPT_ARG_STRING, 0, GETOPT_EVALMACRO, NULL, NULL},
  { "excludedocs", '\0', 0, &excldocs, 0,	NULL, NULL},
  { "excludepath", '\0', POPT_ARG_STRING, 0, GETOPT_EXCLUDEPATH,	NULL, NULL},
  { "force", '\0', 0, &force, 0,			NULL, NULL},
+ { "freshen", 'F', 0, 0, 'F',			NULL, NULL},
  { "ftpdebug", '\0', POPT_ARG_VAL, &_ftp_debug, -1,		NULL, NULL},
  { "ftpport", '\0', POPT_ARG_STRING, &ftpPort, 0,	NULL, NULL},
  { "ftpproxy", '\0', POPT_ARG_STRING, &ftpProxy, 0,	NULL, NULL},
@@ -195,7 +196,7 @@ static struct poptOption optionsTable[] = {
 long _stksize = 64 * 1024L;
 #endif
 
-static void argerror(char * desc) {
+static void argerror(const char * desc) {
     fprintf(stderr, _("rpm: %s\n"), desc);
     exit(EXIT_FAILURE);
 }
@@ -220,7 +221,7 @@ static void printUsage(void) {
     printBanner();
     puts("");
 
-    puts(_("usage: rpm {--help}"));
+    puts(_("Usage: rpm {--help}"));
     puts(_("       rpm {--version}"));
     puts(_("       rpm {--initdb}   [--dbpath <dir>]"));
     puts(_("       rpm {--install -i} [-v] [--hash -h] [--percent] [--force] [--test]"));
@@ -246,7 +247,7 @@ static void printUsage(void) {
     puts(_("       rpm {--query -q} [-afpg] [-i] [-l] [-s] [-d] [-c] [-v] [-R]"));
     puts(_("                        [--scripts] [--root <dir>] [--rcfile <file>]"));
     puts(_("                        [--whatprovides] [--whatrequires] [--requires]"));
-    puts(_("                        [--triggeredby] [--ftpuseport] [--ftpproxy <host>]"));
+    puts(_("                        [--triggeredby] [--ftpport] [--ftpproxy <host>]"));
     puts(_("                        [--httpproxy <host>] [--httpport <port>] "));
     puts(_("                        [--ftpport <port>] [--provides] [--triggers] [--dump]"));
     puts(_("                        [--changelog] [--dbpath <dir>] [targets]"));
@@ -305,7 +306,7 @@ static void printHelp(void) {
     printBanner();
     puts("");
 
-    puts(         _("usage:"));
+    puts(         _("Usage:"));
     printHelpLine(  "   --help                 ", 
 		  _("print this message"));
     printHelpLine(  "   --version              ",
@@ -569,6 +570,7 @@ int main(int argc, const char ** argv)
     int numRelocations = 0;
     int sigTag;
     int upgrade = 0;
+    int freshen = 0;
     int probFilter = 0;
 	
 #if HAVE_MCHECK_H && HAVE_MTRACE
@@ -778,6 +780,14 @@ int main(int argc, const char ** argv)
 	    upgrade = 1;
 	    break;
 
+	  case 'F':
+	    if (bigMode != MODE_UNKNOWN && bigMode != MODE_INSTALL)
+		argerror(_("only one major mode may be specified"));
+	    bigMode = MODE_INSTALL;
+	    upgrade = 1;  /* Freshen implies upgrade */
+	    freshen = 1;
+	    break;
+
 	  case 'p':
 	    if (QVSource != RPMQV_PACKAGE && QVSource != RPMQV_RPM)
 		argerror(_("one type of query/verify may be performed at a " "time"));
@@ -850,12 +860,14 @@ int main(int argc, const char ** argv)
 	  case GETOPT_DEFINEMACRO:
 	    rpmDefineMacro(NULL, optArg, RMIL_CMDLINE);
 	    rpmDefineMacro(&rpmCLIMacroContext, optArg, RMIL_CMDLINE);
+	    noUsageMsg = 1;
 	    break;
 
 	  case GETOPT_EVALMACRO:
 	  { const char *val = rpmExpand(optArg, NULL);
 	    fprintf(stdout, "%s\n", val);
 	    xfree(val);
+	    noUsageMsg = 1;
 	  } break;
 
 	  case GETOPT_TIMECHECK:
@@ -1362,6 +1374,7 @@ int main(int argc, const char ** argv)
 	if (noDeps) interfaceFlags |= INSTALL_NODEPS;
 	if (noOrder) interfaceFlags |= INSTALL_NOORDER;
 	if (upgrade) interfaceFlags |= INSTALL_UPGRADE;
+	if (freshen) interfaceFlags |= INSTALL_FRESHEN;
 
 	if (!poptPeekArg(optCon))
 	    argerror(_("no packages given for install"));

@@ -7,7 +7,7 @@ dnl it, why check it?
 AC_INIT(rpm.c)
 AC_CANONICAL_SYSTEM
 
-AM_INIT_AUTOMAKE(rpm, 3.0.4)
+AM_INIT_AUTOMAKE(rpm, 3.0.5)
 AM_CONFIG_HEADER(config.h)
 
 AC_PREREQ(2.12)         dnl Minimum Autoconf version required.
@@ -149,7 +149,7 @@ if test "$cross_compiling" != "yes"; then
 dnl
 dnl Set search path for common programs
 dnl
-    MYPATH="/bin:/usr/bin:/usr/local/bin:$PATH:/opt/gnu/bin"
+    MYPATH="/bin:/usr/bin:/usr/local/bin:$PATH:/sbin:/usr/sbin:/usr/local/sbin:/opt/gnu/bin"
 
 dnl
 dnl Find some common programs
@@ -260,23 +260,14 @@ dnl
 dnl Check for features
 dnl
 
-### use option --disable-v1-packages to turn off support for rpm-1.x packages
-AC_MSG_CHECKING(if you want support for rpm-1.0 packages)
-AC_ARG_ENABLE(v1-packages,
-        [  --disable-v1-packages[=no]   disable support for rpm-1.x packages],
-        [with_v1_packages=$enableval],
-        [with_v1_packages=yes])
-AC_MSG_RESULT($with_v1_packages)
-test "$with_v1_packages" = yes && AC_DEFINE(ENABLE_V1_PACKAGES)
-
-### use option --enable-v4-packages to turn on support for rpm-4.x packages
-AC_MSG_CHECKING(if you want experimental rpm-4.0 packages)
-AC_ARG_ENABLE(v4-packages,
-        [  --enable-v4-packages[=no]    [experimental] support for rpm-4.x packages],
-        [with_v4_packages=$enableval],
-        [with_v4_packages=no])
-AC_MSG_RESULT($with_v4_packages)
-test "$with_v4_packages" = yes && AC_DEFINE(ENABLE_V4_PACKAGES)
+### use option --enable-v5-packages to turn on support for rpm-5.x packages
+AC_MSG_CHECKING(if you want experimental rpm-5.0 packages)
+AC_ARG_ENABLE(v5-packages,
+        [  --enable-v5-packages[=no]    [experimental] support for rpm-5.x packages],
+        [with_v5_packages=$enableval],
+        [with_v5_packages=no])
+AC_MSG_RESULT($with_v5_packages)
+test "$with_v5_packages" = yes && AC_DEFINE(ENABLE_V5_PACKAGES)
 
 dnl Checks for libraries.
 
@@ -338,14 +329,12 @@ done
 dnl zlib-1.0.4 has not gzseek
 AC_CHECK_LIB(${zlib}, gzseek, [AC_DEFINE(HAVE_GZSEEK)])
 
-for bz2lib in bz2 ; do
-   AC_CHECK_LIB(${bz2lib}, bzread, 
-	[LIBS="$LIBS -l${bz2lib}"; break], 
-	[if test ${bz2lib} = bz2; then 
-	    AC_MSG_WARN([rpm needs libbz2.a (from the bzip2 package)]) 
-	 fi]
-	       )
-done
+AC_CHECK_LIB(bz2, bzread,
+  [LIBS="$LIBS -lbz2"; break],
+   AC_CHECK_LIB(bz2, BZ2_bzread, [
+     LIBS="$LIBS -lbz2"
+     AC_DEFINE(HAVE_BZ2_1_0) ],
+     AC_MSG_WARN([rpm needs libbz2.a (from the bzip2 package)])))
 
 dnl Red Hat 4.x has not personality
 AC_CHECK_FUNCS(personality)
@@ -384,21 +373,6 @@ AC_CHECK_HEADERS(mntent.h sys/mnttab.h sys/systemcfg.h)
 AC_CHECK_HEADERS(sys/mount.h sys/mntctl.h sys/vmount.h)
 AC_CHECK_HEADERS(bzlib.h libio.h zlib.h)
 AC_CHECK_HEADERS(err.h mcheck.h)
-
-dnl whether or not we should try build rpmconvert, which is used to convert
-dnl rpm databases from rpm 1.x to rpm 2.x or later.  It requires the gdbm
-dnl library and header file.
-BUILD_RPMCONVERT=yes
-AC_CHECK_HEADERS(gdbm.h,BUILD_RPMCONVERT=yes,BUILD_RPMCONVERT=no)
-AC_MSG_CHECKING(if rpmconvert should be built)
-if test X"$BUILD_RPMCONVERT" = X"yes"; then
-    BUILD_RPMCONVERT=rpmconvert
-    AC_MSG_RESULT(yes)
-else
-    BUILD_RPMCONVERT=
-    AC_MSG_RESULT(no)
-fi
-AC_SUBST(BUILD_RPMCONVERT)
 
 dnl whether or not we should try to build rpmgettext/rpmputtext.
 if test X"$USE_NLS" = Xyes; then
@@ -656,6 +630,9 @@ AC_ARG_WITH(glob, [  --with-glob             use the internal GNU glob ],
 
 if test $rpm_cv_glob = no ; then
     AC_MSG_CHECKING(for GNU extensions to glob)
+    mkdir t
+    mkdir t/p
+    touch t/p/foo.8
     AC_TRY_RUN([
 #include <unistd.h>
 #include <sys/stat.h>
@@ -663,9 +640,10 @@ if test $rpm_cv_glob = no ; then
 main() {
   glob_t gl ;
   gl.gl_stat = stat;
-  exit(glob("doc/*/*.8", 0, NULL, &gl) || gl.gl_pathc < 1);
+  exit(glob("t/*/*.8", GLOB_PERIOD, NULL, &gl) || gl.gl_pathc < 1);
 } ],
     rpm_cv_glob_ext=yes, rpm_cv_glob_ext=no, rpm_cv_glob_ext=no)
+    rm -r t
     AC_MSG_RESULT([$rpm_cv_glob_ext])
     if test $rpm_cv_glob_ext = no ; then
 	    echo "    --> using the included GNU glob instead." >&AC_FD_MSG
