@@ -1,19 +1,11 @@
-#include "miscfn.h"
-
-#if HAVE_ALLOCA_H
-# include <alloca.h>
-#endif
-
 #include <ctype.h>
 #include <errno.h>
 #include <locale.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <sys/time.h>
-#include <sys/resource.h>
 #include <sys/wait.h>
+#include <unistd.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 
@@ -24,7 +16,6 @@
 #include "lib/messages.h"
 #include "lib/signature.h"
 #include "popt/popt.h"
-#include "miscfn.h"
 #include "query.h"
 #include "rpmlib.h"
 #include "verify.h"
@@ -87,33 +78,30 @@ static void printUsage(void) {
     puts(_("                        [--replacepkgs] [--replacefiles] [--root <dir>]"));
     puts(_("                        [--excludedocs] [--includedocs] [--noscripts]"));
     puts(_("                        [--rcfile <file>] [--ignorearch] [--dbpath <dir>]"));
-    puts(_("                        [--prefix <dir>] [--ignoreos] [--nodeps] [--allfiles]"));
-    puts(_("                        [--ftpproxy <host>] [--ftpport <port>] [--justdb]"));
-    puts(_("                        [--noorder] file1.rpm ... fileN.rpm"));
+    puts(_("                        [--prefix <dir>] [--ignoreos] [--nodeps]"));
+    puts(_("                        [--ftpproxy <host>] [--ftpport <port>]"));
+    puts(_("                        file1.rpm ... fileN.rpm"));
     puts(_("       rpm {--upgrade -U} [-v] [--hash -h] [--percent] [--force] [--test]"));
     puts(_("                        [--oldpackage] [--root <dir>] [--noscripts]"));
     puts(_("                        [--excludedocs] [--includedocs] [--rcfile <file>]"));
     puts(_("                        [--ignorearch]  [--dbpath <dir>] [--prefix <dir>] "));
     puts(_("                        [--ftpproxy <host>] [--ftpport <port>]"));
-    puts(_("                        [--ignoreos] [--nodeps] [--allfiles] [--justdb]"));
-    puts(_("                        [--noorder] file1.rpm ... fileN.rpm"));
+    puts(_("                        [--ignoreos] [--nodeps] file1.rpm ... fileN.rpm"));
     puts(_("       rpm {--query -q} [-afpg] [-i] [-l] [-s] [-d] [-c] [-v] [-R]"));
     puts(_("                        [--scripts] [--root <dir>] [--rcfile <file>]"));
     puts(_("                        [--whatprovides] [--whatrequires] [--requires]"));
     puts(_("                        [--ftpuseport] [--ftpproxy <host>] [--ftpport <port>]"));
-    puts(_("                        [--provides] [--dump] [--dbpath <dir>] [--changelog]"));
-    puts(_("                        [targets]"));
+    puts(_("                        [--provides] [--dump] [--dbpath <dir>] [targets]"));
     puts(_("       rpm {--verify -V -y} [-afpg] [--root <dir>] [--rcfile <file>]"));
     puts(_("                        [--dbpath <dir>] [--nodeps] [--nofiles] [--noscripts]"));
     puts(_("                        [--nomd5] [targets]"));
     puts(_("       rpm {--setperms} [-afpg] [target]"));
     puts(_("       rpm {--setugids} [-afpg] [target]"));
-    puts(_("       rpm {--erase -e} [--root <dir>] [--noscripts] [--rcfile <file>]"));
+    puts(_("       rpm {--erase -e] [--root <dir>] [--noscripts] [--rcfile <file>]"));
     puts(_("                        [--dbpath <dir>] [--nodeps] [--allmatches]"));
-    puts(_("                        [--justdb] package1 ... packageN"));
+    puts(_("                        package1 ... packageN"));
     puts(_("       rpm {-b|t}[plciba] [-v] [--short-circuit] [--clean] [--rcfile  <file>]"));
-    puts(_("                        [--sign] [--test] [--timecheck <s>] [--buildos <os>]"));
-    puts(_("                        [--buildarch <arch>] specfile"));
+    puts(_("                        [--sign] [--test] [--timecheck <s>] specfile"));
     puts(_("       rpm {--rebuild} [--rcfile <file>] [-v] source1.rpm ... sourceN.rpm"));
     puts(_("       rpm {--recompile} [--rcfile <file>] [-v] source1.rpm ... sourceN.rpm"));
     puts(_("       rpm {--resign} [--rcfile <file>] package1 package2 ... packageN"));
@@ -140,7 +128,7 @@ static void printHelpLine(char * prefix, char * help) {
 	while (ch > (help + 1) && isspace(*ch)) ch--;
 	ch++;
 
-	sprintf(format, "%%.%ds\n%%%ds", (int) (ch - help), indentLength);
+	sprintf(format, "%%.%ds\n%%%ds", ch - help, indentLength);
 	printf(format, help, " ");
 	help = ch;
 	while (isspace(*help) && *help) help++;
@@ -153,7 +141,7 @@ static void printHelpLine(char * prefix, char * help) {
 static void printHelp(void) {
     printVersion();
     printBanner();
-    puts("");
+    puts(_(""));
 
     puts(_("usage:"));
     printHelpLine("   --help                 ", 
@@ -195,8 +183,6 @@ static void printHelp(void) {
     puts(_("      Information selection options:"));
     printHelpLine("        -i                ",
 		  _("display package information"));
-    printHelpLine("        --changelog       ",
-		  _("display the package's change log"));
     printHelpLine("        -l                ",
 		  _("display package file list"));
     printHelpLine("        -s                ",
@@ -208,7 +194,7 @@ static void printHelp(void) {
     printHelpLine("        --dump            ",
 		  _("show all verifiable information for each file (must be used with -l, -c, or -d)"));
     printHelpLine("        --provides        ",
-		  _("list capabilities package provides"));
+		  _("list capabilbities package provides"));
     puts(       _("        --requires"));
     printHelpLine("        -R                ",
 		  _("list package dependencies"));
@@ -254,21 +240,14 @@ static void printHelp(void) {
     puts(         "      -h");
     printHelpLine("      --hash              ",
 		  _("print hash marks as package installs (good with -v)"));
-    printHelpLine("      --allfiles          ",
-		  _("install all files, even configurations which might "
-		    "otherwise be skipped"));
     printHelpLine("      --ignorearch        ",
-		  _("don't verify package architecture"));
+		  _("don't verify package architecure"));
     printHelpLine("      --ignoreos          ",
 		  _("don't verify package operating system"));
     printHelpLine("      --includedocs       ",
 		  _("install documentation"));
-    printHelpLine("      --justdb            ",
-		  _("update the database, but do not modify the filesystem"));
     printHelpLine("      --nodeps            ",
 		  _("do not verify package dependencies"));
-    printHelpLine("      --noorder           ",
-		  _("do not reorder package installation to satisfy dependencies"));
     printHelpLine("      --noscripts         ",
 		  _("don't execute any installation scripts"));
     printHelpLine("      --percent           ",
@@ -295,17 +274,13 @@ static void printHelp(void) {
 		  _("remove all packages which match <package> (normally an error is generated if <package> specified multiple packages)"));
     printHelpLine("      --dbpath <dir>      ",
 		  _("use <dir> as the directory for the database"));
-    printHelpLine("      --justdb            ",
-		  _("update the database, but do not modify the filesystem"));
     printHelpLine("      --nodeps            ",
 		  _("do not verify package dependencies"));
-    printHelpLine("      --noorder           ",
-		  _("do not reorder package installation to satisfy dependencies"));
     printHelpLine("      --noscripts         ",
 		  _("do not execute any package specific scripts"));
     printHelpLine("      --root <dir>        ",
 		  _("use <dir> as the top level directory"));
-    puts("");
+    puts(_(""));
     puts(_("    -b<stage> <spec>      "));
     printHelpLine("    -t<stage> <tarball>      ",
 		  _("build package, where <stage> is one of:"));
@@ -327,12 +302,8 @@ static void printHelp(void) {
 		  _("remove build tree when done"));
     printHelpLine("      --sign              ",
 		  _("generate PGP signature"));
-    printHelpLine("      --buildroot <dir>     ",
-		  _("use <dir> as the build root"));
-    printHelpLine("      --buildarch <arch>  ",
-		  _("build the packages for architecture <arch>"));
-    printHelpLine("      --buildos <os>  ",
-		  _("build the packages for ositecture <os>"));
+    printHelpLine("      --buildroot <s>     ",
+		  _("use s as the build root"));
     printHelpLine("      --test              ",
 		  _("do not execute any stages"));
     printHelpLine("      --timecheck <s>     ",
@@ -368,7 +339,7 @@ static void printHelp(void) {
 static int build(char *arg, int buildAmount, char *passPhrase,
 	         char *buildRootOverride, int fromTarball) {
     FILE *f;
-    Spec *s, *specArray;
+    Spec s;
     char * specfile;
     int res = 0;
     struct stat statbuf;
@@ -376,7 +347,6 @@ static int build(char *arg, int buildAmount, char *passPhrase,
     char * tmpSpecFile;
     char * cmd;
     char buf[1024];
-    int flags;
 
     if (fromTarball) {
 	specDir = rpmGetVar(RPMVAR_SPECDIR);
@@ -396,7 +366,7 @@ static int build(char *arg, int buildAmount, char *passPhrase,
 	    unlink(tmpSpecFile);
 	    return 1;
 	}
-	pclose(f);
+	fclose(f);
 
 	cmd = specfile = buf;
 	while (*cmd) {
@@ -414,8 +384,8 @@ static int build(char *arg, int buildAmount, char *passPhrase,
 	sprintf(specfile, "%s/%s", specDir, cmd);
 	
 	if (rename(tmpSpecFile, specfile)) {
-	    fprintf(stderr, _("Failed to rename %s to %s: %s\n"),
-		    tmpSpecFile, specfile, strerror(errno));
+	    fprintf(stderr, "Failed to rename %s to %s: %s\n", tmpSpecFile,
+			specfile, strerror(errno));
 	    unlink(tmpSpecFile);
 	    return 1;
 	}
@@ -448,8 +418,7 @@ static int build(char *arg, int buildAmount, char *passPhrase,
 
     stat(specfile, &statbuf);
     if (! S_ISREG(statbuf.st_mode)) {
-	rpmError(RPMERR_BADSPEC, _("File is not a regular file: %s\n"),
-		 specfile);
+	rpmError(RPMERR_BADSPEC, "File is not a regular file: %s\n", specfile);
 	return 1;
     }
     
@@ -457,10 +426,22 @@ static int build(char *arg, int buildAmount, char *passPhrase,
 	fprintf(stderr, _("unable to open: %s\n"), specfile);
 	return 1;
     }
-    
-    s = specArray = parseSpec(f, specfile, buildRootOverride);
+    s = parseSpec(f, specfile, buildRootOverride);
     fclose(f);
-    if (! specArray) {
+    if (s) {
+	if (verifySpec(s)) {
+	    fprintf(stderr, "\n%cSpec file check failed!!\n", 7);
+	    fprintf(stderr,
+		    "Tell rpm-list@redhat.com if this is incorrect.\n\n");
+	    res = 1;
+	} else {
+	    if (doBuild(s, buildAmount, passPhrase)) {
+		fprintf(stderr, _("Build failed.\n"));
+		res = 1;
+	    }
+	}
+        freeSpec(s);
+    } else {
 	/* Spec parse failed -- could be Exclude: Exclusive: */
 	res = 1;
 	if (rpmErrorCode() == RPMERR_BADARCH) {
@@ -468,34 +449,6 @@ static int build(char *arg, int buildAmount, char *passPhrase,
 	} else {
 	    fprintf(stderr, _("Build failed.\n"));
 	}
-    } else {
-	while (*s && !res) {
-	    if (verifySpec(*s)) {
-		fprintf(stderr, _("\n%cSpec file check failed!!\n"), 7);
-		fprintf(stderr,
-			_("Tell rpm-list@redhat.com if this is incorrect.\n\n"));
-		res = 1;
-	    } else {
-		flags = buildAmount;
-		/* Don't build source package or remove sources */
-		/* unless this is the last package being built. */
-		if (*(s+1)) {
-		    flags = flags & ~RPMBUILD_SOURCE;
-		    flags = flags & ~RPMBUILD_RMSOURCE;
-		}
-		if (doBuild(*s, flags, passPhrase)) {
-		    fprintf(stderr, _("Build failed.\n"));
-		    res = 1;
-		}
-	    }
-	    s++;
-	}
-
-	s = specArray;
-	while (*s) {
-	    freeSpec(*s++);
-	}
-	free(specArray);
     }
 
     if (fromTarball) unlink(specfile);
@@ -513,10 +466,10 @@ int main(int argc, char ** argv) {
     int showHash = 0, installFlags = 0, uninstallFlags = 0, interfaceFlags = 0;
     int buildAmount = 0, oldPackage = 0, clean = 0, signIt = 0;
     int shortCircuit = 0, queryTags = 0, excldocs = 0;
-    int incldocs = 0, noScripts = 0, noDeps = 0, allMatches = 0, noOrder = 0;
+    int incldocs = 0, noScripts = 0, noDeps = 0, allMatches = 0;
     int noPgp = 0, dump = 0, initdb = 0, ignoreArch = 0, showrc = 0;
     int gotDbpath = 0, building = 0, ignoreOs = 0, noFiles = 0, verifyFlags;
-    int noMd5 = 0, allFiles = 0, justdb = 0;
+    int noMd5 = 0;
     int checksigFlags = 0;
     char *tce;
     int timeCheck = 0;
@@ -545,7 +498,6 @@ int main(int argc, char ** argv) {
     struct poptOption optionsTable[] = {
 	    { "addsign", '\0', 0, 0, GETOPT_ADDSIGN },
 	    { "all", 'a', 0, 0, 'a' },
-	    { "allfiles", '\0', 0, &allFiles, 0 },
 	    { "allmatches", 'a', 0, &allMatches, 0 },
 	    { "build", 'b', POPT_ARG_STRING, 0, 'b' },
 	    { "buildarch", '\0', POPT_ARG_STRING, 0, 0 },
@@ -573,10 +525,8 @@ int main(int argc, char ** argv) {
 	    { "initdb", '\0', 0, &initdb, 0 },
 	/* info and install both using 'i' is dumb */
 	    { "install", '\0', 0, 0, GETOPT_INSTALL },
-	    { "justdb", '\0', 0, &justdb, 0 },
 	    { "list", 'l', 0, 0, 'l' },
 	    { "nodeps", '\0', 0, &noDeps, 0 },
-	    { "noorder", '\0', 0, &noOrder, 0 },
 	    { "nofiles", '\0', 0, &noFiles, 0 },
 	    { "nomd5", '\0', 0, &noMd5, 0 },
 	    { "nopgp", '\0', 0, &noPgp, 0 },
@@ -936,7 +886,7 @@ int main(int argc, char ** argv) {
 
     if (bigMode != MODE_QUERY && bigMode != MODE_INSTALL && 
 	bigMode != MODE_UNINSTALL && bigMode != MODE_VERIFY &&
-	bigMode != MODE_INITDB && bigMode != MODE_REBUILDDB && gotDbpath)
+	bigMode != MODE_INITDB && gotDbpath)
 	argerror(_("--dbpath given for operation that does not use a "
 			"database"));
 
@@ -1003,14 +953,6 @@ int main(int argc, char ** argv) {
 	argerror(_("--allmatches may only be specified during package "
 		   "erasure"));
 
-    if (allFiles && bigMode != MODE_INSTALL)
-	argerror(_("--allfiles may only be specified during package "
-		   "installation"));
-
-    if (justdb && bigMode != MODE_INSTALL && bigMode != MODE_UNINSTALL)
-	argerror(_("--justdb may only be specified during package "
-		   "installation and erasure"));
-
     if (bigMode != MODE_INSTALL && bigMode != MODE_UNINSTALL && 
 	bigMode != MODE_VERIFY && noScripts)
 	argerror(_("--noscripts may only be specified during package "
@@ -1054,7 +996,7 @@ int main(int argc, char ** argv) {
 	argerror(_("--oldpackage may only be used during upgrades"));
 
     if (bigMode != MODE_QUERY && dump) 
-	argerror(_("--dump may only be used during queries"));
+	argerror(_("--dump may only be used during queryies"));
 
     if (bigMode == MODE_QUERY && dump && !(queryFor & QUERY_FOR_LIST))
 	argerror(_("--dump of queries must be used with -l, -c, or -d"));
@@ -1170,7 +1112,7 @@ int main(int argc, char ** argv) {
 	}
 
 	while ((pkg = poptGetArg(optCon))) {
-	    if (doSourceInstall("/", pkg, &specFile, NULL))
+	    if (doSourceInstall("/", pkg, &specFile))
 		exit(1);
 
 	    if (build(specFile, buildAmount, passPhrase, buildRootOverride,
@@ -1233,7 +1175,6 @@ int main(int argc, char ** argv) {
 
 	if (noScripts) uninstallFlags |= RPMUNINSTALL_NOSCRIPTS;
 	if (test) uninstallFlags |= RPMUNINSTALL_TEST;
-	if (justdb) uninstallFlags |= RPMUNINSTALL_JUSTDB;
 	if (noDeps) interfaceFlags |= UNINSTALL_NODEPS;
 	if (allMatches) interfaceFlags |= UNINSTALL_ALLMATCHES;
 
@@ -1250,13 +1191,10 @@ int main(int argc, char ** argv) {
 	if (noScripts) installFlags |= RPMINSTALL_NOSCRIPTS;
 	if (ignoreArch) installFlags |= RPMINSTALL_NOARCH;
 	if (ignoreOs) installFlags |= RPMINSTALL_NOOS;
-	if (allFiles) installFlags |= RPMINSTALL_ALLFILES;
-	if (justdb) installFlags |= RPMINSTALL_JUSTDB;
 
 	if (showPercents) interfaceFlags |= INSTALL_PERCENT;
 	if (showHash) interfaceFlags |= INSTALL_HASH;
 	if (noDeps) interfaceFlags |= INSTALL_NODEPS;
-	if (noOrder) interfaceFlags |= INSTALL_NOORDER;
 
 	if (!incldocs) {
 	    if (excldocs)
