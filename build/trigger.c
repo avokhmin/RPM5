@@ -1,8 +1,5 @@
 /* handle triggers */
 
-#include "config.h"
-#include "miscfn.h"
-
 #include <stdlib.h>
 #include <string.h>
 
