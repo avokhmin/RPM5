@@ -6,21 +6,15 @@
 /*****************************
 TODO:
 
+. strip blank lines, leading/trailing spaces in %preamble
+. %doc globbing
 . should be able to drop the -n in non-%package parts
 
 ******************************/
 
-#include "config.h"
-#include "miscfn.h"
-
-#if HAVE_ALLOCA_H
-# include <alloca.h>
-#endif
-
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
-#include <time.h>
 #include <sys/time.h>
 #include <limits.h>
 #include <ctype.h>
@@ -56,7 +50,7 @@ static int dateToTimet(const char * datestr, time_t * secs);
 static void addChangelogEntry(Header h, int time, char *name, char *text);
 static int addChangelog(Header h, StringBuf sb);
 
-static int parseProvides(struct PackageRec *p, char *line, int tag);
+static int parseProvides(struct PackageRec *p, char *line);
 static int parseRequiresConflicts(struct PackageRec *p, char *line,
 				  int flag);
 static void free_reqprov(struct ReqProv *p);
@@ -65,11 +59,7 @@ static int noSourcePatch(Spec s, char *line, int_32 tag);
 static void addListEntry(Header h, int_32 tag, char *line);
 static int finishCurrentPart(Spec spec, StringBuf sb,
 			     struct PackageRec *cur_package,
-			     int cur_part, char *triggerArgs,
-			     char *scriptProg);
-
-Spec parseSpecAux(FILE *f, char *specfile, char *buildRootOverride,
-		  char ***buildArchs);
+			     int cur_part, char *triggerArgs);
 
 /**********************************************************************/
 /*                                                                    */
@@ -303,38 +293,14 @@ static int parseRequiresConflicts(struct PackageRec *p, char *line,
     struct ReqComp *rc;
 
     while (req || (req = strtok(line, " ,\t\n"))) {
-	switch (flag) {
-	  case RPMTAG_CONFLICTFLAGS:
-	    flags = RPMSENSE_CONFLICTS;
-	    break;
-	  case RPMTAG_PREREQ:
-	    flags = RPMSENSE_PREREQ;
-	    break;
-	  default:
-	    flags = RPMSENSE_ANY;
-	    break;
-	}
-	if (flag == RPMTAG_CONFLICTFLAGS && req[0] == '/') {
-	    rpmError(RPMERR_BADSPEC,
-		     "No file names in Conflicts: %s", req);
-	    return RPMERR_BADSPEC;
-	}
+	flags = (flag == RPMTAG_CONFLICTFLAGS) ?
+	    RPMSENSE_CONFLICTS : RPMSENSE_ANY;
 	if ((version = strtok(NULL, " ,\t\n"))) {
 	    rc = ReqComparisons;
 	    while (rc->token && strcmp(version, rc->token)) {
 		rc++;
 	    }
 	    if (rc->token) {
-		if (req[0] == '/') {
-		    rpmError(RPMERR_BADSPEC,
-			     "No versions on file names in Requires: %s", req);
-		    return RPMERR_BADSPEC;
-		}
-		if (flag == RPMTAG_PREREQ) {
-		    rpmError(RPMERR_BADSPEC,
-			     "No versions in PreReq: %s", req);
-		    return RPMERR_BADSPEC;
-		}
 		/* read a version */
 		flags |= rc->flags;
 		version = strtok(NULL, " ,\t\n");
@@ -359,21 +325,12 @@ static int parseRequiresConflicts(struct PackageRec *p, char *line,
     return 0;
 }
 
-static int parseProvides(struct PackageRec *p, char *line, int tag)
+static int parseProvides(struct PackageRec *p, char *line)
 {
     char *prov;
-    int flags;
-
-    flags = (tag == RPMTAG_PROVIDES) ? RPMSENSE_PROVIDES : RPMSENSE_OBSOLETES;
+    int flags = RPMSENSE_PROVIDES;
     
     while ((prov = strtok(line, " ,\t\n"))) {
-	if (prov[0] == '/') {
-	    rpmError(RPMERR_BADSPEC,
-		     "No file names in %s: %s",
-		     (tag == RPMTAG_PROVIDES) ? "provides" : "obsoletes",
-		     prov);
-	    return RPMERR_BADSPEC;
-	}
 	addReqProv(p, flags, prov, NULL);
 	line = NULL;
     }
@@ -402,8 +359,6 @@ static struct PackageRec *new_packagerec(void)
     p->numReq = 0;
     p->numProv = 0;
     p->numConflict = 0;
-    p->numPreReq = 0;
-    p->numObsoletes = 0;
     p->trigger.alloced = 0;
     p->trigger.used = 0;
     p->trigger.triggerScripts = NULL;
@@ -416,8 +371,6 @@ static struct PackageRec *new_packagerec(void)
 
 void free_packagerec(struct PackageRec *p)
 {
-    if (! p ) return;
-    
     headerFree(p->header);
     freeStringBuf(p->filelist);
     freeStringBuf(p->doc);
@@ -440,7 +393,6 @@ void freeSpec(Spec s)
     FREE(s->noSource);
     FREE(s->noPatch);
     FREE(s->buildroot);
-    FREE(s->buildArch);
     freeSources(s);
     freeStringBuf(s->prep);
     freeStringBuf(s->build);
@@ -557,7 +509,7 @@ static int dateToTimet(const char * datestr, time_t * secs)
 				NULL };
     static char * months[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun",
 			     "Jul", "Aug", "Sep", "Oct", "Nov", "Dec", NULL };
-    static char lengths[] = { 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
+    static char lengths[] = { 31, 29, 31, 30, 31, 30, 31, 30, 31, 30, 31, 30 };
     
     memset(&time, 0, sizeof(time));
 
@@ -726,7 +678,7 @@ static int match_arch(char *s)
     char *tok, *arch;
     int sense, match;
 
-    rpmGetArchInfo(&arch, NULL);
+    arch = rpmGetArchName();
     match = 0;
     
     tok = strtok(s, " \n\t");
@@ -746,7 +698,7 @@ static int match_os(char *s)
     char *tok, *os;
     int sense, match;
 
-    rpmGetOsInfo(&os, NULL);
+    os = rpmGetOsName();
     match = 0;
     
     tok = strtok(s, " \n\t");
@@ -771,7 +723,6 @@ static int read_line(FILE *f, char *line)
     static struct read_level_entry *rl;
     int gotline;
     char *r;
-    char *firstChar;
 
     do {
         gotline = 0;
@@ -784,25 +735,21 @@ static int read_line(FILE *f, char *line)
 	        return 0;
 	    }
 	}
-	firstChar = line;
-	while (*firstChar && isspace(*firstChar)) {
-	    firstChar++;
-	}
-	if ((! strncmp("%ifarch", firstChar, 7)) ||
-	    (! strncmp("%ifnarch", firstChar, 8))) {
+	if ((! strncmp("%ifarch", line, 7)) ||
+	    (! strncmp("%ifnarch", line, 8))) {
 	    expandMacros(line);
 	    rl = malloc(sizeof(struct read_level_entry));
 	    rl->next = read_level;
 	    rl->reading = read_level->reading && match_arch(line);
 	    read_level = rl;
-	} else if ((! strncmp("%ifos", firstChar, 5)) ||
-		   (! strncmp("%ifnos", firstChar, 6))) {
+	} else if ((! strncmp("%ifos", line, 5)) ||
+		   (! strncmp("%ifnos", line, 6))) {
 	    expandMacros(line);
 	    rl = malloc(sizeof(struct read_level_entry));
 	    rl->next = read_level;
 	    rl->reading = read_level->reading && match_os(line);
 	    read_level = rl;
-	} else if (! strncmp("%else", firstChar, 5)) {
+	} else if (! strncmp("%else", line, 5)) {
 	    expandMacros(line);
 	    if (! read_level->next) {
 	        /* Got an else with no %if ! */
@@ -811,7 +758,7 @@ static int read_line(FILE *f, char *line)
 	    }
 	    read_level->reading =
 	        read_level->next->reading && ! read_level->reading;
-	} else if (! strncmp("%endif", firstChar, 6)) {
+	} else if (! strncmp("%endif", line, 6)) {
 	    expandMacros(line);
 	    if (! read_level->next) {
 		rpmError(RPMERR_UNMATCHEDIF, "Got a %%endif with no if");
@@ -853,7 +800,6 @@ struct preamble_line {
     {RPMTAG_DESCRIPTION,   0, "description"},
     {RPMTAG_SUMMARY,       0, "summary"},
     {RPMTAG_COPYRIGHT,     0, "copyright"},
-    {RPMTAG_COPYRIGHT,     0, "license"},
     {RPMTAG_DISTRIBUTION,  0, "distribution"},
     {RPMTAG_VENDOR,        0, "vendor"},
     {RPMTAG_GROUP,         0, "group"},
@@ -873,12 +819,9 @@ struct preamble_line {
     {RPMTAG_ICON,          0, "icon"},
     {RPMTAG_PROVIDES,      0, "provides"},
     {RPMTAG_REQUIREFLAGS,  0, "requires"},
-    {RPMTAG_PREREQ,        0, "prereq"},
     {RPMTAG_CONFLICTFLAGS, 0, "conflicts"},
-    {RPMTAG_OBSOLETES,     0, "obsoletes"},
     {RPMTAG_DEFAULTPREFIX, 0, "prefix"},
     {RPMTAG_BUILDROOT,     0, "buildroot"},
-    {RPMTAG_BUILDARCHS,    0, "buildarchitectures"},
     {RPMTAG_AUTOREQPROV,   0, "autoreqprov"},
     {0, 0, 0}
 };
@@ -918,8 +861,6 @@ static int find_preamble_line(char *line, char **s)
 #define FILES_PART         10
 #define CHANGELOG_PART     11
 #define DESCRIPTION_PART   12
-#define TRIGGERIN_PART     13
-#define TRIGGERUN_PART     14
 #define VERIFYSCRIPT_PART  15
 
 static struct part_rec {
@@ -939,8 +880,6 @@ static struct part_rec {
     {FILES_PART,       0, "%files"},
     {CHANGELOG_PART,   0, "%changelog"},
     {DESCRIPTION_PART, 0, "%description"},
-    {TRIGGERUN_PART,   0, "%triggerun"},
-    {TRIGGERIN_PART,   0, "%trigger"},
     {VERIFYSCRIPT_PART, 0, "%verifyscript"},
     {0, 0, 0}
 };
@@ -1002,36 +941,31 @@ static void addListEntry(Header h, int_32 tag, char *line)
 
 static int finishCurrentPart(Spec spec, StringBuf sb,
 			     struct PackageRec *cur_package,
-			     int cur_part, char *triggerArgs,
-			     char *scriptProg)
+			     int cur_part, char *triggerArgs)
 {
     int t1 = 0;
-    int t2 = 0;
-
-    stripTrailingBlanksStringBuf(sb);
 
     switch (cur_part) {
       case PREIN_PART:
 	t1 = RPMTAG_PREIN;
-	t2 = RPMTAG_PREINPROG;
 	break;
       case POSTIN_PART:
 	t1 = RPMTAG_POSTIN;
-	t2 = RPMTAG_POSTINPROG;
 	break;
       case PREUN_PART:
 	t1 = RPMTAG_PREUN;
-	t2 = RPMTAG_PREUNPROG;
 	break; 
       case POSTUN_PART:
 	t1 = RPMTAG_POSTUN;
-	t2 = RPMTAG_POSTUNPROG;
 	break;
       case VERIFYSCRIPT_PART:
 	t1 = RPMTAG_VERIFYSCRIPT;
 	break;
       case DESCRIPTION_PART:
+	/* %description is a little special.  We need to */
+	/* strip off trailing blank lines.               */
 	t1 = RPMTAG_DESCRIPTION;
+	stripTrailingBlanksStringBuf(sb);
 	break;
       case CHANGELOG_PART:
 	/* %changelog is a little special.  It goes in the   */
@@ -1041,27 +975,10 @@ static int finishCurrentPart(Spec spec, StringBuf sb,
 	    return 1;
 	}
 	break;
-      case TRIGGERIN_PART:
-	if (addTrigger(cur_package, RPMSENSE_TRIGGER_IN,
-		       getStringBuf(sb), triggerArgs)) {
-	    return 1;
-	}
-	break;
-      case TRIGGERUN_PART:
-	if (addTrigger(cur_package, RPMSENSE_TRIGGER_UN,
-		       getStringBuf(sb), triggerArgs)) {
-	    return 1;
-	}
-	break;
     }
-    if (t1 && (*(getStringBuf(sb)) != '\0')) {
+    if (t1) {
 	headerAddEntry(cur_package->header, t1,
 		       RPM_STRING_TYPE, getStringBuf(sb), 1);
-    }
-    if (t2) {
-	addReqProv(cur_package, RPMSENSE_PREREQ, scriptProg, NULL);
-	headerAddEntry(cur_package->header, t2,
-		       RPM_STRING_TYPE, scriptProg, 1);
     }
     return 0;
 }
@@ -1072,74 +989,11 @@ static int finishCurrentPart(Spec spec, StringBuf sb,
 /*                                                                    */
 /**********************************************************************/
 
-Spec *parseSpec(FILE *f, char *specfile, char *buildRootOverride)
-{
-    Spec *res;
-    Spec s;
-    char **archs = NULL;
-    char **arch;
-    int i, count;
-    
-    s = parseSpecAux(f, specfile, buildRootOverride, &archs);
-
-    if (s) {
-	/* No BuildArchitectures field */
-	res = (Spec *) malloc(2 * sizeof(Spec));
-	res[0] = s;
-	res[1] = NULL;
-	return res;
-    }
-
-    if (! archs) {
-	/* Error */
-	return NULL;
-    }
-
-    /* We have a BuildArchitectures field */
-    count = 0;
-    while (archs[count]) {
-	count++;
-    }
-    res = (Spec *) malloc(count * sizeof(Spec));
-
-    i = 0;
-    arch = archs;
-    while (*arch) {
-	if (rpmMachineScore(RPM_MACHTABLE_BUILDARCH, *arch)) {
-	    rewind(f);
-	    rpmSetMachine(*arch, NULL);
-	    res[i] = parseSpecAux(f, specfile, buildRootOverride, NULL);
-	    if (! res[i]) {
-		/* Error */
-		freeSplitString(archs);
-		while (i) {
-		    i--;
-		    freeSpec(res[i]);
-		}
-		free(res);
-		return NULL;
-	    }
-	    headerAddEntry(res[i]->packages->header, RPMTAG_BUILDARCHS,
-			   RPM_STRING_ARRAY_TYPE, archs, count);
-	    res[i]->buildArch = strdup(*arch);
-	    i++;
-	}
-	arch++;
-    }
-    res[i] = NULL;
-
-    freeSplitString(archs);
-    
-    return res;
-}
-
-Spec parseSpecAux(FILE *f, char *specfile, char *buildRootOverride,
-		  char ***buildArchs)
+Spec parseSpec(FILE *f, char *specfile, char *buildRootOverride)
 {
     char buf[LINE_BUF_SIZE]; /* read buffer          */
     char buf2[LINE_BUF_SIZE];
     char fileFile[LINE_BUF_SIZE];
-    char scriptProg[LINE_BUF_SIZE];
     char triggerArgs[LINE_BUF_SIZE];
     char *line;              /* "parsed" read buffer */
     
@@ -1152,7 +1006,6 @@ Spec parseSpecAux(FILE *f, char *specfile, char *buildRootOverride,
     int gotRoot = 0;
     int versionMacroSet = 0;
     int releaseMacroSet = 0;
-    char *arch, *os;
 
     struct PackageRec *cur_package = NULL;
     Spec spec = (struct SpecRec *) malloc(sizeof(struct SpecRec));
@@ -1174,17 +1027,10 @@ Spec parseSpecAux(FILE *f, char *specfile, char *buildRootOverride,
     spec->numNoPatch = 0;
     spec->buildroot = NULL;
     spec->autoReqProv = 1;
-    spec->buildArch = NULL;
 
     sb = newStringBuf();
     reset_spec();         /* Reset the parser */
 
-    rpmGetArchInfo(&arch, NULL);
-    rpmGetOsInfo(&os, NULL);
-    addMacro("buildarch", arch);
-    addMacro("buildos", os);
-
-    scriptProg[0] = '\0';
     cur_part = PREAMBLE_PART;
     while ((x = read_line(f, buf)) > 0) {
 	line = buf;
@@ -1192,7 +1038,7 @@ Spec parseSpecAux(FILE *f, char *specfile, char *buildRootOverride,
         if ((tag = check_part(line, &s))) {
 	    rpmMessage(RPMMESS_DEBUG, "Switching to part: %d\n", tag);
 	    if (finishCurrentPart(spec, sb, cur_package,
-				 cur_part, triggerArgs, scriptProg)) {
+				 cur_part, triggerArgs)) {
 		return NULL;
 	    }
 	    cur_part = tag;
@@ -1212,7 +1058,6 @@ Spec parseSpecAux(FILE *f, char *specfile, char *buildRootOverride,
 	    }
 
 	    /* Rip through s for -f in %files */
-	    /* not only is this code disgusting, but it allows -f on any tag */
 	    fileFile[0] = '\0';
 	    s1 = NULL;
 	    if (s &&
@@ -1226,10 +1071,10 @@ Spec parseSpecAux(FILE *f, char *specfile, char *buildRootOverride,
 		}
 		s1[0] = ' '; s1[1] = ' '; s1[2] = ' ';
 		s1 += 3;
+
 		while (isspace(*s1)) {
 		    s1++;
 		}
-
 		s2 = fileFile;
 		while (*s1 && !isspace(*s1)) {
 		    *s2 = *s1;
@@ -1249,76 +1094,6 @@ Spec parseSpecAux(FILE *f, char *specfile, char *buildRootOverride,
 	    rpmMessage(RPMMESS_DEBUG, "fileFile = %s\n", 
 			fileFile[0] ? fileFile : "(null)");
 
-	    /* If trigger, pull off the args */
-	    if (tag == TRIGGERIN_PART || tag == TRIGGERUN_PART) {
-		s1 = strstr(s, "--");
-		if (s1) {
-		    strcpy(triggerArgs, s1+2);
-		    *s1 = '\0';
-		    s = strtok(s, " \n\t");
-		} else {
-		    strcpy(triggerArgs, s);
-		    s = NULL;
-		}
-	    }
-
-	    /* find possible -p <prog> */
-	    if ((tag == PREIN_PART) ||
-		(tag == POSTIN_PART) ||
-		(tag == PREUN_PART) ||
-		(tag == POSTUN_PART)) {
-
-		scriptProg[0] = '\0';
-		s1 = NULL;
-
-		if (s &&
-		    ((s1 = strstr(s, " -p ")) ||
-		     (!strncmp(s, "-p ", 3)))) {
-		    
-		    if (s1) {
-			s1[0] = ' ';
-			s1++;
-		    } else {
-			s1 = s;
-		    }
-		    s1[0] = ' '; s1[1] = ' '; s1[2] = ' ';
-		    s1 += 3;
-		    while (isspace(*s1)) {
-			s1++;
-		    }
-		    
-		    s2 = scriptProg;
-		    while (*s1 && !isspace(*s1)) {
-			*s2 = *s1;
-			*s1 = ' ';
-			s1++;
-			s2++;
-		    }
-
-		    *s2 = '\0';
-		    while (isspace(*s)) {
-			s++;
-		    }
-		    if (! *s) {
-			s = NULL;
-		    }
-		}
-		
-		/* defaults to /bin/sh */
-		if (! scriptProg[0]) {
-		    strcpy(scriptProg, "/bin/sh");
-		} else {
-		    if (scriptProg[0] != '/') {
-			rpmError(RPMERR_BADSPEC, "pre/post -p arg must begin with \'/\': %s", scriptProg);
-			return NULL;
-		    }
-		}
-		rpmMessage(RPMMESS_DEBUG, "scriptProg = %s\n", scriptProg);
-	    }
-	    
-	    /* At this point s is the remaining args, which can only */
-	    /* be -n <pkg>, or simply <pkg>.                         */
-	    
 	    /* Handle -n in part tags */
 	    lookupopts = 0;
 	    if (s) {
@@ -1389,8 +1164,8 @@ Spec parseSpecAux(FILE *f, char *specfile, char *buildRootOverride,
 	    }
 	    rpmMessage(RPMMESS_DEBUG, "Switched to BASE package\n");
 	}
-
-	switch (cur_part) {
+	
+        switch (cur_part) {
 	  case PREAMBLE_PART:
 	    if ((tag = find_preamble_line(line, &s))) {
 	        switch (tag) {
@@ -1446,12 +1221,6 @@ Spec parseSpecAux(FILE *f, char *specfile, char *buildRootOverride,
 		    s1 = s;
 		    while (*s1 && *s1 != ' ' && *s1 != '\t') s1++;
 		    *s1 = '\0';
-		    if (s1 == s) {
-			rpmError(RPMERR_BADSPEC, (tag == RPMTAG_VERSION) ?
-				 "Empty version field." :
-				 "Empty release field.");
-			return NULL;
-		    }
 		    if (tag == RPMTAG_VERSION) {
 			if (! versionMacroSet) {
 			    versionMacroSet = 1;
@@ -1471,14 +1240,6 @@ Spec parseSpecAux(FILE *f, char *specfile, char *buildRootOverride,
 		  case RPMTAG_GROUP:
 		  case RPMTAG_URL:
 		    headerAddEntry(cur_package->header, tag, RPM_STRING_TYPE, s, 1);
-		    break;
-		  case RPMTAG_BUILDARCHS:
-		    if (buildArchs) {
-			*buildArchs = splitString(s, strlen(s), ' ');
-			freeSpec(spec);
-			freeStringBuf(sb);
-			return NULL;
-		    }
 		    break;
 		  case RPMTAG_BUILDROOT:
 		    gotBuildroot = 1;
@@ -1530,15 +1291,13 @@ Spec parseSpecAux(FILE *f, char *specfile, char *buildRootOverride,
 			  return NULL;
 		      }
 		      break;
-		  case RPMTAG_OBSOLETES:
 		  case RPMTAG_PROVIDES:
-		      if (parseProvides(cur_package, s, tag)) {
+		      if (parseProvides(cur_package, s)) {
 			  return NULL;
 		      }
 		      break;
 		  case RPMTAG_REQUIREFLAGS:
 		  case RPMTAG_CONFLICTFLAGS:
-		  case RPMTAG_PREREQ:
 		      if (parseRequiresConflicts(cur_package, s, tag)) {
 			  return NULL;
 		      }
@@ -1596,10 +1355,6 @@ Spec parseSpecAux(FILE *f, char *specfile, char *buildRootOverride,
 	  case VERIFYSCRIPT_PART:
 	    appendLineStringBuf(sb, line);
 	    break;
-	  case TRIGGERIN_PART:
-	  case TRIGGERUN_PART:
-	    appendLineStringBuf(sb, line);
-	    break;
 	  case FILES_PART:
 	      s1 = line;
 	      while (*s1 && (*s1 == ' ' || *s1 == '\t')) s1++;
@@ -1620,12 +1375,9 @@ Spec parseSpecAux(FILE *f, char *specfile, char *buildRootOverride,
 
     /* finish current part */
     if (finishCurrentPart(spec, sb, cur_package,
-			  cur_part, triggerArgs,
-			  scriptProg)) {
+			  cur_part, triggerArgs)) {
 	return NULL;
     }
-
-    freeStringBuf(sb);
     
     if (gotRoot && gotBuildroot) {
 	freeSpec(spec);
