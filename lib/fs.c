@@ -1,51 +1,34 @@
-/**
- * \file lib/fs.c
- */
-
 #include "system.h"
-#include <rpmio.h>
-#include <rpmiotypes.h>
-#include <rpmlog.h>
-#include <rpmmacro.h>	/* XXX for rpmGetPath */
 
-#include "fs.h"
-
-#include "debug.h"
-
-/*@-usereleased -onlytrans@*/
+#include <rpmlib.h>
+#include <rpmmacro.h>
 
 struct fsinfo {
-/*@only@*/ /*@relnull@*/
-    const char * mntPoint;	/*!< path to mount point. */
-    dev_t dev;			/*!< devno for mount point. */
-    int rdonly;			/*!< is mount point read only? */
+    /*@only@*/ const char * mntPoint;
+    dev_t dev;
 };
 
-/*@unchecked@*/
-/*@only@*/ /*@null@*/
-static struct fsinfo * filesystems = NULL;
-/*@unchecked@*/
-/*@only@*/ /*@null@*/
-static const char ** fsnames = NULL;
-/*@unchecked@*/
+/*@only@*/ /*@null@*/ static struct fsinfo * filesystems = NULL;
+/*@only@*/ /*@null@*/ static const char ** fsnames = NULL;
 static int numFilesystems = 0;
 
-void rpmFreeFilesystems(void)
-	/*@globals filesystems, fsnames, numFilesystems @*/
-	/*@modifies filesystems, fsnames, numFilesystems @*/
+void freeFilesystems(void)
 {
-    int i;
-
-    if (filesystems)
-    for (i = 0; i < numFilesystems; i++)
-	filesystems[i].mntPoint = _free(filesystems[i].mntPoint);
-
-    filesystems = _free(filesystems);
-    fsnames = _free(fsnames);
+    if (filesystems) {
+	int i;
+	for (i = 0; i < numFilesystems; i++)
+	    xfree(filesystems[i].mntPoint);
+	free(filesystems);
+	filesystems = NULL;
+    }
+    if (fsnames) {
+	free(fsnames);
+	fsnames = NULL;
+    }
     numFilesystems = 0;
 }
 
-#if defined(HAVE_MNTCTL)
+#if HAVE_MNTCTL
 
 /* modeled after sample code from Till Bubeck */
 
@@ -58,26 +41,19 @@ void rpmFreeFilesystems(void)
  */
 int mntctl(int command, int size, char *buffer);
 
-/**
- * Get information for mounted file systems.
- * @todo determine rdonly for non-linux file systems.
- * @return		0 on success, 1 on error
- */
 static int getFilesystemList(void)
-	/*@*/
 {
     int size;
     void * buf;
     struct vmount * vm;
     struct stat sb;
-    int rdonly = 0;
     int num;
     int fsnameLength;
     int i;
 
     num = mntctl(MCTL_QUERY, sizeof(size), (char *) &size);
     if (num < 0) {
-	rpmlog(RPMLOG_ERR, _("mntctl() failed to return size: %s\n"), 
+	rpmError(RPMERR_MTAB, _("mntctl() failed to return fugger size: %s"), 
 		 strerror(errno));
 	return 1;
     }
@@ -92,7 +68,7 @@ static int getFilesystemList(void)
     buf = alloca(size);
     num = mntctl(MCTL_QUERY, size, buf);
     if ( num <= 0 ) {
-        rpmlog(RPMLOG_ERR, _("mntctl() failed to return mount points: %s\n"), 
+        rpmError(RPMERR_MTAB, "mntctl() failed to return mount points: %s", 
 		 strerror(errno));
 	return 1;
     }
@@ -111,27 +87,15 @@ static int getFilesystemList(void)
 
 	filesystems[i].mntPoint = fsnames[i] = fsn;
 	
-#if defined(RPM_VENDOR_OPENPKG) /* always-skip-proc-filesystem */
-	if (!(strcmp(fsn, "/proc") == 0)) {
-#endif
-	if (Stat(fsn, &sb) < 0) {
-	    switch(errno) {
-	    default:
-		rpmlog(RPMLOG_ERR, _("failed to stat %s: %s\n"), fsn,
+	if (stat(filesystems[i].mntPoint, &sb)) {
+	    rpmError(RPMERR_STAT, _("failed to stat %s: %s"), fsnames[i],
 			strerror(errno));
-		rpmFreeFilesystems();
-		return 1;
-	    case ENOENT:	/* XXX avoid /proc if leaked into *BSD jails. */
-		sb.st_dev = 0;	/* XXXX make sure st_dev is initialized. */
-		/*@switchbreak@*/ break;
-	    }
+
+	    freeFilesystems();
+	    return 1;
 	}
 	
 	filesystems[i].dev = sb.st_dev;
-	filesystems[i].rdonly = rdonly;
-#if defined(RPM_VENDOR_OPENPKG) /* always-skip-proc-filesystem */
-        }
-#endif
 
 	/* goto the next vmount structure: */
 	vm = (struct vmount *)((char *)vm + vm->vmt_length);
@@ -145,52 +109,32 @@ static int getFilesystemList(void)
 
 #else	/* HAVE_MNTCTL */
 
-/**
- * Get information for mounted file systems.
- * @todo determine rdonly for non-linux file systems.
- * @return		0 on success, 1 on error
- */
 static int getFilesystemList(void)
-	/*@globals h_errno, filesystems, fsnames, numFilesystems,
-		fileSystem, internalState @*/
-	/*@modifies filesystems, fsnames, numFilesystems,
-		fileSystem, internalState @*/
 {
     int numAlloced = 10;
     struct stat sb;
     int i;
-    const char * mntdir;
-    int rdonly = 0;
-
+    char * mntdir;
 #   if GETMNTENT_ONE || GETMNTENT_TWO
     our_mntent item;
     FILE * mtab;
-
-	mtab = fopen(MOUNTED, "r");
-	if (!mtab) {
-	    rpmlog(RPMLOG_ERR, _("failed to open %s: %s\n"), MOUNTED, 
-		     strerror(errno));
-	    return 1;
-	}
-#   elif defined(HAVE_GETMNTINFO_R)
-    /* This is OSF */
+#   elif HAVE_GETMNTINFO_R
     struct statfs * mounts = NULL;
     int mntCount = 0, bufSize = 0, flags = MNT_NOWAIT;
     int nextMount = 0;
+#   endif
 
+    rpmMessage(RPMMESS_DEBUG, _("getting list of mounted filesystems\n"));
+
+#   if GETMNTENT_ONE || GETMNTENT_TWO
+	mtab = fopen(MOUNTED, "r");
+	if (!mtab) {
+	    rpmError(RPMERR_MTAB, _("failed to open %s: %s"), MOUNTED, 
+		     strerror(errno));
+	    return 1;
+	}
+#   elif HAVE_GETMNTINFO_R
 	getmntinfo_r(&mounts, flags, &mntCount, &bufSize);
-#   elif defined(HAVE_GETMNTINFO)
-    /* This is Mac OS X */
-#if defined(__NetBSD__)
-    struct statvfs * mounts = NULL;
-#else
-    struct statfs * mounts = NULL;
-#endif
-    int mntCount = 0, flags = MNT_NOWAIT;
-    int nextMount = 0;
-
-	/* XXX 0 on error, errno set */
-	mntCount = getmntinfo(&mounts, flags);
 #   endif
 
     filesystems = xcalloc((numAlloced + 1), sizeof(*filesystems));	/* XXX memory leak */
@@ -199,94 +143,57 @@ static int getFilesystemList(void)
     while (1) {
 #	if GETMNTENT_ONE
 	    /* this is Linux */
-	    /*@-modunconnomods -moduncon @*/
 	    our_mntent * itemptr = getmntent(mtab);
 	    if (!itemptr) break;
-	    item = *itemptr;	/* structure assignment */
+	    item = *itemptr;
 	    mntdir = item.our_mntdir;
-#if defined(MNTOPT_RO)
-	    /*@-compdef@*/
-	    if (hasmntopt(itemptr, MNTOPT_RO) != NULL)
-		rdonly = 1;
-	    /*@=compdef@*/
-#endif
-	    /*@=modunconnomods =moduncon @*/
 #	elif GETMNTENT_TWO
 	    /* Solaris, maybe others */
 	    if (getmntent(mtab, &item)) break;
 	    mntdir = item.our_mntdir;
-#	elif defined(HAVE_GETMNTINFO_R)
-	    /* This is OSF */
-	    if (nextMount == mntCount) break;
-	    mntdir = mounts[nextMount++].f_mntonname;
-#	elif defined(HAVE_GETMNTINFO)
-	    /* This is Mac OS X */
+#	elif HAVE_GETMNTINFO_R
 	    if (nextMount == mntCount) break;
 	    mntdir = mounts[nextMount++].f_mntonname;
 #	endif
 
-#if defined(RPM_VENDOR_OPENPKG) /* always-skip-proc-filesystem */
-	if (strcmp(mntdir, "/proc") == 0)
-		continue;
-#endif
-
-	if (Stat(mntdir, &sb) < 0) {
-	    switch(errno) {
-	    default:
-		rpmlog(RPMLOG_ERR, _("failed to stat %s: %s\n"), mntdir,
+	if (stat(mntdir, &sb)) {
+	    rpmError(RPMERR_STAT, "failed to stat %s: %s", mntdir,
 			strerror(errno));
-		rpmFreeFilesystems();
-		return 1;
-		/*@notreached@*/ /*@switchbreak@*/ break;
-	    case ENOENT:	/* XXX avoid /proc if leaked into *BSD jails. */
-	    case EACCES:	/* XXX fuse fs #220991 */
-	    case ESTALE:
-		continue;
-		/*@notreached@*/ /*@switchbreak@*/ break;
-	    }
+
+	    freeFilesystems();
+	    return 1;
 	}
 
-	if ((numFilesystems + 2) == numAlloced) {
+	numFilesystems++;
+	if ((numFilesystems + 1) == numAlloced) {
 	    numAlloced += 10;
 	    filesystems = xrealloc(filesystems, 
 				  sizeof(*filesystems) * (numAlloced + 1));
 	}
 
-	filesystems[numFilesystems].dev = sb.st_dev;
-	filesystems[numFilesystems].mntPoint = xstrdup(mntdir);
-	filesystems[numFilesystems].rdonly = rdonly;
-#if 0
-	rpmlog(RPMLOG_DEBUG, _("%5d 0x%04x %s %s\n"),
-		numFilesystems,
-		(unsigned) filesystems[numFilesystems].dev,
-		(filesystems[numFilesystems].rdonly ? "ro" : "rw"),
-		filesystems[numFilesystems].mntPoint);
-#endif
-	numFilesystems++;
+	filesystems[numFilesystems-1].dev = sb.st_dev;
+	filesystems[numFilesystems-1].mntPoint = xstrdup(mntdir);
     }
 
 #   if GETMNTENT_ONE || GETMNTENT_TWO
-	(void) fclose(mtab);
-#   elif defined(HAVE_GETMNTINFO_R)
-	mounts = _free(mounts);
+	fclose(mtab);
+#   elif HAVE_GETMNTINFO_R
+	free(mounts);
 #   endif
 
     filesystems[numFilesystems].dev = 0;
     filesystems[numFilesystems].mntPoint = NULL;
-    filesystems[numFilesystems].rdonly = 0;
 
     fsnames = xcalloc((numFilesystems + 1), sizeof(*fsnames));
     for (i = 0; i < numFilesystems; i++)
 	fsnames[i] = filesystems[i].mntPoint;
     fsnames[numFilesystems] = NULL;
 
-/*@-nullstate@*/ /* FIX: fsnames[] may be NULL */
     return 0; 
-/*@=nullstate@*/
 }
 #endif	/* HAVE_MNTCTL */
 
-int rpmGetFilesystemList(const char *** listptr, rpmuint32_t * num)
+int rpmGetFilesystemList(const char *** listptr, int * num)
 {
     if (!fsnames) 
 	if (getFilesystemList())
@@ -298,28 +205,25 @@ int rpmGetFilesystemList(const char *** listptr, rpmuint32_t * num)
     return 0;
 }
 
-int rpmGetFilesystemUsage(const char ** fileList, rpmuint32_t * fssizes,
-		int numFiles, rpmuint64_t ** usagesPtr,
-		/*@unused@*/ int flags)
+int rpmGetFilesystemUsage(const char ** fileList, int_32 * fssizes, int numFiles,
+			  uint_32 ** usagesPtr, /*@unused@*/int flags)
 {
-    rpmuint64_t * usages;
-    int i, j;
+    int_32 * usages;
+    int i, len, j;
     char * buf, * dirName;
     char * chptr;
-    size_t maxLen;
-    size_t len;
+    int maxLen;
     char * lastDir;
     const char * sourceDir;
     int lastfs = 0;
-    dev_t lastDev = (dev_t)-1;		/* I hope nobody uses -1 for a st_dev */
+    int lastDev = -1;		/* I hope nobody uses -1 for a st_dev */
     struct stat sb;
-    int rc = 1;		/* assume failure */
 
     if (!fsnames) 
 	if (getFilesystemList())
-	    return rc;
+	    return 1;
 
-    usages = xcalloc(numFilesystems, sizeof(*usages));
+    usages = xcalloc(numFilesystems, sizeof(usages));
 
     sourceDir = rpmGetPath("%{_sourcedir}", NULL);
 
@@ -352,15 +256,13 @@ int rpmGetFilesystemUsage(const char ** fileList, rpmuint32_t * fssizes,
 	if (strcmp(lastDir, buf)) {
 	    strcpy(dirName, buf);
 	    chptr = dirName + strlen(dirName) - 1;
-	    while (Stat(dirName, &sb) < 0) {
-		switch(errno) {
-		default:
-		    rpmlog(RPMLOG_ERR, _("failed to stat %s: %s\n"), buf,
+	    while (stat(dirName, &sb)) {
+		if (errno != ENOENT) {
+		    rpmError(RPMERR_STAT, _("failed to stat %s: %s"), buf,
 				strerror(errno));
-		    goto exit;
-		    /*@notreached@*/ /*@switchbreak@*/ break;
-		case ENOENT:	/* XXX paths in empty chroot's don't exist. */
-		    /*@switchbreak@*/ break;
+		    xfree(sourceDir);
+		    free(usages);
+		    return 1;
 		}
 
 		/* cut off last directory part, because it was not found. */
@@ -374,13 +276,14 @@ int rpmGetFilesystemUsage(const char ** fileList, rpmuint32_t * fssizes,
 
 	    if (lastDev != sb.st_dev) {
 		for (j = 0; j < numFilesystems; j++)
-		    if (filesystems && filesystems[j].dev == sb.st_dev)
-			/*@innerbreak@*/ break;
+		    if (filesystems[j].dev == sb.st_dev) break;
 
 		if (j == numFilesystems) {
-		    rpmlog(RPMLOG_ERR, 
-				_("file %s is on an unknown device\n"), buf);
-		    goto exit;
+		    rpmError(RPMERR_BADDEV, 
+				_("file %s is on an unknown device"), buf);
+		    xfree(sourceDir);
+		    free(usages);
+		    return 1;
 		}
 
 		lastfs = j;
@@ -391,16 +294,10 @@ int rpmGetFilesystemUsage(const char ** fileList, rpmuint32_t * fssizes,
 	strcpy(lastDir, buf);
 	usages[lastfs] += fssizes[i];
     }
-    rc = 0;
 
-exit:
-    sourceDir = _free(sourceDir);
+    if (sourceDir) xfree(sourceDir);
 
-    if (rc == 0 && usagesPtr)
-	*usagesPtr = usages;
-    else
-	usages = _free(usages);
+    *usagesPtr = usages;
 
-    return rc;
+    return 0;
 }
-/*@=usereleased =onlytrans@*/
