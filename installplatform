@@ -1,0 +1,65 @@
+#!/bin/sh
+
+DESTDIR="${DESTDIR:-/}"
+pkglibdir="${pkglibdir:-/usr/lib/rpm}"
+
+RPMRC="${1:-rpmrc}"
+MACROS="${2:-macros}"
+PLATFORM="${3:-platform}"
+
+TEMPRC="/tmp/rpmrc.$$"
+cat << E_O_F > $TEMPRC
+include:	$RPMRC
+macrofiles:	$MACROS
+E_O_F
+
+RPM="./rpm --rcfile $TEMPRC"
+
+arch="`$RPM --eval '%{_arch}'`"
+VENDOR="`$RPM --eval '%{_vendor}'`"
+OS="`$RPM --eval '%{_os}'`"
+target_platform="`$RPM --eval '%{_target_platform}'`"
+target="`$RPM --eval '%{_target}'`"
+
+case "$arch" in
+  sparc*) SUBSTS='s_sparc64_sparc_ s_sparc\([^6]\|\)_sparc64\1_' ;;
+  *) SUBSTS=y___ ;;
+esac
+
+for SUBST in $SUBSTS; do
+  ARCH=`echo $arch | sed -e $SUBST`
+  TARGET_PLATFORM=`echo $target_platform | sed -e $SUBST`
+  TARGET=`echo $target | sed -e $SUBST`
+  LIB=lib
+
+  PPD="${DESTDIR}/${pkglibdir}/${ARCH}-${VENDOR}-${OS}"
+
+  [ -d $PPD ] || mkdir $PPD
+
+  RPMRC_OPTFLAGS="`$RPM --eval '%{optflags}'`"
+  RPMRC_OPTFLAGS="`echo $RPMRC_OPTFLAGS | sed -e 's, ,\ ,g'`"
+
+  ARCH_INSTALL_POST='%{nil}'
+  case "${ARCH}-${OS}" in
+    sparc64-linux) ARCH_INSTALL_POST=${pkglibdir}/brp-sparc64-linux; LIB=lib64 ;;
+  esac
+
+  cat $PLATFORM | \
+    sed -e "s,@RPMRC_OPTFLAGS@,$RPMRC_OPTFLAGS," \
+	-e "s,@RPMRC_ARCH@,$ARCH," \
+	-e "s,@LIB@,$LIB," \
+	-e "s,@ARCH_INSTALL_POST@,$ARCH_INSTALL_POST," \
+	-e 's,\${,%{_,' \
+  > ${PPD}/macros
+
+  #
+  # Better try to create these too until the smoke clears. Yuck.
+  [ "${ARCH}-${VENDOR}-${OS}" = "${TARGET}" ] || ln -sf ${ARCH}-${VENDOR}-${OS} ${DESTDIR}/${pkglibdir}/${TARGET}
+  [ "${ARCH}-${VENDOR}-${OS}" = "${TARGET_PLATFORM}" ] || ln -sf ${ARCH}-${VENDOR}-${OS} ${DESTDIR}/${pkglibdir}/${TARGET_PLATFORM}
+
+  [ "$ARCH" = sparc ] && ln -sf ${ARCH}-${VENDOR}-${OS} ${DESTDIR}/${pkglibdir}/sparcv9-${OS}
+  [ "$ARCH" = sparc ] && ln -sf ${ARCH}-${VENDOR}-${OS} ${DESTDIR}/${pkglibdir}/sparcv9-${VENDOR}-${OS}
+
+done
+
+rm $TEMPRC
