@@ -35,6 +35,12 @@ int _hdr_debug = 0;
 #define PARSER_IN_ARRAY 1
 #define PARSER_IN_EXPR  2
 
+/* XXX for xml support */
+/*@-redecl@*/
+/*@observer@*/ extern const char *const tagName(int tag)
+	/*@*/;
+/*@=redecl@*/
+
 /** \ingroup header
  */
 /*@observer@*/ /*@unchecked@*/
@@ -2263,6 +2269,123 @@ freeFormat( /*@only@*/ /*@null@*/ sprintfToken format, int num)
 }
 
 /**
+ * Header tag iterator data structure.
+ */
+struct headerIterator_s {
+/*@unused@*/
+    Header h;		/*!< Header being iterated. */
+/*@unused@*/
+    int next_index;	/*!< Next tag index. */
+};
+
+/** \ingroup header
+ * Destroy header tag iterator.
+ * @param hi		header tag iterator
+ * @return		NULL always
+ */
+static /*@null@*/
+HeaderIterator headerFreeIterator(/*@only@*/ HeaderIterator hi)
+	/*@modifies hi @*/
+{
+    if (hi != NULL) {
+	hi->h = headerFree(hi->h);
+	hi = _free(hi);
+    }
+    return hi;
+}
+
+/** \ingroup header
+ * Create header tag iterator.
+ * @param h		header
+ * @return		header tag iterator
+ */
+static
+HeaderIterator headerInitIterator(Header h)
+	/*@modifies h */
+{
+    HeaderIterator hi = xmalloc(sizeof(*hi));
+
+    headerSort(h);
+
+    hi->h = headerLink(h);
+    hi->next_index = 0;
+    return hi;
+}
+
+/** \ingroup header
+ * Return next tag from header.
+ * @param hi		header tag iterator
+ * @retval *tag		tag
+ * @retval *type	tag value data type
+ * @retval *p		pointer to tag value(s)
+ * @retval *c		number of values
+ * @return		1 on success, 0 on failure
+ */
+static
+int headerNextIterator(HeaderIterator hi,
+		/*@null@*/ /*@out@*/ hTAG_t tag,
+		/*@null@*/ /*@out@*/ hTYP_t type,
+		/*@null@*/ /*@out@*/ hPTR_t * p,
+		/*@null@*/ /*@out@*/ hCNT_t c)
+	/*@modifies hi, *tag, *type, *p, *c @*/
+	/*@requires maxSet(tag) >= 0 /\ maxSet(type) >= 0
+		/\ maxSet(p) >= 0 /\ maxSet(c) >= 0 @*/
+{
+    Header h = hi->h;
+    int slot = hi->next_index;
+    indexEntry entry = NULL;
+    int rc;
+
+    for (slot = hi->next_index; slot < h->indexUsed; slot++) {
+	entry = h->index + slot;
+	if (!ENTRY_IS_REGION(entry))
+	    break;
+    }
+    hi->next_index = slot;
+    if (entry == NULL || slot >= h->indexUsed)
+	return 0;
+
+    /*@-noeffect@*/	/* LCL: no clue */
+    hi->next_index++;
+    /*@=noeffect@*/
+
+    if (tag)
+	*tag = entry->info.tag;
+
+    rc = copyEntry(entry, type, p, c, 0);
+
+    /* XXX 1 on success */
+    return ((rc == 1) ? 1 : 0);
+}
+
+/** \ingroup header
+ * Duplicate a header.
+ * @param h		header
+ * @return		new header instance
+ */
+static /*@null@*/
+Header headerCopy(Header h)
+	/*@modifies h @*/
+{
+    Header nh = headerNew();
+    HeaderIterator hi;
+    int_32 tag, type, count;
+    hPTR_t ptr;
+   
+    /*@-branchstate@*/
+    for (hi = headerInitIterator(h);
+	headerNextIterator(hi, &tag, &type, &ptr, &count);
+	ptr = headerFreeData((void *)ptr, type))
+    {
+	if (ptr) (void) headerAddEntry(nh, tag, type, ptr, count);
+    }
+    hi = headerFreeIterator(hi);
+    /*@=branchstate@*/
+
+    return headerReload(nh, HEADER_IMAGE);
+}
+
+/**
  */
 typedef struct headerSprintfArgs_s {
     Header h;
@@ -2273,62 +2396,189 @@ typedef struct headerSprintfArgs_s {
     headerSprintfExtension exts;
 /*@observer@*/ /*@null@*/
     const char * errmsg;
-    sprintfToken format;
-    int numTokens;
     rpmec ec;
+    sprintfToken format;
+/*@relnull@*/
+    HeaderIterator hi;
 /*@owned@*/
     char * val;
     size_t vallen;
     size_t alloced;
+    int numTokens;
+    int i;
 } * headerSprintfArgs;
 
 /**
+ * Initialize an hsa iteration.
  * @param hsa		headerSprintf args
- * @param tagname
- * @retval *tagMatch
- * @retval *extMatch
+ * @return		headerSprintf args
  */
-static void findTag(headerSprintfArgs hsa, const char * tagname,
-		    /*@out@*/ headerTagTableEntry *const tagMatch,
-		    /*@out@*/ headerSprintfExtension *const extMatch)
-	/*@modifies *tagMatch, *extMatch @*/
-	/*@requires maxSet(tagMatch) >= 0 /\ maxSet(extMatch) >= 0 @*/
+static headerSprintfArgs hsaInit(/*@returned@*/ headerSprintfArgs hsa)
+	/*@modifies hsa */
 {
-    headerTagTableEntry entry;
-    headerSprintfExtension ext;
+    sprintfTag tag =
+	(hsa->format->type == PTOK_TAG
+	    ? &hsa->format->u.tag :
+	(hsa->format->type == PTOK_ARRAY
+	    ? &hsa->format->u.array.format->u.tag :
+	NULL));
 
-    *tagMatch = NULL;
-    *extMatch = NULL;
+    if (hsa != NULL) {
+	hsa->i = 0;
+	if (tag != NULL && tag->tag == -2)
+	    hsa->hi = headerInitIterator(hsa->h);
+    }
+/*@-nullret@*/
+    return hsa;
+/*@=nullret@*/
+}
+
+/**
+ * Return next hsa iteration item.
+ * @param hsa		headerSprintf args
+ * @return		next sprintfToken (or NULL)
+ */
+/*@null@*/
+static sprintfToken hsaNext(/*@returned@*/ headerSprintfArgs hsa)
+	/*@modifies hsa */
+{
+    sprintfToken fmt = NULL;
+    sprintfTag tag =
+	(hsa->format->type == PTOK_TAG
+	    ? &hsa->format->u.tag :
+	(hsa->format->type == PTOK_ARRAY
+	    ? &hsa->format->u.array.format->u.tag :
+	NULL));
+
+    if (hsa != NULL && hsa->i >= 0 && hsa->i < hsa->numTokens) {
+	fmt = hsa->format + hsa->i;
+	if (hsa->hi == NULL) {
+	    hsa->i++;
+	} else {
+	    int_32 tagno;
+	    int_32 type;
+	    int_32 count;
+
+/*@-boundswrite@*/
+	    if (!headerNextIterator(hsa->hi, &tagno, &type, NULL, &count))
+		fmt = NULL;
+	    tag->tag = tagno;
+/*@=boundswrite@*/
+	}
+    }
+
+/*@-dependenttrans -onlytrans@*/
+    return fmt;
+/*@=dependenttrans =onlytrans@*/
+}
+
+/**
+ * Finish an hsa iteration.
+ * @param hsa		headerSprintf args
+ * @return		headerSprintf args
+ */
+static headerSprintfArgs hsaFini(/*@returned@*/ headerSprintfArgs hsa)
+	/*@modifies hsa */
+{
+    if (hsa != NULL) {
+	hsa->hi = headerFreeIterator(hsa->hi);
+	hsa->i = 0;
+    }
+/*@-nullret@*/
+    return hsa;
+/*@=nullret@*/
+}
+
+/**
+ * Reserve sufficient buffer space for next output value.
+ * @param hsa		headerSprintf args
+ * @param need		no. of bytes to reserve
+ * @return		pointer to reserved space
+ */
+/*@dependent@*/ /*@exposed@*/
+static char * hsaReserve(headerSprintfArgs hsa, size_t need)
+	/*@modifies hsa */
+{
+    if ((hsa->vallen + need) >= hsa->alloced) {
+	if (hsa->alloced <= need)
+	    hsa->alloced += need;
+	hsa->alloced <<= 1;
+	hsa->val = xrealloc(hsa->val, hsa->alloced+1);	
+    }
+    return hsa->val + hsa->vallen;
+}
+
+/**
+ * @param hsa		headerSprintf args
+ * @param token		parsed fields
+ * @param name		name to find
+ * @return		0 on success, 1 on not found
+ */
+static int findTag(headerSprintfArgs hsa, sprintfToken token, const char * name)
+	/*@modifies token @*/
+{
+    headerTagTableEntry tag;
+    headerSprintfExtension ext;
+    sprintfTag stag = (token->type == PTOK_COND
+	? &token->u.cond.tag : &token->u.tag);
+
+    stag->fmt = NULL;
+    stag->ext = NULL;
+    stag->extNum = 0;
+    stag->tag = -1;
+
+    if (!strcmp(name, "*")) {
+	stag->tag = -2;
+	goto bingo;
+    }
 
 /*@-branchstate@*/
-    if (strncmp("RPMTAG_", tagname, sizeof("RPMTAG_")-1)) {
+    if (strncmp("RPMTAG_", name, sizeof("RPMTAG_")-1)) {
 /*@-boundswrite@*/
-	char * t = alloca(strlen(tagname) + sizeof("RPMTAG_"));
-	(void) stpcpy( stpcpy(t, "RPMTAG_"), tagname);
-	tagname = t;
+	char * t = alloca(strlen(name) + sizeof("RPMTAG_"));
+	(void) stpcpy( stpcpy(t, "RPMTAG_"), name);
+	name = t;
 /*@=boundswrite@*/
     }
 /*@=branchstate@*/
 
-    /* Search extensions first to permit overriding header tags. */
+    /* Search extensions for specific tag override. */
     for (ext = hsa->exts; ext != NULL && ext->type != HEADER_EXT_LAST;
 	ext = (ext->type == HEADER_EXT_MORE ? ext->u.more : ext+1))
     {
 	if (ext->name == NULL || ext->type != HEADER_EXT_TAG)
 	    continue;
-	if (!xstrcasecmp(ext->name, tagname)) {
-	    *extMatch = ext;
-	    return;
+	if (!xstrcasecmp(ext->name, name)) {
+	    stag->ext = ext->u.tagFunction;
+	    stag->extNum = ext - hsa->exts;
+	    goto bingo;
 	}
     }
 
-    /* Search header tags. */
-    for (entry = hsa->tags; entry->name != NULL; entry++) {
-	if (!xstrcasecmp(entry->name, tagname)) {
-	    *tagMatch = entry;
-	    return;
+    /* Search tag names. */
+    for (tag = hsa->tags; tag->name != NULL; tag++) {
+	if (!xstrcasecmp(tag->name, name)) {
+	    stag->tag = tag->val;
+	    goto bingo;
 	}
     }
+
+    return 1;
+
+bingo:
+    /* Search extensions for specific format. */
+    if (stag->type != NULL)
+    for (ext = hsa->exts; ext != NULL && ext->type != HEADER_EXT_LAST;
+	    ext = (ext->type == HEADER_EXT_MORE ? ext->u.more : ext+1))
+    {
+	if (ext->name == NULL || ext->type != HEADER_EXT_FORMAT)
+	    continue;
+	if (!strcmp(ext->name, stag->type)) {
+	    stag->fmt = ext->u.formatFunction;
+	    break;
+	}
+    }
+    return 0;
 }
 
 /* forward ref */
@@ -2341,7 +2591,7 @@ static void findTag(headerSprintfArgs hsa, const char * tagname,
  */
 static int parseExpression(headerSprintfArgs hsa, sprintfToken token,
 		char * str, /*@out@*/char ** endPtr)
-	/*@modifies hsa, str, *token, *endPtr @*/
+	/*@modifies hsa, str, token, *endPtr @*/
 	/*@requires maxSet(endPtr) >= 0 @*/;
 
 /**
@@ -2364,8 +2614,6 @@ static int parseFormat(headerSprintfArgs hsa, /*@null@*/ char * str,
     sprintfToken format;
     sprintfToken token;
     int numTokens;
-    headerTagTableEntry tag;
-    headerSprintfExtension ext;
     int i;
     int done = 0;
 
@@ -2498,26 +2746,15 @@ static int parseFormat(headerSprintfArgs hsa, /*@null@*/ char * str,
 	    }
 
 	    i = 0;
-/*@-boundswrite@*/
-	    findTag(hsa, start, &tag, &ext);
-/*@=boundswrite@*/
+	    token->type = PTOK_TAG;
 
-	    if (tag) {
-		token->u.tag.ext = NULL;
-		token->u.tag.tag = tag->val;
-	    } else if (ext) {
-		token->u.tag.ext = ext->u.tagFunction;
-		token->u.tag.extNum = ext - hsa->exts;
-	    } else {
+	    if (findTag(hsa, token, start)) {
 		hsa->errmsg = _("unknown tag");
 		format = freeFormat(format, numTokens);
 		return 1;
 	    }
 
-	    token->type = PTOK_TAG;
-
 	    start = next;
-
 	    /*@switchbreak@*/ break;
 
 	case '[':
@@ -2621,8 +2858,6 @@ static int parseFormat(headerSprintfArgs hsa, /*@null@*/ char * str,
 static int parseExpression(headerSprintfArgs hsa, sprintfToken token,
 		char * str, /*@out@*/ char ** endPtr)
 {
-    headerTagTableEntry tag;
-    headerSprintfExtension ext;
     char * chptr;
     char * end;
 
@@ -2711,20 +2946,9 @@ static int parseExpression(headerSprintfArgs hsa, sprintfToken token,
 
     *endPtr = chptr;
 
-    findTag(hsa, str, &tag, &ext);
-
-    if (tag) {
-	token->u.cond.tag.ext = NULL;
-	token->u.cond.tag.tag = tag->val;
-    } else if (ext) {
-	token->u.cond.tag.ext = ext->u.tagFunction;
-	token->u.cond.tag.extNum = ext - hsa->exts;
-    } else {
-	token->u.cond.tag.ext = NULL;
-	token->u.cond.tag.tag = -1;
-    }
-	
     token->type = PTOK_COND;
+
+    (void) findTag(hsa, token, str);
 
     return 0;
 }
@@ -2763,25 +2987,6 @@ static int getExtension(headerSprintfArgs hsa, headerTagTagFunction fn,
 }
 
 /**
- * Reserve sufficient buffer space for next output value.
- * @param hsa		headerSprintf args
- * @param need		no. of bytes to reserve
- * @return		pointer to reserved space
- */
-/*@dependent@*/ /*@exposed@*/
-static char * hsaReserve(headerSprintfArgs hsa, size_t need)
-	/*@modifies hsa */
-{
-    if ((hsa->vallen + need) >= hsa->alloced) {
-	if (hsa->alloced <= need)
-	    hsa->alloced += need;
-	hsa->alloced <<= 1;
-	hsa->val = xrealloc(hsa->val, hsa->alloced+1);	
-    }
-    return hsa->val + hsa->vallen;
-}
-
-/**
  * @param hsa		headerSprintf args
  * @param tag
  * @param element
@@ -2801,8 +3006,6 @@ static char * formatValue(headerSprintfArgs hsa, sprintfTag tag, int element)
     const char ** strarray;
     int datafree = 0;
     int countBuf;
-    headerTagFormatFunction tagtype = NULL;
-    headerSprintfExtension ext;
 
     memset(buf, 0, sizeof(buf));
     if (tag->ext) {
@@ -2858,27 +3061,14 @@ static char * formatValue(headerSprintfArgs hsa, sprintfTag tag, int element)
     (void) stpcpy( stpcpy(buf, "%"), tag->format);
 /*@=boundswrite@*/
 
-    if (tag->type) {
-	for (ext = hsa->exts; ext != NULL && ext->type != HEADER_EXT_LAST;
-	    ext = (ext->type == HEADER_EXT_MORE ? ext->u.more : ext+1))
-	{
-	    if (ext->name == NULL || ext->type != HEADER_EXT_FORMAT)
-		continue;
-	    if (!strcmp(ext->name, tag->type)) {
-		tagtype = ext->u.formatFunction;
-		break;
-	    }
-	}
-    }
-    
     /*@-branchstate@*/
     if (data)
     switch (type) {
     case RPM_STRING_ARRAY_TYPE:
 	strarray = (const char **)data;
 
-	if (tagtype)
-	    val = tagtype(RPM_STRING_TYPE, strarray[element], buf, tag->pad, 0);
+	if (tag->fmt)
+	    val = tag->fmt(RPM_STRING_TYPE, strarray[element], buf, tag->pad, element);
 
 	if (val) {
 	    need = strlen(val);
@@ -2894,8 +3084,8 @@ static char * formatValue(headerSprintfArgs hsa, sprintfTag tag, int element)
 	break;
 
     case RPM_STRING_TYPE:
-	if (tagtype)
-	    val = tagtype(RPM_STRING_TYPE, data, buf, tag->pad,  0);
+	if (tag->fmt)
+	    val = tag->fmt(RPM_STRING_TYPE, data, buf, tag->pad,  0);
 
 	if (val) {
 	    need = strlen(val);
@@ -2927,8 +3117,8 @@ static char * formatValue(headerSprintfArgs hsa, sprintfTag tag, int element)
 	    /*@innerbreak@*/ break;
 	}
 
-	if (tagtype)
-	    val = tagtype(RPM_INT32_TYPE, &intVal, buf, tag->pad, element);
+	if (tag->fmt)
+	    val = tag->fmt(RPM_INT32_TYPE, &intVal, buf, tag->pad, element);
 
 	if (val) {
 	    need = strlen(val);
@@ -2944,8 +3134,8 @@ static char * formatValue(headerSprintfArgs hsa, sprintfTag tag, int element)
 
     case RPM_BIN_TYPE:
 	/* XXX HACK ALERT: element field abused as no. bytes of binary data. */
-	if (tagtype)
-	    val = tagtype(RPM_BIN_TYPE, data, buf, tag->pad, count);
+	if (tag->fmt)
+	    val = tag->fmt(RPM_BIN_TYPE, data, buf, tag->pad, count);
 
 	if (val) {
 	    need = strlen(val);
@@ -3065,7 +3255,8 @@ static char * singleSprintf(headerSprintfArgs hsa, sprintfToken token,
     case PTOK_ARRAY:
 	numElements = -1;
 	spft = token->u.array.format;
-	for (i = 0; i < token->u.array.numTokens; i++, spft++) {
+	for (i = 0; i < token->u.array.numTokens; i++, spft++)
+	{
 	    if (spft->type != PTOK_TAG ||
 		spft->u.tag.arrayCount ||
 		spft->u.tag.justOne) continue;
@@ -3082,6 +3273,10 @@ static char * singleSprintf(headerSprintfArgs hsa, sprintfToken token,
 		    continue;
 /*@=boundswrite@*/
 	    } 
+
+	    if (type == RPM_BIN_TYPE)
+		count = 1;	/* XXX count abused as no. of bytes. */
+
 	    if (numElements > 1 && count != numElements)
 	    switch (type) {
 	    default:
@@ -3105,8 +3300,27 @@ static char * singleSprintf(headerSprintfArgs hsa, sprintfToken token,
 /*@=boundswrite@*/
 	    hsa->vallen += (te - t);
 	} else {
+	    int isxml;
+
 	    need = numElements * token->u.array.numTokens * 10;
 	    if (need == 0) break;
+
+	    spft = token->u.array.format;
+	    isxml = (spft->type == PTOK_TAG && spft->u.tag.type != NULL &&
+		!strcmp(spft->u.tag.type, "xml"));
+
+	    if (isxml) {
+		const char * tagN = tagName(spft->u.tag.tag);
+
+		need = strlen(tagN) + sizeof("  <rpmTag name=\"\">\n") - 1;
+		t = hsaReserve(hsa, need);
+/*@-boundswrite@*/
+		te = stpcpy(t, "  <rpmTag name=\"");
+		te = stpcpy(te, tagN);
+		te = stpcpy(te, "\">\n");
+/*@=boundswrite@*/
+		hsa->vallen += (te - t);
+	    }
 
 	    t = hsaReserve(hsa, need);
 	    for (j = 0; j < numElements; j++) {
@@ -3117,6 +3331,16 @@ static char * singleSprintf(headerSprintfArgs hsa, sprintfToken token,
 			return NULL;
 		}
 	    }
+
+	    if (isxml) {
+		need = sizeof("  </rpmTag>\n") - 1;
+		t = hsaReserve(hsa, need);
+/*@-boundswrite@*/
+		te = stpcpy(t, "  </rpmTag>\n");
+/*@=boundswrite@*/
+		hsa->vallen += (te - t);
+	    }
+
 	}
 	break;
     }
@@ -3126,18 +3350,18 @@ static char * singleSprintf(headerSprintfArgs hsa, sprintfToken token,
 
 /**
  * Create an extension cache.
- * @param extensions
+ * @param exts		headerSprintf extensions
  * @return		new extension cache
  */
 static /*@only@*/ rpmec
-rpmecNew(const headerSprintfExtension extensions)
+rpmecNew(const headerSprintfExtension exts)
 	/*@*/
 {
     headerSprintfExtension ext;
     rpmec ec;
     int i = 0;
 
-    for (ext = extensions; ext != NULL && ext->type != HEADER_EXT_LAST;
+    for (ext = exts; ext != NULL && ext->type != HEADER_EXT_LAST;
 	ext = (ext->type == HEADER_EXT_MORE ? ext->u.more : ext+1))
     {
 	i++;
@@ -3149,18 +3373,18 @@ rpmecNew(const headerSprintfExtension extensions)
 
 /**
  * Destroy an extension cache.
- * @param extensions
+ * @param exts		headerSprintf extensions
  * @param ec		extension cache
  * @return		NULL always
  */
 static /*@null@*/ rpmec
-rpmecFree(const headerSprintfExtension extensions, /*@only@*/ rpmec ec)
+rpmecFree(const headerSprintfExtension exts, /*@only@*/ rpmec ec)
 	/*@modifies ec @*/
 {
     headerSprintfExtension ext;
     int i = 0;
 
-    for (ext = extensions; ext != NULL && ext->type != HEADER_EXT_LAST;
+    for (ext = exts; ext != NULL && ext->type != HEADER_EXT_LAST;
 	ext = (ext->type == HEADER_EXT_MORE ? ext->u.more : ext+1))
     {
 /*@-boundswrite@*/
@@ -3193,8 +3417,11 @@ char * headerSprintf(Header h, const char * fmt,
 	/*@requires maxSet(errmsg) >= 0 @*/
 {
     headerSprintfArgs hsa = memset(alloca(sizeof(*hsa)), 0, sizeof(*hsa));
-    char * te;
-    int i;
+    sprintfToken nextfmt;
+    sprintfTag tag;
+    char * t, * te;
+    int isxml;
+    int need;
  
     hsa->h = headerLink(h);
     hsa->fmt = xstrdup(fmt);
@@ -3210,18 +3437,42 @@ char * headerSprintf(Header h, const char * fmt,
 /*@=boundswrite@*/
 
     hsa->ec = rpmecNew(hsa->exts);
-
     hsa->val = xstrdup("");
-    for (i = 0; i < hsa->numTokens; i++) {
+
+    tag =
+	(hsa->format->type == PTOK_TAG
+	    ? &hsa->format->u.tag :
+	(hsa->format->type == PTOK_ARRAY
+	    ? &hsa->format->u.array.format->u.tag :
+	NULL));
+    isxml = (tag != NULL && tag->tag == -2 && tag->type != NULL && !strcmp(tag->type, "xml"));
+
+    if (isxml) {
+	need = sizeof("<rpmHeader>\n") - 1;
+	t = hsaReserve(hsa, need);
 /*@-boundswrite@*/
-	/*@-mods@*/
-	te = singleSprintf(hsa, hsa->format + i, 0);
-	/*@=mods@*/
+	te = stpcpy(t, "<rpmHeader>\n");
+/*@=boundswrite@*/
+	hsa->vallen += (te - t);
+    }
+
+    hsa = hsaInit(hsa);
+    while ((nextfmt = hsaNext(hsa)) != NULL) {
+	te = singleSprintf(hsa, nextfmt, 0);
 	if (te == NULL) {
 	    hsa->val = _free(hsa->val);
 	    break;
 	}
+    }
+    hsa = hsaFini(hsa);
+
+    if (isxml) {
+	need = sizeof("</rpmHeader>\n") - 1;
+	t = hsaReserve(hsa, need);
+/*@-boundswrite@*/
+	te = stpcpy(t, "</rpmHeader>\n");
 /*@=boundswrite@*/
+	hsa->vallen += (te - t);
     }
 
     if (hsa->val != NULL && hsa->vallen < hsa->alloced)
@@ -3345,7 +3596,8 @@ static char * dateFormat(int_32 type, hPTR_t data,
 		         char * formatPrefix, int padding, int element)
 	/*@modifies formatPrefix @*/
 {
-    return realDateFormat(type, data, formatPrefix, padding, element, "%c");
+    return realDateFormat(type, data, formatPrefix, padding, element,
+			_("%c"));
 }
 
 /**
@@ -3361,7 +3613,7 @@ static char * dayFormat(int_32 type, hPTR_t data,
 	/*@modifies formatPrefix @*/
 {
     return realDateFormat(type, data, formatPrefix, padding, element, 
-			  "%a %b %d %Y");
+			  _("%a %b %d %Y"));
 }
 
 /**
@@ -3457,119 +3709,6 @@ void headerCopyTags(Header headerFrom, Header headerTo, hTAG_t tagstocopy)
 	(void) headerAddEntry(headerTo, *p, type, s, count);
 	s = headerFreeData(s, type);
     }
-}
-
-/**
- * Header tag iterator data structure.
- */
-struct headerIteratorS {
-/*@unused@*/ Header h;		/*!< Header being iterated. */
-/*@unused@*/ int next_index;	/*!< Next tag index. */
-};
-
-/** \ingroup header
- * Destroy header tag iterator.
- * @param hi		header tag iterator
- * @return		NULL always
- */
-static /*@null@*/
-HeaderIterator headerFreeIterator(/*@only@*/ HeaderIterator hi)
-	/*@modifies hi @*/
-{
-    hi->h = headerFree(hi->h);
-    hi = _free(hi);
-    return hi;
-}
-
-/** \ingroup header
- * Create header tag iterator.
- * @param h		header
- * @return		header tag iterator
- */
-static
-HeaderIterator headerInitIterator(Header h)
-	/*@modifies h */
-{
-    HeaderIterator hi = xmalloc(sizeof(*hi));
-
-    headerSort(h);
-
-    hi->h = headerLink(h);
-    hi->next_index = 0;
-    return hi;
-}
-
-/** \ingroup header
- * Return next tag from header.
- * @param hi		header tag iterator
- * @retval tag		address of tag
- * @retval type		address of tag value data type
- * @retval p		address of pointer to tag value(s)
- * @retval c		address of number of values
- * @return		1 on success, 0 on failure
- */
-static
-int headerNextIterator(HeaderIterator hi,
-		/*@null@*/ /*@out@*/ hTAG_t tag,
-		/*@null@*/ /*@out@*/ hTYP_t type,
-		/*@null@*/ /*@out@*/ hPTR_t * p,
-		/*@null@*/ /*@out@*/ hCNT_t c)
-	/*@modifies hi, *tag, *type, *p, *c @*/
-	/*@requires maxSet(tag) >= 0 /\ maxSet(type) >= 0
-		/\ maxSet(p) >= 0 /\ maxSet(c) >= 0 @*/
-{
-    Header h = hi->h;
-    int slot = hi->next_index;
-    indexEntry entry = NULL;
-    int rc;
-
-    for (slot = hi->next_index; slot < h->indexUsed; slot++) {
-	entry = h->index + slot;
-	if (!ENTRY_IS_REGION(entry))
-	    break;
-    }
-    hi->next_index = slot;
-    if (entry == NULL || slot >= h->indexUsed)
-	return 0;
-
-    /*@-noeffect@*/	/* LCL: no clue */
-    hi->next_index++;
-    /*@=noeffect@*/
-
-    if (tag)
-	*tag = entry->info.tag;
-
-    rc = copyEntry(entry, type, p, c, 0);
-
-    /* XXX 1 on success */
-    return ((rc == 1) ? 1 : 0);
-}
-
-/** \ingroup header
- * Duplicate a header.
- * @param h		header
- * @return		new header instance
- */
-static /*@null@*/
-Header headerCopy(Header h)
-	/*@modifies h @*/
-{
-    Header nh = headerNew();
-    HeaderIterator hi;
-    int_32 tag, type, count;
-    hPTR_t ptr;
-   
-    /*@-branchstate@*/
-    for (hi = headerInitIterator(h);
-	headerNextIterator(hi, &tag, &type, &ptr, &count);
-	ptr = headerFreeData((void *)ptr, type))
-    {
-	if (ptr) (void) headerAddEntry(nh, tag, type, ptr, count);
-    }
-    hi = headerFreeIterator(hi);
-    /*@=branchstate@*/
-
-    return headerReload(nh, HEADER_IMAGE);
 }
 
 /*@observer@*/ /*@unchecked@*/
