@@ -7,7 +7,7 @@ dnl it, why check it?
 AC_INIT(rpm.c)
 AC_CANONICAL_SYSTEM
 
-AM_INIT_AUTOMAKE(rpm, 3.1)
+AM_INIT_AUTOMAKE(rpm, 3.0.4)
 AM_CONFIG_HEADER(config.h)
 
 AC_PREREQ(2.12)         dnl Minimum Autoconf version required.
@@ -852,6 +852,7 @@ fi
 dnl Determine the canonical arch-vendor-os for the build machine
 case "${build_cpu}" in
 i386|i486|i586|i686|ix86)	RPMCANONARCH=i386 ;;
+ia64*)		RPMCANONARCH=ia64 ;;
 alpha*)		RPMCANONARCH=alpha ;;
 sparc*)		RPMCANONARCH=sparc ;;
 powerpc*)	RPMCANONARCH=ppc ;;
