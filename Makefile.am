@@ -2,94 +2,227 @@
 
 AUTOMAKE_OPTIONS = 1.4 foreign
 
-EXTRA_DIST = CHANGES CREDITS README.amiga RPM-PGP-KEY \
+LINT = splint
+
+EXTRA_DIST = config.rpath m4/ChangeLog  CHANGES CREDITS Doxyheader GROUPS INSTALL \
 	autodeps/none autodeps/*.prov autodeps/*.req autogen.sh \
-	docs/[a-z]* gendiff groups $(man_MANS) po/*.in po/*.po po/rpm.pot \
-	rpm.magic rpmpopt rpm.spec rpm.8ru rpm2cpio.8ru
+	config.site db db3/configure gendiff installplatform platform* \
+	perl/* \
+	wdj/JBJ-GPG-KEY wdj/Makefile.in wnh/Makefile.in \
+	po/*.in po/*.po po/rpm.pot \
+	rpm.magic rpmpopt-$(VERSION) rpmqv.c rpm.c
 
-SUBDIRS = popt build lib po intl misc tools scripts tests .
+SUBDIRS = po misc @WITH_ZLIB_SUBDIR@ @WITH_ELFUTILS_SUBDIR@ @WITH_MAGIC_SUBDIR@ @WITH_DB_SUBDIR@ @WITH_SQLITE3_SUBDIR@ @WITH_POPT_SUBDIR@ @WITH_BEECRYPT_SUBDIR@ @WITH_NEON_SUBDIR@ @WITH_SYCK_SUBDIR@ @WITH_LUA_SUBDIR@ rpmio rpmdb lib build @WITH_PYTHON_SUBDIR@ @WITH_PERL_SUBDIR@ tools scripts doc .
 
-INCLUDES = -I$(top_srcdir)/build -I$(top_srcdir)/lib -I$(top_srcdir)/intl @INCPATH@
+INCLUDES = \
+	-I$(top_srcdir)/build \
+	-I$(top_srcdir)/lib \
+	-I$(top_srcdir)/rpmdb \
+	-I$(top_srcdir)/rpmio \
+	@WITH_BEECRYPT_INCLUDE@ \
+	@WITH_POPT_INCLUDE@ \
+	-I$(top_srcdir)/misc \
+	@WITH_LIBELF_INCLUDE@ \
+	@INCPATH@
 
-mylibs=	$(top_builddir)/build/librpmbuild.la \
+staticLDFLAGS = # @LDFLAGS_STATIC@ # @LDFLAGS_NPTL@
+
+myLDFLAGS = @WITH_LIBELF_LIB@ @WITH_BEECRYPT_LIB@
+
+myLDADD = \
 	$(top_builddir)/lib/librpm.la \
-	$(top_builddir)/popt/libpopt.la
+	$(top_builddir)/rpmdb/librpmdb.la \
+	$(top_builddir)/rpmio/librpmio.la \
+	@WITH_POPT_LIB@ \
+	@WITH_ZLIB_LIB@ \
+	@LIBMISC@
 
-LDFLAGS = @LDFLAGS_STATIC@
-
-rpmbindir = $(subst usr/bin,bin,$(bindir))
+rpmbindir = `echo $(bindir) | sed -e s,usr/bin,bin,`
 rpmbin_PROGRAMS = rpm
 
-bin_PROGRAMS =		rpm2cpio
 bin_SCRIPTS =		gendiff
-noinst_PROGRAMS =	rpmconvert
 
-man_MANS = rpm.8 rpm2cpio.8	# rpm.8ru rpm2cpio.8ru
+pkglibdir =		@USRLIBRPM@
+pkglib_PROGRAMS =	rpmb rpmd rpmi rpmk rpmq
+pkglib_DATA =		rpmrc rpmpopt-$(VERSION) macros
+pkglib_SCRIPTS =	find-provides find-requires mkinstalldirs \
+			config.guess config.sub config.site
 
-configdir = @RPMCONFIGDIR@
-config_DATA = rpmrc rpmpopt macros
-config_SCRIPTS = find-provides find-requires mkinstalldirs
+rpmpopt-$(VERSION): rpmpopt
+	cp rpmpopt $@
 
-noinst_HEADERS = \
-	acconfig.h	build.h		checksig.h	ftp.h	\
-	install.h	system.h	url.h	\
-	verify.h
+noinst_HEADERS = build.h debug.h system.h
 
-rpm_SOURCES =		build.c checksig.c ftp.c install.c rpm.c url.c \
-			verify.c
-rpm_LDADD =		$(mylibs) @LIBMISC@
+rpm_SOURCES =
+rpm_LDFLAGS =		$(myLDFLAGS) $(staticLDFLAGS)
+rpm_LDADD =		rpm.o $(top_builddir)/build/.libs/librpmbuild.a $(myLDADD)
+#rpm_LDFLAGS =		$(myLDFLAGS)
+#rpm_LDADD =		rpm.o $(top_builddir)/build/.libs/librpmbuild.a $(myLDADD)
+rpm.o:	$(top_srcdir)/rpmqv.c
+	$(COMPILE) -fpie -DIAM_RPMDB -DIAM_RPMEIU -DIAM_RPMK -DIAM_RPMQV -o $@ -c $<
 
-$(PROGRAMS): 		$(mylibs) @LIBMISC@
+rpmb_SOURCES =		$(top_srcdir)/build.c
+rpmb_LDFLAGS =		$(myLDFLAGS) $(staticLDFLAGS)
+rpmb_LDADD =		rpmb.o $(top_builddir)/build/librpmbuild.la $(myLDADD)
+rpmb.o:	$(top_srcdir)/rpmqv.c
+	$(COMPILE) -fpie -DIAM_RPMBT -o $@ -c $<
 
-.PHONY:	lclint
-lclint:
-	lclint ${DEFS} ${INCLUDES} ${rpm_SOURCES}
+rpmd_SOURCES =
+rpmd_LDFLAGS =		$(myLDFLAGS) $(staticLDFLAGS)
+rpmd_LDADD =		rpmd.o $(myLDADD)
+rpmd.o:	$(top_srcdir)/rpmqv.c
+	$(COMPILE) -fpie -DIAM_RPMDB -o $@ -c $<
+
+rpmi_SOURCES =
+rpmi_LDFLAGS =		$(myLDFLAGS) # $(staticLDFLAGS)
+rpmi_LDADD =		rpmi.o $(myLDADD)
+#rpmi_LDFLAGS =		$(myLDFLAGS)
+#rpmi_LDADD =		rpmi.o $(myLDADD)
+rpmi.o:	$(top_srcdir)/rpmqv.c
+	$(COMPILE) -fpie -DIAM_RPMEIU -o $@ -c $<
+
+rpmk_SOURCES =
+rpmk_LDFLAGS =		$(myLDFLAGS) $(staticLDFLAGS)
+rpmk_LDADD =		rpmk.o $(myLDADD)
+rpmk.o:	$(top_srcdir)/rpmqv.c
+	$(COMPILE) -fpie -DIAM_RPMK -o $@ -c $<
+
+rpmq_SOURCES =
+rpmq_LDFLAGS =		$(myLDFLAGS) # $(staticLDFLAGS)
+rpmq_LDADD =		rpmq.o $(top_builddir)/build/librpmbuild.la $(myLDADD)
+rpmq.o:	$(top_srcdir)/rpmqv.c
+	$(COMPILE) -fpie -DIAM_RPMQV -o $@ -c $<
+
+$(PROGRAMS): 		$(myLDADD) @WITH_APIDOCS_TARGET@
+
+.PHONY:	splint
+splint:
+	splint \
+	    -load build/rpmbuild.lcd \
+	    -load lib/rpmlib.lcd \
+	    -load rpmdb/rpmdb.lcd \
+	    -load rpmio/rpmio.lcd \
+	    -load popt/popt.lcd \
+		$(DEFS) $(INCLUDES) rpmqv.c $(rpmb_SOURCES)
+
+.PHONY:	lint
+lint:
+	$(LINT) -Dlint $(DEFS) $(INCLUDES) rpmqv.c $(rpmb_SOURCES) \
+		`make -s sources -C build` \
+		`make -s sources -C lib` \
+		`make -s sources -C rpmdb` \
+		`make -s sources -C rpmio` \
+		`make -s sources -C beecrypt` \
+		`make -s sources -C file/src` \
+		`make -s sources -C popt`
 
 CVSTAG = r$(subst .,-,$(VERSION))
 
-rpm2cpio_SOURCES =	rpm2cpio.c
-rpm2cpio_LDADD =	$(mylibs)
-
-rpmconvert_SOURCES =	convertdb.c oldrpmdb.c
-rpmconvert_LDADD =	$(mylibs) -lgdbm
+pkgsrcdir = $(prefix)/src/rpm
 
 install-data-local:
-	@$(mkinstalldirs) $(DESTDIR)/var/lib/rpm
-	@rm -f $(DESTDIR)/$(libdir)/rpmrc
-	@ln -s rpm/rpmrc $(DESTDIR)/$(libdir)/rpmrc
-	@rm -f $(DESTDIR)/$(libdir)/rpmpopt
-	@ln -s rpm/rpmpopt $(DESTDIR)/$(libdir)/rpmpopt
-	@$(mkinstalldirs) $(DESTDIR)/$(prefix)/src/redhat/BUILD
-	@$(mkinstalldirs) $(DESTDIR)/$(prefix)/src/redhat/RPMS/noarch
-	@$(mkinstalldirs) $(DESTDIR)/$(prefix)/src/redhat/RPMS/@build_cpu@
-	@$(mkinstalldirs) $(DESTDIR)/$(prefix)/src/redhat/SOURCES
-	@$(mkinstalldirs) $(DESTDIR)/$(prefix)/src/redhat/SPECS
-	@$(mkinstalldirs) $(DESTDIR)/$(prefix)/src/redhat/SRPMS
-	@$(mkinstalldirs) $(DESTDIR)/var/lib/rpm
+	@$(mkinstalldirs) $(DESTDIR)$(varprefix)/lib/rpm
+	@rm -f $(DESTDIR)$(pkglibdir)/rpmt
+	@@LN_S@ rpmb $(DESTDIR)$(pkglibdir)/rpmt
+	@rm -f $(DESTDIR)$(pkglibdir)/rpme
+	@@LN_S@ rpmi $(DESTDIR)$(pkglibdir)/rpme
+	@rm -f $(DESTDIR)$(pkglibdir)/rpmu
+	@@LN_S@ rpmi $(DESTDIR)$(pkglibdir)/rpmu
+	@rm -f $(DESTDIR)$(pkglibdir)/rpmv
+	@@LN_S@ rpmq $(DESTDIR)$(pkglibdir)/rpmv
+	rm -f $(DESTDIR)$(bindir)/rpmbuild
+	@LN_S@ ../lib/rpm/rpmb $(DESTDIR)$(bindir)/rpmbuild
+	rm -f $(DESTDIR)$(bindir)/rpmquery
+	@LN_S@ ../lib/rpm/rpmq $(DESTDIR)$(bindir)/rpmquery
+	rm -f $(DESTDIR)$(bindir)/rpmverify
+	@LN_S@ ../lib/rpm/rpmv $(DESTDIR)$(bindir)/rpmverify
+	rm -f $(DESTDIR)$(bindir)/rpmsign
+	@LN_S@ ../lib/rpm/rpmk $(DESTDIR)$(bindir)/rpmsign
+	rm -f $(DESTDIR)$(bindir)/rpmdb ; \
+	@LN_S@ ../lib/rpm/rpmd $(DESTDIR)$(bindir)/rpmdb ; \
+	for bf in e i u ; do \
+	    rm -f $(DESTDIR)$(bindir)/rpm$$bf ; \
+	    @LN_S@ ../lib/rpm/rpm$$bf $(DESTDIR)$(bindir)/rpm$$bf ; \
+	done
+	@for dir in BUILD RPMS SOURCES SPECS SRPMS ; do\
+	    $(mkinstalldirs) $(DESTDIR)$(pkgsrcdir)/$$dir;\
+	done
+	@case "@host_cpu@" in \
+	*86)	$(mkinstalldirs) $(DESTDIR)$(pkgsrcdir)/RPMS/i386 ;\
+		$(mkinstalldirs) $(DESTDIR)$(pkgsrcdir)/RPMS/i486 ;\
+		$(mkinstalldirs) $(DESTDIR)$(pkgsrcdir)/RPMS/i586 ;\
+		$(mkinstalldirs) $(DESTDIR)$(pkgsrcdir)/RPMS/i686 ;\
+		$(mkinstalldirs) $(DESTDIR)$(pkgsrcdir)/RPMS/athlon ;;\
+	armv3l)	$(mkinstalldirs) $(DESTDIR)$(pkgsrcdir)/RPMS/armv3l ;;\
+	armv4b)	$(mkinstalldirs) $(DESTDIR)$(pkgsrcdir)/RPMS/armv4b ;;\
+	armv4l)	$(mkinstalldirs) $(DESTDIR)$(pkgsrcdir)/RPMS/armv3l ;\
+		$(mkinstalldirs) $(DESTDIR)$(pkgsrcdir)/RPMS/armv4l ;;\
+	armv5teb) $(mkinstalldirs) $(DESTDIR)$(pkgsrcdir)/RPMS/armv4b ;\
+		$(mkinstalldirs) $(DESTDIR)$(pkgsrcdir)/RPMS/armv5teb ;;\
+	armv5tel) $(mkinstalldirs) $(DESTDIR)$(pkgsrcdir)/RPMS/armv3l ;\
+		$(mkinstalldirs) $(DESTDIR)$(pkgsrcdir)/RPMS/armv4l ;\
+		$(mkinstalldirs) $(DESTDIR)$(pkgsrcdir)/RPMS/armv5tel ;;\
+	alpha*) $(mkinstalldirs) $(DESTDIR)$(pkgsrcdir)/RPMS/alpha ;\
+		$(mkinstalldirs) $(DESTDIR)$(pkgsrcdir)/RPMS/alphaev6 ;;\
+	sparc*) $(mkinstalldirs) $(DESTDIR)$(pkgsrcdir)/RPMS/sparc ;\
+		$(mkinstalldirs) $(DESTDIR)$(pkgsrcdir)/RPMS/sparcv8 ;\
+		$(mkinstalldirs) $(DESTDIR)$(pkgsrcdir)/RPMS/sparcv9 ;\
+		$(mkinstalldirs) $(DESTDIR)$(pkgsrcdir)/RPMS/sparc64 ;;\
+	ia64*)	$(mkinstalldirs) $(DESTDIR)$(pkgsrcdir)/RPMS/ia64 ;;\
+	s390*)	$(mkinstalldirs) $(DESTDIR)$(pkgsrcdir)/RPMS/s390 ;;\
+	mipsel*) $(mkinstalldirs) $(DESTDIR)$(pkgsrcdir)/RPMS/mipsel ;;\
+	mips*)  $(mkinstalldirs) $(DESTDIR)$(pkgsrcdir)/RPMS/mips ;;\
+	powerpc*) $(mkinstalldirs) $(DESTDIR)$(pkgsrcdir)/RPMS/ppc ;\
+		$(mkinstalldirs) $(DESTDIR)$(pkgsrcdir)/RPMS/ppciseries ;\
+		$(mkinstalldirs) $(DESTDIR)$(pkgsrcdir)/RPMS/ppcpseries ;\
+		$(mkinstalldirs) $(DESTDIR)$(pkgsrcdir)/RPMS/ppc64 ;\
+		$(mkinstalldirs) $(DESTDIR)$(pkgsrcdir)/RPMS/ppc64iseries ;\
+		$(mkinstalldirs) $(DESTDIR)$(pkgsrcdir)/RPMS/ppc64pseries ;;\
+	*)	$(mkinstalldirs) $(DESTDIR)$(pkgsrcdir)/RPMS/@host_cpu@ ;;\
+	esac
+	$(mkinstalldirs) $(DESTDIR)$(pkgsrcdir)/RPMS/noarch
+	@case "@host_os@" in \
+	mint) $(mkinstalldirs) $(DESTDIR)$(pkgsrcdir)/RPMS/m68kmint ;;\
+	solaris*|linux*|darwin*) \
+	   chmod u+x $(top_srcdir)/installplatform; DESTDIR="$(DESTDIR)" pkglibdir="$(pkglibdir)" $(top_srcdir)/installplatform rpmrc macros platform ;; \
+	esac
 	@$(mkinstalldirs) $(DESTDIR)/var/tmp
 
-# FIXME: these should be generated in configure.in
-find-requires: find-requires.sh
-	cp $< $@
-find-provides: find-provides.sh
-	cp $< $@
-rpmrc: lib-rpmrc
-	cp $< $@
+.PHONY:	setperms
+setperms:
+	@for f in $(rpmbin_PROGRAMS) ; do\
+	    $(__CHOWN) ${RPMUSER}.${RPMGROUP} $(DESTDIR)$(rpmbindir)/$$f ;\
+	    $(__CHMOD) g+s $(DESTDIR)$(rpmbindir)/$$f ;\
+	done
+	@for f in $(bin_PROGRAMS) ; do\
+	    $(__CHOWN) ${RPMUSER}.${RPMGROUP} $(DESTDIR)$(bindir)/$$f ;\
+	done
+	@for f in $(pkglib_PROGRAMS) ; do\
+	    $(__CHOWN) ${RPMUSER}.${RPMGROUP} $(DESTDIR)$(pkglibdir)/$$f ;\
+	    $(__CHMOD) g+s $(DESTDIR)$(pkglibdir)/$$f ;\
+	done
+	@for f in $(pkglib_SCRIPTS) ; do\
+	    $(__CHOWN) ${RPMUSER}.${RPMGROUP} $(DESTDIR)$(pkglibdir)/$$f ;\
+	done
+	@$(__CHOWN) ${RPMUSER}.${RPMGROUP} $(DESTDIR)$(pkglibdir)
+	@$(__CHOWN) -R ${RPMUSER}.${RPMGROUP} $(DESTDIR)$(varprefix)/lib/rpm
+	-@$(__CHMOD) 0664 $(DESTDIR)$(varprefix)/lib/rpm/[A-Z]*
+	-@$(__CHMOD) 0775 $(DESTDIR)$(varprefix)/lib/rpm
+	-@$(__CHMOD) 0664 $(DESTDIR)$(varprefix)/lib/rpm/__db.*
 
-# FIXME: these should be checked
-.PHONY:                tar
+.PHONY:	unsetgid
+unsetgid:
+	@for f in $(rpmbin_PROGRAMS) ; do\
+	    $(__CHMOD) g-s $(DESTDIR)$(rpmbindir)/$$f ;\
+	done
+	@for f in $(pkglib_PROGRAMS) ; do\
+	    $(__CHMOD) g-s $(DESTDIR)$(pkglibdir)/$$f ;\
+	done
+
+.PHONY: tar
 tar:
 	rm -rf /tmp/rpm-$(VERSION)
-	make installprefix=/tmp/rpm-$(VERSION)$(ROOT) install
-	$(mkinstalldirs) /tmp/rpm-$(VERSION)/usr/local/src/redhat/SOURCES
-	$(mkinstalldirs) /tmp/rpm-$(VERSION)/usr/local/src/redhat/SPECS
-	$(mkinstalldirs) /tmp/rpm-$(VERSION)/usr/local/src/redhat/SRPMS
-	$(mkinstalldirs) /tmp/rpm-$(VERSION)/usr/local/src/redhat/RPMS
-	$(mkinstalldirs) /tmp/rpm-$(VERSION)/usr/local/src/redhat/BUILD
-	$(mkinstalldirs) /tmp/rpm-$(VERSION)/var/local/lib/rpm
-	$(mkinstalldirs) /tmp/rpm-$(VERSION)/var/tmp
-#	Couldn't figure de ARCH value   
-#	$(mkinstalldirs) /tmp/rpm-$(VERSION)/usr/local/src/redhat/RPMS/i386
+	$(MAKE) DESTDIR=/tmp/rpm-$(VERSION) install
 	cd /tmp/rpm-$(VERSION) ; tar cvf /tmp/rpm-$(VERSION).tar .
 
 .PHONY: noconfig
@@ -99,23 +232,36 @@ noconfig:
 
 .PHONY: archive
 archive: 
-	@echo " "
-	@echo "I hope you checked everything out and made sure it builds"
-	@echo "maybe someday Erik will get around to making that automatic."
-	@echo
-	@echo "This is version $(VERSION)."
-	@sleep 5
-	@cvs -Q tag -F $(CVSTAG) .
-	@rm -rf /tmp/rpm-$(VERSION) /tmp/rpm
-	@cd /tmp; cvs -Q -d $(CVSROOT) export -r$(CVSTAG) rpm || :
-	@mv /tmp/rpm /tmp/rpm-$(VERSION)
-	@rm /tmp/rpm-$(VERSION)/popt/popt.spec
-	@cd /tmp/rpm-$(VERSION); ./autogen.sh
-	@make -C /tmp/rpm-$(VERSION) distclean
-	@cd /tmp/rpm-$(VERSION); ./autogen.sh --noconfigure
-	@cd /tmp; tar czSpf rpm-$(VERSION).tar.gz rpm-$(VERSION)
-	@rm -rf /tmp/rpm-$(VERSION)
-	@cp /tmp/rpm-$(VERSION).tar.gz .
-	@rm -f /tmp/rpm-$(VERSION).tar.gz 
+	@cvs -d `cat CVS/Root` diff 2>&1 > /dev/null || { \
+	    echo " " ; \
+	    echo "==> Please resolve differences between the repository and" ; \
+	    echo "==> your rpm check out before tagging." ; \
+	    echo " " ; \
+	    cvs -n up ; \
+	    echo " " ; \
+	    exit 1 ; \
+	}
+	@cvs -d `cat CVS/Root` -Q tag -F $(CVSTAG) .
+	@make dist
 	@echo " "
 	@echo "The final archive is ./rpm-$(VERSION).tar.gz."
+
+.PHONY:	nextsrpm
+nextsrpm: all archive
+	@sudo ./rpm -ta rpm-$(VERSION).tar.gz
+
+.PHONY:	doxygen
+doxygen @WITH_APIDOCS_TARGET@: Doxyfile rpmpopt-@VERSION@
+	rm -rf $@
+	mkdir -p $@
+	- [ X"@__DOXYGEN@" != Xno ] && @__DOXYGEN@
+
+ctags:
+	find . -type f -name "*.[ch]*" | xargs @CTAGS@
+
+cscope:
+	@CSCOPE@ -b -R
+
+cref: ctags cscope
+
+ACLOCAL_AMFLAGS = -I m4
