@@ -1,11 +1,8 @@
 .deps
 .depend
+.libs
 Makefile
-rpmlead
-dump
-rpmheader
-rpmarchive
-rpmsignature
-dumpdb
-rpmgettext
-rpmputtext
+Makefile.in
+convertdb1
+debugedit
+rpmdeps

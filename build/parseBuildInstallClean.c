@@ -1,52 +1,74 @@
+/** \ingroup rpmbuild
+ * \file build/parseBuildInstallClean.c
+ *  Parse %build/%install/%clean section from spec file.
+ */
 #include "system.h"
 
 #include "rpmbuild.h"
+#include "debug.h"
 
-int parseBuildInstallClean(Spec spec, int parsePart)
+/*@access StringBuf @*/
+
+/*@-boundswrite@*/
+int parseBuildInstallClean(Spec spec, rpmParseState parsePart)
 {
     int nextPart, rc;
     StringBuf *sbp = NULL;
-    char *name = NULL;
+    const char *name = NULL;
 
-    switch (parsePart) {
-      case PART_BUILD:
-	sbp = &(spec->build);
+    /*@-branchstate@*/
+    if (parsePart == PART_BUILD) {
+	sbp = &spec->build;
 	name = "%build";
-	break;
-      case PART_INSTALL:
-	sbp = &(spec->install);
+    } else if (parsePart == PART_INSTALL) {
+	sbp = &spec->install;
 	name = "%install";
-	break;
-      case PART_CLEAN:
-	sbp = &(spec->clean);
+    } else if (parsePart == PART_CHECK) {
+	sbp = &spec->check;
+	name = "%check";
+    } else if (parsePart == PART_CLEAN) {
+	sbp = &spec->clean;
 	name = "%clean";
-	break;
     }
+    /*@=branchstate@*/
     
     if (*sbp != NULL) {
-	rpmError(RPMERR_BADSPEC, _("line %d: second %s"), spec->lineNum, name);
+	rpmError(RPMERR_BADSPEC, _("line %d: second %s\n"),
+		spec->lineNum, name);
 	return RPMERR_BADSPEC;
     }
     
     *sbp = newStringBuf();
 
-    /* There are no options to %build, %install, or %clean */
-    if ((rc = readLine(spec, STRIP_NOTHING)) > 0) {
+    /* Make sure the buildroot is removed where needed. */
+    if (parsePart == PART_INSTALL) {
+	const char * s = rpmExpand("%{!?__spec_install_pre:%{?buildroot:rm -rf '%{buildroot}'\n}}\n", NULL);
+	if (s && *s)
+	    appendStringBuf(*sbp, s);
+	s = _free(s);
+    } else if (parsePart == PART_CLEAN) {
+	const char * s = rpmExpand("%{?__spec_clean_body}%{!?__spec_clean_body:%{?buildroot:rm -rf '%{buildroot}'\n}}\n", NULL);
+	if (s && *s)
+	    appendStringBuf(*sbp, s);
+	s = _free(s);
+	sbp = NULL;	/* XXX skip %clean from spec file. */
+    }
+
+    /* There are no options to %build, %install, %check, or %clean */
+    if ((rc = readLine(spec, STRIP_NOTHING)) > 0)
 	return PART_NONE;
-    }
-    if (rc) {
+    if (rc)
 	return rc;
-    }
     
     while (! (nextPart = isPart(spec->line))) {
-	appendStringBuf(*sbp, spec->line);
-	if ((rc = readLine(spec, STRIP_NOTHING)) > 0) {
+	if (sbp)
+	    appendStringBuf(*sbp, spec->line);
+	if ((rc = readLine(spec, STRIP_NOTHING)) > 0)
 	    return PART_NONE;
-	}
-	if (rc) {
+	if (rc)
 	    return rc;
-	}
     }
 
     return nextPart;
 }
+/*@=boundswrite@*/

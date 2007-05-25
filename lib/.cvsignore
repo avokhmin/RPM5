@@ -2,7 +2,8 @@
 .depend
 Makefile
 Makefile.in
-tagtable.c
+getdate.c
 .libs
 *.la
+*.lcd
 *.lo

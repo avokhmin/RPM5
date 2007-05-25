@@ -1,437 +1,1044 @@
 #ifndef H_RPMLIB
 #define	H_RPMLIB
 
-/* This is the *only* module users of rpmlib should need to include */
-
-/* and it shouldn't need these :-( */
+/** \ingroup rpmcli rpmrc rpmts rpmte rpmds rpmfi rpmdb lead signature header payload dbi
+ * \file lib/rpmlib.h
+ *
+ * In Memoriam: Steve Taylor <staylor@redhat.com> was here, now he's not.
+ *
+ */
 
 #include "rpmio.h"
-#include "dbindex.h"
+#include "rpmmessages.h"
+#include "rpmerr.h"
 #include "header.h"
+#include "popt.h"
+
+#define RPM_FORMAT_VERSION 4
+#define RPM_MAJOR_VERSION 5
+#define RPM_MINOR_VERSION 0
+
+/**
+ * Package read return codes.
+ */
+typedef	enum rpmRC_e {
+    RPMRC_OK		= 0,	/*!< Generic success code */
+    RPMRC_NOTFOUND	= 1,	/*!< Generic not found code. */
+    RPMRC_FAIL		= 2,	/*!< Generic failure code. */
+    RPMRC_NOTTRUSTED	= 3,	/*!< Signature is OK, but key is not trusted. */
+    RPMRC_NOKEY		= 4	/*!< Public key is unavailable. */
+} rpmRC;
+
+/*@-redecl@*/
+/*@checked@*/
+extern struct MacroContext_s * rpmGlobalMacroContext;
+
+/*@checked@*/
+extern struct MacroContext_s * rpmCLIMacroContext;
+
+/*@unchecked@*/ /*@observer@*/
+extern const char * RPMVERSION;
+
+/*@unchecked@*/ /*@observer@*/
+extern const char * rpmNAME;
+
+/*@unchecked@*/ /*@observer@*/
+extern const char * rpmEVR;
+
+/*@unchecked@*/
+extern int rpmFLAGS;
+/*@=redecl@*/
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-int rpmReadPackageInfo(FD_t fd, Header * signatures, Header * hdr);
-int rpmReadPackageHeader(FD_t fd, Header * hdr, int * isSource, int * major,
-			 int * minor);
-   /* 0 = success */
-   /* 1 = bad magic */
-   /* 2 = error */
+#if !defined(SWIG)
+/**
+ * Wrapper to free(3), hides const compilation noise, permit NULL, return NULL.
+ * @param p		memory to free
+ * @return		NULL always
+ */
+/*@unused@*/ static inline /*@null@*/
+void * _free(/*@only@*/ /*@null@*/ /*@out@*/ const void * p)
+	/*@modifies p @*/
+{
+    if (p != NULL)	free((void *)p);
+    return NULL;
+}
+#endif
 
-extern const struct headerTagTableEntry rpmTagTable[];
+/** \ingroup rpmts
+ * The RPM Transaction Set.
+ * Transaction sets are inherently unordered! RPM may reorder transaction
+ * sets to reduce errors. In general, installs/upgrades are done before
+ * strict removals, and prerequisite ordering is done on installs/upgrades.
+ */
+typedef /*@abstract@*/ /*@refcounted@*/ struct rpmts_s * rpmts;
+
+/** \ingroup rpmbuild
+ */
+typedef struct Spec_s * Spec;
+
+/** \ingroup rpmts
+ * An added/available package retrieval key.
+ */
+typedef /*@abstract@*/ void * alKey;
+#define	RPMAL_NOMATCH	((alKey)-1L)
+
+/** \ingroup rpmts
+ * An added/available package retrieval index.
+ */
+/*@-mutrep@*/
+typedef /*@abstract@*/ int alNum;
+/*@=mutrep@*/
+
+/** \ingroup rpmds 
+ * Dependency tag sets from a header, so that a header can be discarded early.
+ */
+typedef /*@abstract@*/ /*@refcounted@*/ struct rpmds_s * rpmds;
+
+/** \ingroup rpmds 
+ * Container for commonly extracted dependency set(s).
+ */
+typedef struct rpmPRCO_s * rpmPRCO;
+
+/** \ingroup rpmfi
+ * File info tag sets from a header, so that a header can be discarded early.
+ */
+typedef /*@abstract@*/ /*@refcounted@*/ struct rpmfi_s * rpmfi;
+
+/** \ingroup rpmte
+ * An element of a transaction set, i.e. a TR_ADDED or TR_REMOVED package.
+ */
+typedef /*@abstract@*/ struct rpmte_s * rpmte;
+
+/** \ingroup rpmdb
+ * Database of headers and tag value indices.
+ */
+typedef /*@abstract@*/ /*@refcounted@*/ struct rpmdb_s * rpmdb;
+
+/** \ingroup rpmdb
+ * Database iterator.
+ */
+typedef /*@abstract@*/ struct _rpmdbMatchIterator * rpmdbMatchIterator;
+
+/** \ingroup rpmgi
+ * Generalized iterator.
+ */
+typedef /*@abstract@*/ /*@refcounted@*/ struct rpmgi_s * rpmgi;
+
+/** \ingroup header
+ * Translate and merge legacy signature tags into header.
+ * @todo Remove headerSort() through headerInitIterator() modifies sig.
+ * @param h		header
+ * @param sigh		signature header
+ */
+void headerMergeLegacySigs(Header h, const Header sigh)
+	/*@modifies h, sigh @*/;
+
+/** \ingroup header
+ * Regenerate signature header.
+ * @todo Remove headerSort() through headerInitIterator() modifies h.
+ * @param h		header
+ * @param noArchiveSize	don't copy archive size tag (pre rpm-4.1)
+ * @return		regenerated signature header
+ */
+Header headerRegenSigHeader(const Header h, int noArchiveSize)
+	/*@modifies h @*/;
+
+/**
+ * Automatically generated table of tag name/value pairs.
+ */
+/*@-redecl@*/
+/*@observer@*/ /*@unchecked@*/
+extern const struct headerTagTableEntry_s * rpmTagTable;
+/*@=redecl@*/
+
+/**
+ * Number of entries in rpmTagTable.
+ */
+/*@-redecl@*/
+/*@unchecked@*/
 extern const int rpmTagTableSize;
+/*@=redecl@*/
 
-/* this chains to headerDefaultFormats[] */
-extern const struct headerSprintfExtension rpmHeaderFormats[];
+/*@unchecked@*/
+extern headerTagIndices rpmTags;
 
-/* these tags are for both the database and packages */
-/* none of these can be 0 !!                         */
+/**
+ * Table of query format extensions.
+ * @note Chains to headerDefaultFormats[].
+ */
+/*@-redecl@*/
+/*@unchecked@*/
+extern const struct headerSprintfExtension_s rpmHeaderFormats[];
+/*@=redecl@*/
 
-#define	RPMTAG_NAME  			1000
-#define	RPMTAG_VERSION			1001
-#define	RPMTAG_RELEASE			1002
-#define	RPMTAG_EPOCH	   		1003
-#define	RPMTAG_SERIAL		RPMTAG_EPOCH	/* backward comaptibility */
-#define	RPMTAG_SUMMARY			1004
-#define	RPMTAG_DESCRIPTION		1005
-#define	RPMTAG_BUILDTIME		1006
-#define	RPMTAG_BUILDHOST		1007
-#define	RPMTAG_INSTALLTIME		1008
-#define	RPMTAG_SIZE			1009
-#define	RPMTAG_DISTRIBUTION		1010
-#define	RPMTAG_VENDOR			1011
-#define	RPMTAG_GIF			1012
-#define	RPMTAG_XPM			1013
-#define	RPMTAG_LICENSE			1014
-#define	RPMTAG_COPYRIGHT	RPMTAG_LICENSE	/* backward comaptibility */
-#define	RPMTAG_PACKAGER			1015
-#define	RPMTAG_GROUP			1016
-#define	RPMTAG_CHANGELOG		1017 /* internal */
-#define	RPMTAG_SOURCE			1018
-#define	RPMTAG_PATCH			1019
-#define	RPMTAG_URL			1020
-#define	RPMTAG_OS			1021
-#define	RPMTAG_ARCH			1022
-#define	RPMTAG_PREIN			1023
-#define	RPMTAG_POSTIN			1024
-#define	RPMTAG_PREUN			1025
-#define	RPMTAG_POSTUN			1026
-#define	RPMTAG_FILENAMES		1027
-#define	RPMTAG_FILESIZES		1028
-#define	RPMTAG_FILESTATES		1029
-#define	RPMTAG_FILEMODES		1030
-#define	RPMTAG_FILEUIDS			1031 /* internal */
-#define	RPMTAG_FILEGIDS			1032 /* internal */
-#define	RPMTAG_FILERDEVS		1033
-#define	RPMTAG_FILEMTIMES		1034
-#define	RPMTAG_FILEMD5S			1035
-#define	RPMTAG_FILELINKTOS		1036
-#define	RPMTAG_FILEFLAGS		1037
-#define	RPMTAG_ROOT			1038
-#define	RPMTAG_FILEUSERNAME		1039
-#define	RPMTAG_FILEGROUPNAME		1040
-#define	RPMTAG_EXCLUDE			1041 /* internal - depricated */
-#define	RPMTAG_EXCLUSIVE		1042 /* internal - depricated */
-#define	RPMTAG_ICON			1043
-#define	RPMTAG_SOURCERPM		1044
-#define	RPMTAG_FILEVERIFYFLAGS		1045
-#define	RPMTAG_ARCHIVESIZE		1046
-#define	RPMTAG_PROVIDES                 1047
-#define	RPMTAG_REQUIREFLAGS		1048
-#define	RPMTAG_REQUIRENAME		1049
-#define	RPMTAG_REQUIREVERSION		1050
-#define	RPMTAG_NOSOURCE			1051 /* internal */
-#define	RPMTAG_NOPATCH			1052 /* internal */
-#define	RPMTAG_CONFLICTFLAGS		1053
-#define	RPMTAG_CONFLICTNAME		1054
-#define	RPMTAG_CONFLICTVERSION		1055
-#define	RPMTAG_DEFAULTPREFIX		1056 /* internal - deprecated */
-#define	RPMTAG_BUILDROOT		1057
-#define	RPMTAG_INSTALLPREFIX		1058 /* internal - deprecated */
-#define	RPMTAG_EXCLUDEARCH		1059
-#define	RPMTAG_EXCLUDEOS		1060
-#define	RPMTAG_EXCLUSIVEARCH		1061
-#define	RPMTAG_EXCLUSIVEOS		1062
-#define	RPMTAG_AUTOREQPROV		1063 /* internal */
-#define	RPMTAG_RPMVERSION		1064
-#define	RPMTAG_TRIGGERSCRIPTS		1065
-#define	RPMTAG_TRIGGERNAME		1066
-#define	RPMTAG_TRIGGERVERSION		1067
-#define	RPMTAG_TRIGGERFLAGS		1068
-#define	RPMTAG_TRIGGERINDEX		1069
-#define	RPMTAG_VERIFYSCRIPT		1079
-#define	RPMTAG_CHANGELOGTIME		1080
-#define	RPMTAG_CHANGELOGNAME		1081
-#define	RPMTAG_CHANGELOGTEXT		1082
-#define	RPMTAG_BROKENMD5		1083 /* internal */
-#define	RPMTAG_PREREQ			1084 /* internal */
-#define	RPMTAG_PREINPROG		1085
-#define	RPMTAG_POSTINPROG		1086
-#define	RPMTAG_PREUNPROG		1087
-#define	RPMTAG_POSTUNPROG		1088
-#define	RPMTAG_BUILDARCHS		1089
-#define	RPMTAG_OBSOLETES		1090
-#define	RPMTAG_VERIFYSCRIPTPROG		1091
-#define	RPMTAG_TRIGGERSCRIPTPROG	1092
-#define	RPMTAG_DOCDIR			1093 /* internal */
-#define	RPMTAG_COOKIE			1094
-#define	RPMTAG_FILEDEVICES		1095
-#define	RPMTAG_FILEINODES		1096
-#define	RPMTAG_FILELANGS		1097
-#define	RPMTAG_PREFIXES			1098
-#define	RPMTAG_INSTPREFIXES		1099
-#define	RPMTAG_TRIGGERIN		1100 /* internal */
-#define	RPMTAG_TRIGGERUN		1101 /* internal */
-#define	RPMTAG_TRIGGERPOSTUN		1102 /* internal */
-#define	RPMTAG_AUTOREQ			1103 /* internal */
-#define	RPMTAG_AUTOPROV			1104 /* internal */
-#define	RPMTAG_CAPABILITY		1105
-#define	RPMTAG_SOURCEPACKAGE		1106 /* internal */
-#define	RPMTAG_ORIGFILENAMES		1107
+/**
+ * Pseudo-tags used by the rpmdb and rpmgi iterator API's.
+ */
+#define	RPMDBI_PACKAGES		0	/* Installed package headers. */
+#define	RPMDBI_DEPENDS		1	/* Dependency resolution cache. */
+#define	RPMDBI_LABEL		2	/* Fingerprint search marker. */
+#define	RPMDBI_ADDED		3	/* Added package headers. */
+#define	RPMDBI_REMOVED		4	/* Removed package headers. */
+#define	RPMDBI_AVAILABLE	5	/* Available package headers. */
+#define	RPMDBI_HDLIST		6	/* (rpmgi) Header list. */
+#define	RPMDBI_ARGLIST		7	/* (rpmgi) Argument list. */
+#define	RPMDBI_FTSWALK		8	/* (rpmgi) File tree  walk. */
+
+/** \ingroup header
+ * Tags identify data in package headers.
+ * @note tags should not have value 0!
+ */
+/** @todo: Somehow supply type **/
+typedef enum rpmTag_e {
+
+    RPMTAG_HEADERIMAGE		= HEADER_IMAGE,		/*!< Current image. */
+    RPMTAG_HEADERSIGNATURES	= HEADER_SIGNATURES,	/*!< Signatures. */
+    RPMTAG_HEADERIMMUTABLE	= HEADER_IMMUTABLE,	/*!< Original image. */
+/*@-enummemuse@*/
+    RPMTAG_HEADERREGIONS	= HEADER_REGIONS,	/*!< Regions. */
+
+    RPMTAG_HEADERI18NTABLE	= HEADER_I18NTABLE, /*!< I18N string locales. */
+/*@=enummemuse@*/
+
+/* Retrofit (and uniqify) signature tags for use by tagName() and rpmQuery. */
+/* the md5 sum was broken *twice* on big endian machines */
+/* XXX 2nd underscore prevents tagTable generation */
+    RPMTAG_SIG_BASE		= HEADER_SIGBASE,
+    RPMTAG_SIGSIZE		= RPMTAG_SIG_BASE+1,	/* i */
+    RPMTAG_SIGLEMD5_1		= RPMTAG_SIG_BASE+2,	/* internal - obsolete */
+    RPMTAG_SIGPGP		= RPMTAG_SIG_BASE+3,	/* x */
+    RPMTAG_SIGLEMD5_2		= RPMTAG_SIG_BASE+4,	/* x internal - obsolete */
+    RPMTAG_SIGMD5	        = RPMTAG_SIG_BASE+5,	/* x */
+#define	RPMTAG_PKGID	RPMTAG_SIGMD5			/* x */
+    RPMTAG_SIGGPG	        = RPMTAG_SIG_BASE+6,	/* x */
+    RPMTAG_SIGPGP5	        = RPMTAG_SIG_BASE+7,	/* internal - obsolete */
+
+    RPMTAG_BADSHA1_1		= RPMTAG_SIG_BASE+8,	/* internal - obsolete */
+    RPMTAG_BADSHA1_2		= RPMTAG_SIG_BASE+9,	/* internal - obsolete */
+    RPMTAG_PUBKEYS		= RPMTAG_SIG_BASE+10,	/* s[] */
+    RPMTAG_DSAHEADER		= RPMTAG_SIG_BASE+11,	/* x */
+    RPMTAG_RSAHEADER		= RPMTAG_SIG_BASE+12,	/* x */
+    RPMTAG_SHA1HEADER		= RPMTAG_SIG_BASE+13,	/* s */
+#define	RPMTAG_HDRID	RPMTAG_SHA1HEADER	/* s */
+
+    RPMTAG_NAME  		= 1000,	/* s */
+#define	RPMTAG_N	RPMTAG_NAME	/* s */
+    RPMTAG_VERSION		= 1001,	/* s */
+#define	RPMTAG_V	RPMTAG_VERSION	/* s */
+    RPMTAG_RELEASE		= 1002,	/* s */
+#define	RPMTAG_R	RPMTAG_RELEASE	/* s */
+    RPMTAG_EPOCH   		= 1003,	/* i */
+#define	RPMTAG_E	RPMTAG_EPOCH	/* i */
+    RPMTAG_SUMMARY		= 1004,	/* s{} */
+    RPMTAG_DESCRIPTION		= 1005,	/* s{} */
+    RPMTAG_BUILDTIME		= 1006,	/* i */
+    RPMTAG_BUILDHOST		= 1007,	/* s */
+    RPMTAG_INSTALLTIME		= 1008,	/* i */
+    RPMTAG_SIZE			= 1009,	/* i */
+    RPMTAG_DISTRIBUTION		= 1010,	/* s */
+    RPMTAG_VENDOR		= 1011,	/* s */
+    RPMTAG_GIF			= 1012,	/* x */
+    RPMTAG_XPM			= 1013,	/* x */
+    RPMTAG_LICENSE		= 1014,	/* s */
+    RPMTAG_PACKAGER		= 1015,	/* s */
+    RPMTAG_GROUP		= 1016,	/* s{} */
+/*@-enummemuse@*/
+    RPMTAG_CHANGELOG		= 1017, /* s[] internal */
+/*@=enummemuse@*/
+    RPMTAG_SOURCE		= 1018,	/* s[] */
+    RPMTAG_PATCH		= 1019,	/* s[] */
+    RPMTAG_URL			= 1020,	/* s */
+    RPMTAG_OS			= 1021,	/* s legacy used int */
+    RPMTAG_ARCH			= 1022,	/* s legacy used int */
+    RPMTAG_PREIN		= 1023,	/* s */
+    RPMTAG_POSTIN		= 1024,	/* s */
+    RPMTAG_PREUN		= 1025,	/* s */
+    RPMTAG_POSTUN		= 1026,	/* s */
+    RPMTAG_OLDFILENAMES		= 1027, /* s[] obsolete */
+    RPMTAG_FILESIZES		= 1028,	/* i[] */
+    RPMTAG_FILESTATES		= 1029, /* c[] */
+    RPMTAG_FILEMODES		= 1030,	/* h[] */
+    RPMTAG_FILEUIDS		= 1031, /* i[] internal */
+    RPMTAG_FILEGIDS		= 1032, /* i[] internal */
+    RPMTAG_FILERDEVS		= 1033,	/* h[] */
+    RPMTAG_FILEMTIMES		= 1034, /* i[] */
+    RPMTAG_FILEDIGESTS		= 1035,	/* s[] */
+#define RPMTAG_FILEMD5S	RPMTAG_FILEDIGESTS /* s[] */
+    RPMTAG_FILELINKTOS		= 1036,	/* s[] */
+    RPMTAG_FILEFLAGS		= 1037,	/* i[] */
+/*@-enummemuse@*/
+    RPMTAG_ROOT			= 1038, /* internal - obsolete */
+/*@=enummemuse@*/
+    RPMTAG_FILEUSERNAME		= 1039,	/* s[] */
+    RPMTAG_FILEGROUPNAME	= 1040,	/* s[] */
+/*@-enummemuse@*/
+    RPMTAG_EXCLUDE		= 1041, /* internal - obsolete */
+    RPMTAG_EXCLUSIVE		= 1042, /* internal - obsolete */
+/*@=enummemuse@*/
+    RPMTAG_ICON			= 1043, /* x */
+    RPMTAG_SOURCERPM		= 1044,	/* s */
+    RPMTAG_FILEVERIFYFLAGS	= 1045,	/* i[] */
+    RPMTAG_ARCHIVESIZE		= 1046,	/* i */
+    RPMTAG_PROVIDENAME		= 1047,	/* s[] */
+#define	RPMTAG_PROVIDES RPMTAG_PROVIDENAME	/* s[] */
+#define	RPMTAG_P	RPMTAG_PROVIDENAME	/* s[] */
+    RPMTAG_REQUIREFLAGS		= 1048,	/* i[] */
+    RPMTAG_REQUIRENAME		= 1049,	/* s[] */
+#define	RPMTAG_REQUIRES RPMTAG_REQUIRENAME	/* s[] */
+    RPMTAG_REQUIREVERSION	= 1050,	/* s[] */
+    RPMTAG_NOSOURCE		= 1051, /* i internal */
+    RPMTAG_NOPATCH		= 1052, /* i internal */
+    RPMTAG_CONFLICTFLAGS	= 1053, /* i[] */
+    RPMTAG_CONFLICTNAME		= 1054,	/* s[] */
+#define	RPMTAG_CONFLICTS RPMTAG_CONFLICTNAME	/* s[] */
+#define	RPMTAG_C	RPMTAG_CONFLICTNAME	/* s[] */
+    RPMTAG_CONFLICTVERSION	= 1055,	/* s[] */
+    RPMTAG_DEFAULTPREFIX	= 1056, /* s internal - deprecated */
+    RPMTAG_BUILDROOT		= 1057, /* s internal */
+    RPMTAG_INSTALLPREFIX	= 1058, /* s internal - deprecated */
+    RPMTAG_EXCLUDEARCH		= 1059, /* s[] */
+    RPMTAG_EXCLUDEOS		= 1060, /* s[] */
+    RPMTAG_EXCLUSIVEARCH	= 1061, /* s[] */
+    RPMTAG_EXCLUSIVEOS		= 1062, /* s[] */
+    RPMTAG_AUTOREQPROV		= 1063, /* s internal */
+    RPMTAG_RPMVERSION		= 1064,	/* s */
+    RPMTAG_TRIGGERSCRIPTS	= 1065,	/* s[] */
+    RPMTAG_TRIGGERNAME		= 1066,	/* s[] */
+    RPMTAG_TRIGGERVERSION	= 1067,	/* s[] */
+    RPMTAG_TRIGGERFLAGS		= 1068,	/* i[] */
+    RPMTAG_TRIGGERINDEX		= 1069,	/* i[] */
+    RPMTAG_VERIFYSCRIPT		= 1079,	/* s */
+    RPMTAG_CHANGELOGTIME	= 1080,	/* i[] */
+    RPMTAG_CHANGELOGNAME	= 1081,	/* s[] */
+    RPMTAG_CHANGELOGTEXT	= 1082,	/* s[] */
+/*@-enummemuse@*/
+    RPMTAG_BROKENMD5		= 1083, /* internal - obsolete */
+/*@=enummemuse@*/
+    RPMTAG_PREREQ		= 1084, /* internal */
+    RPMTAG_PREINPROG		= 1085,	/* s */
+    RPMTAG_POSTINPROG		= 1086,	/* s */
+    RPMTAG_PREUNPROG		= 1087,	/* s */
+    RPMTAG_POSTUNPROG		= 1088,	/* s */
+    RPMTAG_BUILDARCHS		= 1089, /* s[] */
+    RPMTAG_OBSOLETENAME		= 1090,	/* s[] */
+#define	RPMTAG_OBSOLETES RPMTAG_OBSOLETENAME	/* s[] */
+#define	RPMTAG_O	RPMTAG_OBSOLETENAME	/* s[] */
+    RPMTAG_VERIFYSCRIPTPROG	= 1091,	/* s */
+    RPMTAG_TRIGGERSCRIPTPROG	= 1092,	/* s[] */
+    RPMTAG_DOCDIR		= 1093, /* internal */
+    RPMTAG_COOKIE		= 1094,	/* s */
+    RPMTAG_FILEDEVICES		= 1095,	/* i[] */
+    RPMTAG_FILEINODES		= 1096,	/* i[] */
+    RPMTAG_FILELANGS		= 1097,	/* s[] */
+    RPMTAG_PREFIXES		= 1098,	/* s[] */
+    RPMTAG_INSTPREFIXES		= 1099,	/* s[] */
+    RPMTAG_TRIGGERIN		= 1100, /* internal */
+    RPMTAG_TRIGGERUN		= 1101, /* internal */
+    RPMTAG_TRIGGERPOSTUN	= 1102, /* internal */
+    RPMTAG_AUTOREQ		= 1103, /* internal */
+    RPMTAG_AUTOPROV		= 1104, /* internal */
+/*@-enummemuse@*/
+    RPMTAG_CAPABILITY		= 1105, /* i legacy - obsolete */
+/*@=enummemuse@*/
+    RPMTAG_SOURCEPACKAGE	= 1106, /* i legacy - obsolete */
+/*@-enummemuse@*/
+    RPMTAG_OLDORIGFILENAMES	= 1107, /* internal - obsolete */
+/*@=enummemuse@*/
+    RPMTAG_BUILDPREREQ		= 1108, /* internal */
+    RPMTAG_BUILDREQUIRES	= 1109, /* internal */
+    RPMTAG_BUILDCONFLICTS	= 1110, /* internal */
+/*@-enummemuse@*/
+    RPMTAG_BUILDMACROS		= 1111, /* internal - unused */
+/*@=enummemuse@*/
+    RPMTAG_PROVIDEFLAGS		= 1112,	/* i[] */
+    RPMTAG_PROVIDEVERSION	= 1113,	/* s[] */
+    RPMTAG_OBSOLETEFLAGS	= 1114,	/* i[] */
+    RPMTAG_OBSOLETEVERSION	= 1115,	/* s[] */
+    RPMTAG_DIRINDEXES		= 1116,	/* i[] */
+    RPMTAG_BASENAMES		= 1117,	/* s[] */
+    RPMTAG_DIRNAMES		= 1118,	/* s[] */
+    RPMTAG_ORIGDIRINDEXES	= 1119, /* i[] relocation */
+    RPMTAG_ORIGBASENAMES	= 1120, /* s[] relocation */
+    RPMTAG_ORIGDIRNAMES		= 1121, /* s[] relocation */
+    RPMTAG_OPTFLAGS		= 1122,	/* s */
+    RPMTAG_DISTURL		= 1123,	/* s */
+    RPMTAG_PAYLOADFORMAT	= 1124,	/* s */
+    RPMTAG_PAYLOADCOMPRESSOR	= 1125,	/* s */
+    RPMTAG_PAYLOADFLAGS		= 1126,	/* s */
+    RPMTAG_INSTALLCOLOR		= 1127, /* i transaction color when installed */
+    RPMTAG_INSTALLTID		= 1128,	/* i */
+    RPMTAG_REMOVETID		= 1129,	/* i */
+/*@-enummemuse@*/
+    RPMTAG_SHA1RHN		= 1130, /* internal - obsolete */
+/*@=enummemuse@*/
+    RPMTAG_RHNPLATFORM		= 1131,	/* s deprecated */
+    RPMTAG_PLATFORM		= 1132,	/* s */
+    RPMTAG_PATCHESNAME		= 1133, /* s[] deprecated placeholder (SuSE) */
+    RPMTAG_PATCHESFLAGS		= 1134, /* i[] deprecated placeholder (SuSE) */
+    RPMTAG_PATCHESVERSION	= 1135, /* s[] deprecated placeholder (SuSE) */
+    RPMTAG_CACHECTIME		= 1136,	/* i */
+    RPMTAG_CACHEPKGPATH		= 1137,	/* s */
+    RPMTAG_CACHEPKGSIZE		= 1138,	/* i */
+    RPMTAG_CACHEPKGMTIME	= 1139,	/* i */
+    RPMTAG_FILECOLORS		= 1140,	/* i[] */
+    RPMTAG_FILECLASS		= 1141,	/* i[] */
+    RPMTAG_CLASSDICT		= 1142,	/* s[] */
+    RPMTAG_FILEDEPENDSX		= 1143,	/* i[] */
+    RPMTAG_FILEDEPENDSN		= 1144,	/* i[] */
+    RPMTAG_DEPENDSDICT		= 1145,	/* i[] */
+    RPMTAG_SOURCEPKGID		= 1146,	/* x */
+    RPMTAG_FILECONTEXTS		= 1147,	/* s[] */
+    RPMTAG_FSCONTEXTS		= 1148,	/* s[] extension */
+    RPMTAG_RECONTEXTS		= 1149,	/* s[] extension */
+    RPMTAG_POLICIES		= 1150,	/* s[] selinux *.te policy file. */
+    RPMTAG_PRETRANS		= 1151,	/* s */
+    RPMTAG_POSTTRANS		= 1152,	/* s */
+    RPMTAG_PRETRANSPROG		= 1153,	/* s */
+    RPMTAG_POSTTRANSPROG	= 1154,	/* s */
+    RPMTAG_DISTTAG		= 1155,	/* s */
+    RPMTAG_SUGGESTSNAME		= 1156,	/* s[] extension */
+#define	RPMTAG_SUGGESTS RPMTAG_SUGGESTSNAME	/* s[] */
+    RPMTAG_SUGGESTSVERSION	= 1157,	/* s[] extension */
+    RPMTAG_SUGGESTSFLAGS	= 1158,	/* i[] extension */
+    RPMTAG_ENHANCESNAME		= 1159,	/* s[] extension placeholder */
+#define	RPMTAG_ENHANCES RPMTAG_ENHANCESNAME	/* s[] */
+    RPMTAG_ENHANCESVERSION	= 1160,	/* s[] extension placeholder */
+    RPMTAG_ENHANCESFLAGS	= 1161,	/* i[] extension placeholder */
+    RPMTAG_PRIORITY		= 1162, /* i[] extension placeholder */
+    RPMTAG_CVSID		= 1163, /* s */
+#define	RPMTAG_SVNID	RPMTAG_CVSID	/* s */
+    RPMTAG_BLINKPKGID		= 1164, /* s[] */
+    RPMTAG_BLINKHDRID		= 1165, /* s[] */
+    RPMTAG_BLINKNEVRA		= 1166, /* s[] */
+    RPMTAG_FLINKPKGID		= 1167, /* s[] */
+    RPMTAG_FLINKHDRID		= 1168, /* s[] */
+    RPMTAG_FLINKNEVRA		= 1169, /* s[] */
+    RPMTAG_PACKAGEORIGIN	= 1170, /* s */
+    RPMTAG_TRIGGERPREIN		= 1171, /* internal */
+    RPMTAG_BUILDSUGGESTS	= 1172, /* internal */
+    RPMTAG_BUILDENHANCES	= 1173, /* internal */
+    RPMTAG_SCRIPTSTATES		= 1174, /* i[] scriptlet exit codes */
+    RPMTAG_SCRIPTMETRICS	= 1175, /* i[] scriptlet execution times */
+    RPMTAG_BUILDCPUCLOCK	= 1176, /* i */
+    RPMTAG_FILEDIGESTALGOS	= 1177, /* i[] */
+    RPMTAG_VARIANTS		= 1178, /* s[] */
+    RPMTAG_XMAJOR		= 1179, /* i */
+    RPMTAG_XMINOR		= 1180, /* i */
+    RPMTAG_REPOTAG		= 1181,	/* s */
+    RPMTAG_KEYWORDS		= 1182,	/* s[] */
+    RPMTAG_BUILDPLATFORMS	= 1183,	/* s[] */
+    RPMTAG_PACKAGECOLOR		= 1184, /* i */
+    RPMTAG_PACKAGEPREFCOLOR	= 1185, /* i (unimplemented) */
+    RPMTAG_XATTRSDICT		= 1186, /* s[] (unimplemented) */
+    RPMTAG_FILEXATTRSX		= 1187, /* i[] (unimplemented) */
+    RPMTAG_DEPATTRSDICT		= 1188, /* s[] (unimplemented) */
+    RPMTAG_CONFLICTATTRSX	= 1189, /* i[] (unimplemented) */
+    RPMTAG_OBSOLETEATTRSX	= 1190, /* i[] (unimplemented) */
+    RPMTAG_PROVIDEATTRSX	= 1191, /* i[] (unimplemented) */
+    RPMTAG_REQUIREATTRSX	= 1192, /* i[] (unimplemented) */
+    RPMTAG_BUILDPROVIDES	= 1193, /* internal */
+    RPMTAG_BUILDOBSOLETES	= 1194, /* internal */
+
+/*@-enummemuse@*/
+    RPMTAG_FIRSTFREE_TAG	/*!< internal */
+/*@=enummemuse@*/
+} rpmTag;
 
 #define	RPMTAG_EXTERNAL_TAG		1000000
 
-#define	RPMFILE_STATE_NORMAL 		0
-#define	RPMFILE_STATE_REPLACED 		1
-#define	RPMFILE_STATE_NOTINSTALLED	2
-#define	RPMFILE_STATE_NETSHARED		3
+/**
+ * Scriptlet identifiers.
+ */
+typedef enum rpmScriptID_e {
+    RPMSCRIPT_UNKNOWN		=  0,	/*!< unknown scriptlet */
+    RPMSCRIPT_PRETRANS		=  1,	/*!< %pretrans scriptlet */
+    RPMSCRIPT_TRIGGERPREIN	=  2,	/*!< %triggerprein scriptlet */
+    RPMSCRIPT_PREIN		=  3,	/*!< %pre scriptlet */
+    RPMSCRIPT_POSTIN		=  4,	/*!< %post scriptlet  */
+    RPMSCRIPT_TRIGGERIN		=  5,	/*!< %triggerin scriptlet  */
+    RPMSCRIPT_TRIGGERUN		=  6,	/*!< %triggerun scriptlet  */
+    RPMSCRIPT_PREUN		=  7,	/*!< %preun scriptlet  */
+    RPMSCRIPT_POSTUN		=  8,	/*!< %postun scriptlet  */
+    RPMSCRIPT_TRIGGERPOSTUN	=  9,	/*!< %triggerpostun scriptlet  */
+    RPMSCRIPT_POSTTRANS		= 10,	/*!< %posttrans scriptlet  */
+	/* 11-15 unused */
+    RPMSCRIPT_VERIFY		= 16,	/*!< %verify scriptlet  */
+    RPMSCRIPT_MAX		= 32
+} rpmScriptID;
 
-/* these can be ORed together */
-#define	RPMFILE_CONFIG			(1 << 0)
-#define	RPMFILE_DOC			(1 << 1)
-#define	RPMFILE_DONOTUSE		(1 << 2)
-#define	RPMFILE_MISSINGOK		(1 << 3)
-#define	RPMFILE_NOREPLACE		(1 << 4)
-#define	RPMFILE_SPECFILE		(1 << 5)
-#define	RPMFILE_GHOST			(1 << 6)
-#define	RPMFILE_LICENSE			(1 << 7)
-#define	RPMFILE_README			(1 << 8)
+/**
+ * Scriptlet states (when installed).
+ */
+typedef enum rpmScriptState_e {
+    RPMSCRIPT_STATE_UNKNOWN	= 0,
+	/* 0-15 reserved for waitpid return. */
+    RPMSCRIPT_STATE_EXEC	= (1 << 16), /*!< scriptlet was exec'd */
+    RPMSCRIPT_STATE_REAPED	= (1 << 17), /*!< scriptlet was reaped */
+	/* 18-23 unused */
+    RPMSCRIPT_STATE_SELINUX	= (1 << 24), /*!< scriptlet exec by SELinux */
+    RPMSCRIPT_STATE_EMULATOR	= (1 << 25), /*!< scriptlet exec in emulator */
+    RPMSCRIPT_STATE_LUA		= (1 << 26)  /*!< scriptlet exec with lua */
+} rpmScriptState;
 
-#define	RPMINSTALL_TEST			(1 << 2)
-#define	RPMINSTALL_UPGRADETOOLD		(1 << 4)
-#define	RPMINSTALL_NODOCS		(1 << 5)
-#define	RPMINSTALL_NOSCRIPTS		(1 << 6)
-#define	RPMINSTALL_ALLFILES		(1 << 9)
-#define	RPMINSTALL_JUSTDB		(1 << 10)
-#define	RPMINSTALL_KEEPOBSOLETE		(1 << 11)
-#define	RPMINSTALL_NOTRIGGERS		(1 << 13)
+/**
+ * File States (when installed).
+ */
+typedef enum rpmfileState_e {
+    RPMFILE_STATE_NORMAL 	= 0,
+    RPMFILE_STATE_REPLACED 	= 1,
+    RPMFILE_STATE_NOTINSTALLED	= 2,
+    RPMFILE_STATE_NETSHARED	= 3,
+    RPMFILE_STATE_WRONGCOLOR	= 4
+} rpmfileState;
+#define	RPMFILE_STATE_MISSING	-1	/* XXX used for unavailable data */
 
-#define	RPMUNINSTALL_TEST		(1 << 0)
-#define	RPMUNINSTALL_NOSCRIPTS		(1 << 1)
-#define	RPMUNINSTALL_JUSTDB		(1 << 2)
-#define	RPMUNINSTALL_NOTRIGGERS		(1 << 3)
+/**
+ * File Attributes.
+ */
+typedef	enum rpmfileAttrs_e {
+/*@-enummemuse@*/
+    RPMFILE_NONE	= 0,
+/*@=enummemuse@*/
+    RPMFILE_CONFIG	= (1 <<  0),	/*!< from %%config */
+    RPMFILE_DOC		= (1 <<  1),	/*!< from %%doc */
+    RPMFILE_ICON	= (1 <<  2),	/*!< from Icon: */
+    RPMFILE_MISSINGOK	= (1 <<  3),	/*!< from %%config(missingok) */
+    RPMFILE_NOREPLACE	= (1 <<  4),	/*!< from %%config(noreplace) */
+    RPMFILE_SPECFILE	= (1 <<  5),	/*!< the specfile (srpm only). */
+    RPMFILE_GHOST	= (1 <<  6),	/*!< from %%ghost */
+    RPMFILE_LICENSE	= (1 <<  7),	/*!< from %%license */
+    RPMFILE_README	= (1 <<  8),	/*!< from %%readme */
+    RPMFILE_EXCLUDE	= (1 <<  9),	/*!< from %%exclude, internal */
+    RPMFILE_UNPATCHED	= (1 << 10),	/*!< (deprecated) placeholder (SuSE) */
+    RPMFILE_PUBKEY	= (1 << 11),	/*!< from %%pubkey */
+    RPMFILE_POLICY	= (1 << 12),	/*!< from %%policy */
+    RPMFILE_EXISTS	= (1 << 13),	/*!< did lstat(fn, st) succeed? */
+    RPMFILE_SPARSE	= (1 << 14),	/*!< was ((512*st->st_blocks) < st->st_size) ? */
+    RPMFILE_TYPED	= (1 << 15),	/*!< (unimplemented) from %%spook */
+    RPMFILE_SOURCE	= (1 << 16),	/*!< from SourceN: (srpm only). */
+    RPMFILE_PATCH	= (1 << 17)	/*!< from PatchN: (srpm only). */
+} rpmfileAttrs;
 
-#define RPMVERIFY_NONE		0
-#define RPMVERIFY_MD5		(1 << 0)
-#define RPMVERIFY_FILESIZE	(1 << 1)
-#define RPMVERIFY_LINKTO	(1 << 2)
-#define RPMVERIFY_USER		(1 << 3)
-#define RPMVERIFY_GROUP		(1 << 4)
-#define RPMVERIFY_MTIME		(1 << 5)
-#define RPMVERIFY_MODE		(1 << 6)
-#define RPMVERIFY_RDEV		(1 << 7)
-#define RPMVERIFY_READLINKFAIL	(1 << 28)
-#define RPMVERIFY_READFAIL	(1 << 29)
-#define RPMVERIFY_LSTATFAIL	(1 << 30)
+#define	RPMFILE_SPOOK	(RPMFILE_GHOST|RPMFILE_TYPED)
+#define	RPMFILE_ALL	~(RPMFILE_NONE)
 
-#define RPMVERIFY_ALL		~(RPMVERIFY_NONE)
+/* ==================================================================== */
+/** \name RPMRC */
+/*@{*/
 
-#define	RPMSENSE_ANY		0
-#define	RPMSENSE_SERIAL		(1 << 0)
-#define	RPMSENSE_LESS		(1 << 1)
-#define	RPMSENSE_GREATER	(1 << 2)
-#define	RPMSENSE_EQUAL		(1 << 3)
-#define	RPMSENSE_PROVIDES	(1 << 4) /* only used internally by builds */
-#define	RPMSENSE_CONFLICTS	(1 << 5) /* only used internally by builds */
-#define	RPMSENSE_PREREQ		(1 << 6)
-#define	RPMSENSE_OBSOLETES	(1 << 7) /* only used internally by builds */
-#define	RPMSENSE_SENSEMASK	15       /* Mask to get senses, ie serial, */
-                                          /* less, greater, equal.          */
+/** \ingroup rpmrc
+ * Build and install arch/os table identifiers.
+ * @deprecated Eliminate from API.
+ */
+enum rpm_machtable_e {
+    RPM_MACHTABLE_INSTARCH	= 0,	/*!< Install platform architecture. */
+    RPM_MACHTABLE_INSTOS	= 1,	/*!< Install platform operating system. */
+    RPM_MACHTABLE_BUILDARCH	= 2,	/*!< Build platform architecture. */
+    RPM_MACHTABLE_BUILDOS	= 3	/*!< Build platform operating system. */
+};
+#define	RPM_MACHTABLE_COUNT	4	/*!< No. of arch/os tables. */
 
-#define	RPMSENSE_TRIGGERIN	(1 << 16)
-#define	RPMSENSE_TRIGGERUN	(1 << 17)
-#define	RPMSENSE_TRIGGERPOSTUN	(1 << 18)
-#define	RPMSENSE_TRIGGER	(RPMSENSE_TRIGGERIN | RPMSENSE_TRIGGERUN | \
-                                  RPMSENSE_TRIGGERPOSTUN)
+/** \ingroup rpmrc
+ * The default rpmrc files to be read.
+ * @deprecated The rpmrc files are no longer parsed by default.
+ */
+/*@observer@*/ /*@checked@*/
+extern const char *rpmRcfiles;
 
-/* Stuff for maintaining "variables" like SOURCEDIR, BUILDDIR, etc */
+/** \ingroup rpmrc
+ * Read macro configuration file(s) for a target.
+ * @param file		colon separated files to read (NULL uses default)
+ * @param target	target platform (NULL uses default)
+ * @return		0 on success, -1 on error
+ */
+int rpmReadConfigFiles(/*@null@*/ const char * file,
+		/*@null@*/ const char * target)
+	/*@globals rpmRcfiles,
+		rpmGlobalMacroContext, rpmCLIMacroContext, h_errno,
+		fileSystem, internalState @*/
+	/*@modifies rpmGlobalMacroContext, rpmCLIMacroContext,
+		fileSystem, internalState @*/;
 
-#define	RPMVAR_SOURCEDIR		0
-#define	RPMVAR_BUILDDIR			1
-/* #define RPMVAR_DOCDIR		2 -- No longer used */
-#define	RPMVAR_OPTFLAGS			3
-#define	RPMVAR_TOPDIR			4
-#define	RPMVAR_SPECDIR			5
-#define	RPMVAR_ROOT			6
-#define	RPMVAR_RPMDIR			7
-#define	RPMVAR_SRPMDIR			8
-/* #define RPMVAR_ARCHSENSITIVE 	9  -- No longer used */
-#define	RPMVAR_REQUIREDISTRIBUTION	10
-/* #define RPMVAR_REQUIREGROUP		11 -- No longer used */
-#define	RPMVAR_REQUIREVENDOR		12
-#define	RPMVAR_DISTRIBUTION		13
-#define	RPMVAR_VENDOR			14
-#define	RPMVAR_MESSAGELEVEL		15
-#define	RPMVAR_REQUIREICON		16
-#define	RPMVAR_TIMECHECK		17
-#define	RPMVAR_SIGTYPE			18
-#define	RPMVAR_PGP_PATH			19
-#define	RPMVAR_PGP_NAME			20
-/* #define RPMVAR_PGP_SECRING		21 -- No longer used */
-/* #define RPMVAR_PGP_PUBRING		22 -- No longer used */
-#define	RPMVAR_EXCLUDEDOCS		23
-/* #define RPMVAR_BUILDARCH		24 -- No longer used */
-/* #define RPMVAR_BUILDOS		25 -- No longer used */
-#define	RPMVAR_BUILDROOT		26
-#define	RPMVAR_DBPATH			27
-#define	RPMVAR_PACKAGER			28
-#define	RPMVAR_FTPPROXY			29
-#define	RPMVAR_TMPPATH			30
-/* #define RPMVAR_CPIOBIN		31 -- No longer used */
-#define	RPMVAR_FTPPORT			32
-#define	RPMVAR_NETSHAREDPATH		33
-#define	RPMVAR_DEFAULTDOCDIR		34
-#define	RPMVAR_FIXPERMS			35
-#define	RPMVAR_GZIPBIN			36
-#define	RPMVAR_RPMFILENAME		37
-#define	RPMVAR_PROVIDES			38
-#define	RPMVAR_BUILDSHELL		39
-#define	RPMVAR_INSTCHANGELOG		40
-#define	RPMVAR_BZIP2BIN			41
-#define	RPMVAR_LANGPATT			42
-#define	RPMVAR_INCLUDE			43
-/* #define RPMVAR_ARCH			44 -- reserved */
-/* #define RPMVAR_OS			45 -- reserved */
-/* #define RPMVAR_BUILDPLATFORM		46 -- reserved */
-/* #define RPMVAR_BUILDARCH		47 -- reserved */
-/* #define RPMVAR_BUILDOS		48 -- reserved */
-#define	RPMVAR_MACROFILES		49
-#define	RPMVAR_GPG_PATH			51
-#define	RPMVAR_GPG_NAME			52
+/** \ingroup rpmrc
+ * @deprecated Expand %{_host_cpu}/%{_target_cpu} for the canonical/current cpu.
+ * Return current arch name and/or number.
+ * @todo Generalize to extract arch component from target_platform macro.
+ * @retval name		address of arch name (or NULL)
+ * @retval num		address of arch number (or NULL)
+ */
+void rpmGetArchInfo( /*@null@*/ /*@out@*/ const char ** name,
+		/*@null@*/ /*@out@*/ int * num)
+	/*@modifies *name, *num @*/;
 
-#define	RPMVAR_NUM			53     /* number of RPMVAR entries */
+/** \ingroup rpmrc
+ * @deprecated Expand %{_host_os}/%{_target_os} for the canonical/current os.
+ * Return current os name and/or number.
+ * @todo Generalize to extract os component from target_platform macro.
+ * @retval name		address of os name (or NULL)
+ * @retval num		address of os number (or NULL)
+ */
+void rpmGetOsInfo( /*@null@*/ /*@out@*/ const char ** name,
+		/*@null@*/ /*@out@*/ int * num)
+	/*@modifies *name, *num @*/;
 
-#define	xfree(_p)	free((void *)_p)
-const char *rpmGetPath(const char *path, ...);
-char * rpmGetVar(int var);
-int rpmGetBooleanVar(int var);
-void rpmSetVar(int var, const char *val);
+/** \ingroup rpmrc
+ * @deprecated Use rpmPlatformScore instead.
+ * Return arch/os score of a name.
+ * An arch/os score measures the "nearness" of a name to the currently
+ * running (or defined) platform arch/os. For example, the score of arch
+ * "i586" on an i686 platform is (usually) 2. The arch/os score is used
+ * to select one of several otherwise identical packages using the arch/os
+ * tags from the header as hints of the intended platform for the package.
+ *
+ * @param type		any of the RPM_MACHTABLE_* constants
+ * @param name		name
+ * @return		arch score (0 is no match, lower is preferred)
+ */
+int rpmMachineScore(int type, const char * name)
+	/*@*/;
 
-/** rpmrc.c **/
+/*@only@*/ /*@null@*/ /*@unchecked@*/
+extern void * platpat;
+/*@unchecked@*/
+extern int nplatpat;
 
-#define	RPM_MACHTABLE_INSTARCH		0
-#define	RPM_MACHTABLE_INSTOS		1
-#define	RPM_MACHTABLE_BUILDARCH		2
-#define	RPM_MACHTABLE_BUILDOS  		3
-#define	RPM_MACHTABLE_COUNT		4	/* number of arch/os tables */
+/** \ingroup rpmrc
+ * Return score of a platform string.
+ * A platform score measures the "nearness" of a platform string wrto
+ * configured platform patterns. The returned score is the line number
+ * of the 1st pattern in /etc/rpm/platform that matches the input string.
+ *
+ * @param platform	cpu-vendor-os platform string
+ * @param mi_re		pattern array (NULL uses /etc/rpm/platform patterns)
+ * @param mi_nre	no. of patterns
+ * @return		platform score (0 is no match, lower is preferred)
+ */
+int rpmPlatformScore(const char * platform, /*@null@*/ void * mi_re, int mi_nre)
+	/*@modifies mi_re @*/;
 
-int rpmReadConfigFiles(const char * file, const char * target);
-int rpmReadRC(const char * file);
-void rpmGetArchInfo(/*@out@*/char ** name, /*@out@*/int * num);
-void rpmGetOsInfo(/*@out@*/char ** name, /*@out@*/int * num);
-int rpmMachineScore(int type, char * name);
-int rpmShowRC(FILE *f);
-void rpmSetTables(int archTable, int osTable);  /* only used by build code */
-/* if either are NULL, they are set to the default value (munged uname())
-   pushed through a translation table (if appropriate) */
-void rpmSetMachine(const char * arch, const char * os);
-void rpmGetMachine(/*@out@*/char **arch, /*@out@*/char **os);
+/** \ingroup rpmrc
+ * Display current rpmrc (and macro) configuration.
+ * @param fp		output file handle
+ * @return		0 always
+ */
+int rpmShowRC(FILE * fp)
+	/*@globals rpmGlobalMacroContext, h_errno, fileSystem, internalState @*/
+	/*@modifies *fp, rpmGlobalMacroContext, fileSystem, internalState  @*/;
 
-/** **/
+/** \ingroup rpmrc
+ * @deprecated Use addMacro to set _target_* macros.
+ * @todo Eliminate from API.
+ # @note Only used by build code.
+ * @param archTable
+ * @param osTable
+ */
+void rpmSetTables(int archTable, int osTable)
+	/*@globals rpmGlobalMacroContext, h_errno, fileSystem, internalState @*/
+	/*@modifies rpmGlobalMacroContext, fileSystem, internalState @*/;
 
-typedef /*@abstract@*/ struct rpmdb_s * rpmdb;
+/** \ingroup rpmrc
+ * Set current arch/os names.
+ * NULL as argument is set to the default value (munged uname())
+ * pushed through a translation table (if appropriate).
+ * @deprecated Use addMacro to set _target_* macros.
+ * @todo Eliminate from API.
+ *
+ * @param arch		arch name (or NULL)
+ * @param os		os name (or NULL)
+ */
+void rpmSetMachine(/*@null@*/ const char * arch, /*@null@*/ const char * os)
+	/*@globals rpmGlobalMacroContext, h_errno, fileSystem, internalState @*/
+	/*@modifies rpmGlobalMacroContext, fileSystem, internalState @*/;
 
-typedef enum rpmCallbackType_e 
-	{ RPMCALLBACK_INST_PROGRESS, RPMCALLBACK_INST_START,
-	  RPMCALLBACK_INST_OPEN_FILE, RPMCALLBACK_INST_CLOSE_FILE 
-	} rpmCallbackType;
-typedef void * (*rpmCallbackFunction)(const Header h, 
-				      const rpmCallbackType what, 
-				      const unsigned long amount, 
-				      const unsigned long total,
-				      const void * pkgKey, void * data);
+/** \ingroup rpmrc
+ * Destroy rpmrc arch/os compatibility tables.
+ * @todo Eliminate from API.
+ */
+void rpmFreeRpmrc(void)
+	/*@globals platpat, nplatpat, internalState @*/
+	/*@modifies platpat, nplatpat, internalState @*/;
 
-int rpmdbOpen (const char * root, rpmdb * dbp, int mode, int perms);
-    /* 0 on error */
-int rpmdbInit(const char * root, int perms);
-    /* nonzero on error */
-void rpmdbClose (rpmdb db);
+/*@}*/
+/* ==================================================================== */
+/** \name RPMTS */
+/*@{*/
+/**
+ * Prototype for headerFreeData() vector.
+ *
+ * @param data		address of data (or NULL)
+ * @param type		type of data (or -1 to force free)
+ * @return		NULL always
+ */
+typedef /*@null@*/
+    void * (*HFD_t) (/*@only@*/ /*@null@*/ const void * data, rpmTagType type)
+	/*@modifies data @*/;
 
-int rpmdbFirstRecNum(rpmdb db);
-int rpmdbNextRecNum(rpmdb db, unsigned int lastOffset);
-    /* 0 at end, -1 on error */
+/**
+ * Prototype for headerGetEntry() vector.
+ *
+ * Will never return RPM_I18NSTRING_TYPE! RPM_STRING_TYPE elements with
+ * RPM_I18NSTRING_TYPE equivalent entries are translated (if HEADER_I18NTABLE
+ * entry is present).
+ *
+ * @param h		header
+ * @param tag		tag
+ * @retval type		address of tag value data type (or NULL)
+ * @retval p		address of pointer to tag value(s) (or NULL)
+ * @retval c		address of number of values (or NULL)
+ * @return		1 on success, 0 on failure
+ */
+typedef int (*HGE_t) (Header h, rpmTag tag,
+			/*@null@*/ /*@out@*/ rpmTagType * type,
+			/*@null@*/ /*@out@*/ void ** p,
+			/*@null@*/ /*@out@*/ int_32 * c)
+	/*@modifies *type, *p, *c @*/;
 
-Header rpmdbGetRecord(rpmdb db, unsigned int offset);
-int rpmdbFindByFile(rpmdb db, const char * filespec, dbiIndexSet * matches);
-int rpmdbFindByGroup(rpmdb db, const char * group, dbiIndexSet * matches);
-int rpmdbFindPackage(rpmdb db, const char * name, dbiIndexSet * matches);
-int rpmdbFindByProvides(rpmdb db, const char * provides, dbiIndexSet * matches);
-int rpmdbFindByRequiredBy(rpmdb db, const char * requires, dbiIndexSet * matches);
-int rpmdbFindByConflicts(rpmdb db, const char * conflicts, dbiIndexSet * matches);
-int rpmdbFindByTriggeredBy(rpmdb db, const char * package, dbiIndexSet * matches);
+/**
+ * Prototype for headerAddEntry() vector.
+ *
+ * Duplicate tags are okay, but only defined for iteration (with the
+ * exceptions noted below). While you are allowed to add i18n string
+ * arrays through this function, you probably don't mean to. See
+ * headerAddI18NString() instead.
+ *
+ * @param h             header
+ * @param tag           tag
+ * @param type          tag value data type
+ * @param p             pointer to tag value(s)
+ * @param c             number of values
+ * @return              1 on success, 0 on failure
+ */
+typedef int (*HAE_t) (Header h, rpmTag tag, rpmTagType type,
+			const void * p, int_32 c)
+	/*@modifies h @*/;
 
-/* these are just convenience functions */
-int rpmdbFindByLabel(rpmdb db, const char * label, dbiIndexSet * matches);
-int rpmdbFindByHeader(rpmdb db, Header h, dbiIndexSet * matches);
+/**
+ * Prototype for headerModifyEntry() vector.
+ * If there are multiple entries with this tag, the first one gets replaced.
+ *
+ * @param h		header
+ * @param tag		tag
+ * @param type		tag value data type
+ * @param p		pointer to tag value(s)
+ * @param c		number of values
+ * @return		1 on success, 0 on failure
+ */
+typedef int (*HME_t) (Header h, rpmTag tag, rpmTagType type,
+			const void * p, int_32 c)
+	/*@modifies h @*/;
 
-/* we pass these around as an array with a sentinel */
-typedef struct rpmRelocation_s {
-    char * oldPath;	/* NULL here evals to RPMTAG_DEFAULTPREFIX, this */
-			/* odd behavior is only for backwards compatibility */
-    char * newPath;	/* NULL means to omit the file completely! */
-} rpmRelocation;
+/**
+ * Prototype for headerRemoveEntry() vector.
+ * Delete tag in header.
+ * Removes all entries of type tag from the header, returns 1 if none were
+ * found.
+ *
+ * @param h		header
+ * @param tag		tag
+ * @return		0 on success, 1 on failure (INCONSISTENT)
+ */
+typedef int (*HRE_t) (Header h, int_32 tag)
+	/*@modifies h @*/;
 
-int rpmInstallSourcePackage(const char * root, FD_t fd, const char ** specFile,
-			    rpmCallbackFunction notify, void * notifyData,
-			    char ** cookie);
-int rpmVersionCompare(Header first, Header second);
-int rpmdbRebuild(const char * root);
+/**
+ * @todo Generalize filter mechanism.
+ */
+typedef enum rpmprobFilterFlags_e {
+    RPMPROB_FILTER_NONE		= 0,
+    RPMPROB_FILTER_IGNOREOS	= (1 << 0),	/*!< from --ignoreos */
+    RPMPROB_FILTER_IGNOREARCH	= (1 << 1),	/*!< from --ignorearch */
+    RPMPROB_FILTER_REPLACEPKG	= (1 << 2),	/*!< from --replacepkgs */
+    RPMPROB_FILTER_FORCERELOCATE= (1 << 3),	/*!< from --badreloc */
+    RPMPROB_FILTER_REPLACENEWFILES= (1 << 4),	/*!< from --replacefiles */
+    RPMPROB_FILTER_REPLACEOLDFILES= (1 << 5),	/*!< from --replacefiles */
+    RPMPROB_FILTER_OLDPACKAGE	= (1 << 6),	/*!< from --oldpackage */
+    RPMPROB_FILTER_DISKSPACE	= (1 << 7),	/*!< from --ignoresize */
+    RPMPROB_FILTER_DISKNODES	= (1 << 8)	/*!< from --ignoresize */
+} rpmprobFilterFlags;
 
-int rpmVerifyFile(const char * root, Header h, int filenum, int * result,
-		  int omitMask);
-int rpmVerifyScript(const char * root, Header h, FD_t err);
+/**
+ * We pass these around as an array with a sentinel.
+ */
+typedef struct rpmRelocation_s * rpmRelocation;
+#if !defined(SWIG)
+struct rpmRelocation_s {
+/*@only@*/ /*@null@*/
+    const char * oldPath;	/*!< NULL here evals to RPMTAG_DEFAULTPREFIX, */
+/*@only@*/ /*@null@*/
+    const char * newPath;	/*!< NULL means to omit the file completely! */
+};
+#endif
 
-/* Transaction sets are inherently unordered! RPM may reorder transaction
-   sets to reduce errors. In general, installs/upgrades are done before
-   strict removals, and prerequisite ordering is done on installs/upgrades. */
-typedef struct rpmTransactionSet_s * rpmTransactionSet;
+/**
+ * Compare headers to determine which header is "newer".
+ * @deprecated Use rpmdsCompare instead.
+ * @param first		1st header
+ * @param second	2nd header
+ * @return		result of comparison
+ */
+int rpmVersionCompare(Header first, Header second)
+	/*@*/;
 
-struct rpmDependencyConflict {
-    char * byName, * byVersion, * byRelease;
-    Header byHeader;
-    /* these needs fields are misnamed -- they are used for the package
-       which isn't needed as well */
-    char * needsName, * needsVersion;
-    int needsFlags;
-    const void * suggestedPackage;			/* NULL if none */
-    enum { RPMDEP_SENSE_REQUIRES, RPMDEP_SENSE_CONFLICTS } sense;
-} ;
+/**
+ * File disposition(s) during package install/erase transaction.
+ */
+typedef enum fileAction_e {
+    FA_UNKNOWN = 0,	/*!< initial action for file ... */
+    FA_CREATE,		/*!< ... copy in from payload. */
+    FA_COPYIN,		/*!< ... copy in from payload. */
+    FA_COPYOUT,		/*!< ... copy out to payload. */
+    FA_BACKUP,		/*!< ... renamed with ".rpmorig" extension. */
+    FA_SAVE,		/*!< ... renamed with ".rpmsave" extension. */
+    FA_SKIP, 		/*!< ... already replaced, don't remove. */
+    FA_ALTNAME,		/*!< ... create with ".rpmnew" extension. */
+    FA_ERASE,		/*!< ... to be removed. */
+    FA_SKIPNSTATE,	/*!< ... untouched, state "not installed". */
+    FA_SKIPNETSHARED,	/*!< ... untouched, state "netshared". */
+    FA_SKIPCOLOR	/*!< ... untouched, state "wrong color". */
+} fileAction;
 
-/* db may be NULL, but don't do things which require the database! */
-/*@only@*/ rpmTransactionSet rpmtransCreateSet(rpmdb db, const char * rootdir);
+#define XFA_SKIPPING(_a)	\
+    ((_a) == FA_SKIP || (_a) == FA_SKIPNSTATE || (_a) == FA_SKIPNETSHARED || (_a) == FA_SKIPCOLOR)
 
-/* if fd is NULL, the callback specified in rpmtransCreateSet() is used to
-   open and close the file descriptor. If Header is NULL, the fd is always
-   used, otherwise fd is only needed (and only opened) for actual package 
-   installation */
-int rpmtransAddPackage(rpmTransactionSet rpmdep, Header h, FD_t fd,
-			const void * key, int update, rpmRelocation * relocs);
-void rpmtransAvailablePackage(rpmTransactionSet rpmdep, Header h, void * key);
-void rpmtransRemovePackage(rpmTransactionSet rpmdep, int dboffset);
-void rpmtransFree(/*@only@*/ rpmTransactionSet rpmdep);
+/**
+ * File types.
+ * These are the file types used internally by rpm. The file
+ * type is determined by applying stat(2) macros like S_ISDIR to
+ * the file mode tag from a header. The values are arbitrary,
+ * but are identical to the linux stat(2) file types.
+ */
+typedef enum fileTypes_e {
+    PIPE	=  1,	/*!< pipe/fifo */
+    CDEV	=  2,	/*!< character device */
+    XDIR	=  4,	/*!< directory */
+    BDEV	=  6,	/*!< block device */
+    REG		=  8,	/*!< regular file */
+    LINK	= 10,	/*!< hard link */
+    SOCK	= 12	/*!< socket */
+} fileTypes;
 
-/* this checks for dependency satisfaction, but *not* ordering */
-int rpmdepCheck(rpmTransactionSet rpmdep,
-		struct rpmDependencyConflict ** conflicts, int * numConflicts);
-/* Orders items, returns error on circle, finals keys[] is NULL. No dependency
-   check is done, use rpmdepCheck() for that. If dependencies are not
-   satisfied a "best-try" ordering is returned. */
-int rpmdepOrder(rpmTransactionSet order, void *** keysListPtr);
-void rpmdepFreeConflicts(struct rpmDependencyConflict * conflicts, int
-			 numConflicts);
+/** \ingroup payload
+ * Iterator across package file info, forward on install, backward on erase.
+ */
+typedef /*@abstract@*/ struct fsmIterator_s * FSMI_t;
 
-#define RPMTRANS_FLAG_TEST		(1 << 0)
-#define RPMTRANS_FLAG_BUILD_PROBS	(1 << 1)
+/** \ingroup payload
+ * File state machine data.
+ */
+typedef /*@abstract@*/ struct fsm_s * FSM_t;
 
-typedef enum rpmProblemType_e { RPMPROB_BADARCH, 
-				RPMPROB_BADOS,
-				RPMPROB_PKG_INSTALLED,
-				RPMPROB_BADRELOCATE,
-				RPMPROB_REQUIRES,
-				RPMPROB_CONFLICT,
-				RPMPROB_NEW_FILE_CONFLICT,
-				RPMPROB_FILE_CONFLICT,
- 			      } rpmProblemType;
+/** \ingroup rpmts
+ * Package state machine data.
+ */
+typedef /*@abstract@*/ /*@refcounted@*/ struct rpmpsm_s * rpmpsm;
 
-typedef struct rpmProblem_s {
-    Header h, altH;
-    const void * key;
-    rpmProblemType type;
-    int ignoreProblem;
-    char * str1;
-} rpmProblem;
+/**
+ * Perform simple sanity and range checks on header tag(s).
+ * @param il		no. of tags in header
+ * @param dl		no. of bytes in header data.
+ * @param pev		1st element in tag array, big-endian
+ * @param iv		failing (or last) tag element, host-endian
+ * @param negate	negative offset expected?
+ * @return		-1 on success, otherwise failing tag element index
+ */
+int headerVerifyInfo(int il, int dl, const void * pev, void * iv, int negate)
+	/*@modifies *iv @*/;
 
-typedef struct rpmProblemSet_s {
-    int numProblems;
-    int numProblemsAlloced;
-    rpmProblem * probs;
-} * rpmProblemSet;
+/** 
+ * Check header consistency, performing headerGetEntry() the hard way.
+ *  
+ * Sanity checks on the header are performed while looking for a
+ * header-only digest or signature to verify the blob. If found,
+ * the digest or signature is verified.
+ *
+ * @param ts		transaction set
+ * @param uh		unloaded header blob
+ * @param uc		no. of bytes in blob (or 0 to disable)
+ * @retval *msg		verification error message (or NULL)
+ * @return		RPMRC_OK on success
+ */
+rpmRC headerCheck(rpmts ts, const void * uh, size_t uc,
+		/*@out@*/ /*@null@*/ const char ** msg)
+	/*@globals rpmGlobalMacroContext, h_errno, fileSystem, internalState @*/
+	/*@modifies ts, *msg, rpmGlobalMacroContext,
+		fileSystem, internalState @*/;
 
-char * rpmProblemString(rpmProblem prob);
-void rpmProblemSetFree(rpmProblemSet probs);
-void rpmProblemSetFilter(rpmProblemSet ps, int flags);
-int rpmRunTransactions(rpmTransactionSet ts, rpmCallbackFunction notify,
-		       void * notifyData, rpmProblemSet okProbs,
-		       rpmProblemSet * newProbs, int flags);
+/** 
+ * Return checked and loaded header.
+ * @param ts		transaction set
+ * @param fd		file handle
+ * @retval hdrp		address of header (or NULL)
+ * @retval *msg		verification error message (or NULL)
+ * @return		RPMRC_OK on success
+ */
+rpmRC rpmReadHeader(rpmts ts, FD_t fd, /*@out@*/ Header *hdrp,
+		/*@out@*/ /*@null@*/ const char ** msg)
+        /*@globals rpmGlobalMacroContext, h_errno, fileSystem, internalState @*/
+        /*@modifies ts, *hdrp, *msg, rpmGlobalMacroContext,
+                fileSystem, internalState @*/;
 
-#define RPMPROB_FILTER_IGNOREOS		(1 << 0)
-#define RPMPROB_FILTER_IGNOREARCH	(1 << 1)
-#define RPMPROB_FILTER_REPLACEPKG	(1 << 2)
-#define RPMPROB_FILTER_FORCERELOCATE	(1 << 3)
-#define RPMPROB_FILTER_REPLACENEWFILES	(1 << 4)
-#define RPMPROB_FILTER_REPLACEOLDFILES	(1 << 5)
+/**
+ * Return package header from file handle, verifying digests/signatures.
+ * @param ts		transaction set
+ * @param fd		file handle
+ * @param fn		file name
+ * @retval hdrp		address of header (or NULL)
+ * @return		RPMRC_OK on success
+ */
+rpmRC rpmReadPackageFile(rpmts ts, FD_t fd,
+		const char * fn, /*@null@*/ /*@out@*/ Header * hdrp)
+	/*@globals rpmGlobalMacroContext, h_errno, fileSystem, internalState @*/
+	/*@modifies ts, fd, *hdrp, rpmGlobalMacroContext,
+		fileSystem, internalState @*/;
 
-/** messages.c **/
+/**
+ * Install source package.
+ * @param ts		transaction set
+ * @param fd		file handle
+ * @retval specFilePtr	address of spec file name (or NULL)
+ * @retval cookie	address of cookie pointer (or NULL)
+ * @return		rpmRC return code
+ */
+rpmRC rpmInstallSourcePackage(rpmts ts, FD_t fd,
+			/*@null@*/ /*@out@*/ const char ** specFilePtr,
+			/*@null@*/ /*@out@*/ const char ** cookie)
+	/*@globals rpmGlobalMacroContext, h_errno, fileSystem, internalState @*/
+	/*@modifies ts, fd, *specFilePtr, *cookie, rpmGlobalMacroContext,
+		fileSystem, internalState @*/;
 
-#define	RPMMESS_DEBUG      1
-#define	RPMMESS_VERBOSE    2
-#define	RPMMESS_NORMAL     3
-#define	RPMMESS_WARNING    4
-#define	RPMMESS_ERROR      5
-#define	RPMMESS_FATALERROR 6
+/** \ingroup rpmts
+ * Bit(s) to control rpmtsCheck() and rpmtsOrder() operation.
+ * @todo Move to rpmts.h.
+ */
+typedef enum rpmdepFlags_e {
+    RPMDEPS_FLAG_NONE		= 0,
+    RPMDEPS_FLAG_NOUPGRADE	= (1 <<  0),	/*!< from --noupgrade */
+    RPMDEPS_FLAG_NOREQUIRES	= (1 <<  1),	/*!< from --norequires */
+    RPMDEPS_FLAG_NOCONFLICTS	= (1 <<  2),	/*!< from --noconflicts */
+    RPMDEPS_FLAG_NOOBSOLETES	= (1 <<  3),	/*!< from --noobsoletes */
+    RPMDEPS_FLAG_NOPARENTDIRS	= (1 <<  4),	/*!< from --noparentdirs */
+    RPMDEPS_FLAG_NOLINKTOS	= (1 <<  5),	/*!< from --nolinktos */
+    RPMDEPS_FLAG_ANACONDA	= (1 <<  6),	/*!< from --anaconda */
+    RPMDEPS_FLAG_NOSUGGEST	= (1 <<  7),	/*!< from --nosuggest */
+    RPMDEPS_FLAG_ADDINDEPS	= (1 <<  8),	/*!< from --aid */
+    RPMDEPS_FLAG_DEPLOOPS	= (1 <<  9)	/*!< from --deploops */
+} rpmdepFlags;
 
-#define	RPMMESS_QUIET (RPMMESS_NORMAL + 1)
+/** \ingroup rpmts
+ * Bit(s) to control rpmtsRun() operation.
+ * @todo Move to rpmts.h.
+ */
+typedef enum rpmtransFlags_e {
+    RPMTRANS_FLAG_NONE		= 0,
+    RPMTRANS_FLAG_TEST		= (1 <<  0),	/*!< from --test */
+    RPMTRANS_FLAG_BUILD_PROBS	= (1 <<  1),	/*!< don't process payload */
+    RPMTRANS_FLAG_NOSCRIPTS	= (1 <<  2),	/*!< from --noscripts */
+    RPMTRANS_FLAG_JUSTDB	= (1 <<  3),	/*!< from --justdb */
+    RPMTRANS_FLAG_NOTRIGGERS	= (1 <<  4),	/*!< from --notriggers */
+    RPMTRANS_FLAG_NODOCS	= (1 <<  5),	/*!< from --excludedocs */
+    RPMTRANS_FLAG_ALLFILES	= (1 <<  6),	/*!< from --allfiles */
+/*@-enummemuse@*/
+    RPMTRANS_FLAG_KEEPOBSOLETE	= (1 <<  7),	/*!< @todo Document. */
+/*@=enummemuse@*/
+    RPMTRANS_FLAG_NOCONTEXTS	= (1 <<  8),	/*!< from --nocontexts */
+    RPMTRANS_FLAG_DIRSTASH	= (1 <<  9),	/*!< from --dirstash */
+    RPMTRANS_FLAG_REPACKAGE	= (1 << 10),	/*!< from --repackage */
 
-void rpmIncreaseVerbosity(void);
-void rpmSetVerbosity(int level);
-int rpmGetVerbosity(void);
-int rpmIsVerbose(void);
-int rpmIsDebug(void);
-void rpmMessage(int level, char * format, ...);
+    RPMTRANS_FLAG_PKGCOMMIT	= (1 << 11),
+/*@-enummemuse@*/
+    RPMTRANS_FLAG_PKGUNDO	= (1 << 12),
+/*@=enummemuse@*/
+    RPMTRANS_FLAG_COMMIT	= (1 << 13),
+/*@-enummemuse@*/
+    RPMTRANS_FLAG_UNDO		= (1 << 14),
+/*@=enummemuse@*/
+    /* 15 unused */
 
-/** rpmlead.c **/
+    RPMTRANS_FLAG_NOTRIGGERPREIN= (1 << 16),	/*!< from --notriggerprein */
+    RPMTRANS_FLAG_NOPRE		= (1 << 17),	/*!< from --nopre */
+    RPMTRANS_FLAG_NOPOST	= (1 << 18),	/*!< from --nopost */
+    RPMTRANS_FLAG_NOTRIGGERIN	= (1 << 19),	/*!< from --notriggerin */
+    RPMTRANS_FLAG_NOTRIGGERUN	= (1 << 20),	/*!< from --notriggerun */
+    RPMTRANS_FLAG_NOPREUN	= (1 << 21),	/*!< from --nopreun */
+    RPMTRANS_FLAG_NOPOSTUN	= (1 << 22),	/*!< from --nopostun */
+    RPMTRANS_FLAG_NOTRIGGERPOSTUN = (1 << 23),	/*!< from --notriggerpostun */
+/*@-enummemuse@*/
+    RPMTRANS_FLAG_NOPAYLOAD	= (1 << 24),
+/*@=enummemuse@*/
+    RPMTRANS_FLAG_APPLYONLY	= (1 << 25),
+
+    /* 26 unused */
+    RPMTRANS_FLAG_NOFDIGESTS	= (1 << 27),	/*!< from --nofdigests */
+    /* 28-29 unused */
+    RPMTRANS_FLAG_NOCONFIGS	= (1 << 30),	/*!< from --noconfigs */
+    /* 31 unused */
+} rpmtransFlags;
+
+#define	_noTransScripts		\
+  ( RPMTRANS_FLAG_NOPRE |	\
+    RPMTRANS_FLAG_NOPOST |	\
+    RPMTRANS_FLAG_NOPREUN |	\
+    RPMTRANS_FLAG_NOPOSTUN	\
+  )
+
+#define	_noTransTriggers	\
+  ( RPMTRANS_FLAG_NOTRIGGERPREIN | \
+    RPMTRANS_FLAG_NOTRIGGERIN |	\
+    RPMTRANS_FLAG_NOTRIGGERUN |	\
+    RPMTRANS_FLAG_NOTRIGGERPOSTUN \
+  )
+
+/*@}*/
+
+#if !defined(SWIG)
+/**
+ * Return tag name from value.
+ * @param tag		tag value
+ * @return		tag name, "(unknown)" on not found
+ */
+/*@-redecl@*/
+/*@unused@*/ static inline /*@observer@*/
+const char * tagName(int tag)
+	/*@*/
+{
+/*@-type@*/
+    return ((*rpmTags->tagName)(tag));
+/*@=type@*/
+}
+/*@=redecl@*/
+
+/**
+ * Return tag data type from value.
+ * @param tag		tag value
+ * @return		tag data type, RPM_NULL_TYPE on not found.
+ */
+/*@unused@*/ static inline
+int tagType(int tag)
+	/*@*/
+{
+/*@-type@*/
+    return ((*rpmTags->tagType)(tag));
+/*@=type@*/
+}
+
+/**
+ * Return tag value from name.
+ * @param tagstr	name of tag
+ * @return		tag value, -1 on not found
+ */
+/*@unused@*/ static inline
+int tagValue(const char * tagstr)
+	/*@*/
+{
+/*@-type@*/
+    return ((*rpmTags->tagValue)(tagstr));
+/*@=type@*/
+}
+#endif
 
 #define	RPMLEAD_BINARY 0
 #define	RPMLEAD_SOURCE 1
@@ -441,165 +1048,77 @@ void rpmMessage(int level, char * format, ...);
 #define	RPMLEAD_MAGIC2 0xee
 #define	RPMLEAD_MAGIC3 0xdb
 
-/* The lead needs to be 8 byte aligned */
+#define	RPMLEAD_SIZE 96		/*!< Don't rely on sizeof(struct) */
 
-#define	RPMLEAD_SIZE 96
-
+/** \ingroup lead
+ * The lead data structure.
+ * The lead needs to be 8 byte aligned.
+ * @deprecated The lead (except for signature_type) is legacy.
+ * @todo Don't use any information from lead.
+ */
 struct rpmlead {
     unsigned char magic[4];
-    unsigned char major, minor;
+    unsigned char major;
+    unsigned char minor;
     short type;
     short archnum;
     char name[66];
     short osnum;
-    short signature_type;
-    char reserved[16];      /* pads to 96 bytes -- 8 byte aligned! */
+    short signature_type;	/*!< Signature header type (RPMSIG_HEADERSIG) */
+/*@unused@*/ char reserved[16];	/*!< Pad to 96 bytes -- 8 byte aligned! */
 } ;
 
-struct oldrpmlead {		/* for version 1 packages */
-    unsigned char magic[4];
-    unsigned char major, minor;
-    short type;
-    short archnum;
-    char name[66];
-    unsigned int specOffset;
-    unsigned int specLength;
-    unsigned int archiveOffset;
-} ;
+/* ==================================================================== */
+/** \name RPMK */
+/*@{*/
 
-/** rpmerr.c **/
-
-typedef void (*rpmErrorCallBackType)(void);
-
-void rpmError(int code, char * format, ...);
-int rpmErrorCode(void);
-char *rpmErrorCodeString(void);
-char *rpmErrorString(void);
-rpmErrorCallBackType rpmErrorSetCallback(rpmErrorCallBackType);
-
-#define	RPMERR_GDBMOPEN		-2      /* gdbm open failed */
-#define	RPMERR_GDBMREAD		-3	/* gdbm read failed */
-#define	RPMERR_GDBMWRITE	-4	/* gdbm write failed */
-#define	RPMERR_INTERNAL		-5	/* internal RPM error */
-#define	RPMERR_DBCORRUPT	-6	/* rpm database is corrupt */
-#define	RPMERR_OLDDBCORRUPT	-7	/* old style rpm database is corrupt */
-#define	RPMERR_OLDDBMISSING	-8	/* old style rpm database is missing */
-#define	RPMERR_NOCREATEDB	-9	/* cannot create new database */
-#define	RPMERR_DBOPEN		-10     /* database open failed */
-#define	RPMERR_DBGETINDEX	-11     /* database get from index failed */
-#define	RPMERR_DBPUTINDEX	-12     /* database get from index failed */
-#define	RPMERR_NEWPACKAGE	-13     /* package is too new to handle */
-#define	RPMERR_BADMAGIC		-14	/* bad magic for an RPM */
-#define	RPMERR_RENAME		-15	/* rename(2) failed */
-#define	RPMERR_UNLINK		-16	/* unlink(2) failed */
-#define	RPMERR_RMDIR		-17	/* rmdir(2) failed */
-#define	RPMERR_PKGINSTALLED	-18	/* package already installed */
-#define	RPMERR_CHOWN		-19	/* chown() call failed */
-#define	RPMERR_NOUSER		-20	/* user does not exist */
-#define	RPMERR_NOGROUP		-21	/* group does not exist */
-#define	RPMERR_MKDIR		-22	/* mkdir() call failed */
-#define	RPMERR_FILECONFLICT     -23     /* file being installed exists */
-#define	RPMERR_RPMRC		-24     /* bad line in rpmrc */
-#define	RPMERR_NOSPEC		-25     /* .spec file is missing */
-#define	RPMERR_NOTSRPM		-26     /* a source rpm was expected */
-#define	RPMERR_FLOCK		-27     /* locking the database failed */
-#define	RPMERR_OLDPACKAGE	-28	/* trying upgrading to old version */
-/*#define	RPMERR_BADARCH  -29        bad architecture or arch mismatch */
-#define	RPMERR_CREATE		-30	/* failed to create a file */
-#define	RPMERR_NOSPACE		-31	/* out of disk space */
-#define	RPMERR_NORELOCATE	-32	/* tried to do improper relocatation */
-/*#define	RPMERR_BADOS    -33        bad architecture or arch mismatch */
-#define	RPMMESS_BACKUP          -34     /* backup made during [un]install */
-#define	RPMERR_MTAB		-35	/* failed to read mount table */
-#define	RPMERR_STAT		-36	/* failed to stat something */
-#define	RPMERR_BADDEV		-37	/* file on device not listed in mtab */
-#define	RPMMESS_ALTNAME         -38     /* file written as .rpmnew */
-#define	RPMMESS_PREREQLOOP      -39     /* loop in prerequisites */
-#define	RPMERR_BADRELOCATE      -40     /* bad relocation was specified */
-#define	RPMERR_OLDDB      	-41     /* old format database */
-
-/* spec.c build.c pack.c */
-#define	RPMERR_UNMATCHEDIF      -107    /* unclosed %ifarch or %ifos */
-#define	RPMERR_BADARG           -109
-#define	RPMERR_SCRIPT           -110    /* errors related to script exec */
-#define	RPMERR_READERROR        -111
-#define	RPMERR_UNKNOWNOS        -112
-#define	RPMERR_UNKNOWNARCH      -113
-#define	RPMERR_EXEC             -114
-#define	RPMERR_FORK             -115
-#define	RPMERR_CPIO             -116
-#define	RPMERR_GZIP             -117
-#define	RPMERR_BADSPEC          -118
-#define	RPMERR_LDD              -119    /* couldn't understand ldd output */
-#define	RPMERR_BADFILENAME	-120
-
-#define	RPMERR_BADSIGTYPE       -200    /* Unknown signature type */
-#define	RPMERR_SIGGEN           -201    /* Error generating signature */
-
-/** signature.c **/
-
-/**************************************************/
-/*                                                */
-/* Signature Tags                                 */
-/*                                                */
-/* These go in the sig Header to specify          */
-/* individual signature types.                    */
-/*                                                */
-/**************************************************/
-
-#define	RPMSIGTAG_SIZE         	        1000
-/* the md5 sum was broken *twice* on big endian machines */
-#define	RPMSIGTAG_LEMD5_1		1001
-#define	RPMSIGTAG_PGP          	        1002
-#define	RPMSIGTAG_LEMD5_2		1003
-#define	RPMSIGTAG_MD5		        1004
-#define	RPMSIGTAG_GPG		        1005
-
-/**************************************************/
-/*                                                */
-/* verifySignature() results                      */
-/*                                                */
-/**************************************************/
-
-/* verifySignature() results */
-#define	RPMSIG_OK        0
-#define	RPMSIG_UNKNOWN   1
-#define	RPMSIG_BAD       2
-#define	RPMSIG_NOKEY     3  /* Do not have the key to check this signature */
-
-void rpmFreeSignature(Header h);
-
-int rpmVerifySignature(const char *file, int_32 sigTag, void *sig, int count,
-		       char *result);
-
-int rpmGetFilesystemList(const char *** listptr, int * num);
-int rpmGetFilesystemUsage(const char ** filelist, int_32 * fssizes, int numFiles,
-			  uint_32 ** usagesPtr, int flags);
-
-enum rpmQuerySources { QUERY_PACKAGE = 0, QUERY_PATH, QUERY_ALL, QUERY_RPM, 
-		       QUERY_GROUP, QUERY_WHATPROVIDES, QUERY_WHATREQUIRES,
-		       QUERY_DBOFFSET, QUERY_TRIGGEREDBY, QUERY_SPECFILE };
-
-#define QUERY_FOR_LIST		(1 << 1)
-#define QUERY_FOR_STATE		(1 << 2)
-#define QUERY_FOR_DOCS		(1 << 3)
-#define QUERY_FOR_CONFIG	(1 << 4)
-#define QUERY_FOR_DUMPFILES     (1 << 8)
-
-extern struct poptOption rpmQuerySourcePoptTable[];
-extern struct poptOption rpmQueryPoptTable[];
-
-struct rpmQueryArguments {
-    int flags;
-    enum rpmQuerySources source;
-    int sourceCount;		/* > 1 is an error */
-    char * queryFormat;
-    int verbose;
+/** \ingroup signature
+ * Tags found in signature header from package.
+ */
+enum rpmtagSignature {
+    RPMSIGTAG_SIZE	= 1000,	/*!< internal Header+Payload size in bytes. */
+    RPMSIGTAG_LEMD5_1	= 1001,	/*!< internal Broken MD5, take 1 @deprecated legacy. */
+    RPMSIGTAG_PGP	= 1002,	/*!< internal PGP 2.6.3 signature. */
+    RPMSIGTAG_LEMD5_2	= 1003,	/*!< internal Broken MD5, take 2 @deprecated legacy. */
+    RPMSIGTAG_MD5	= 1004,	/*!< internal MD5 signature. */
+    RPMSIGTAG_GPG	= 1005, /*!< internal GnuPG signature. */
+    RPMSIGTAG_PGP5	= 1006,	/*!< internal PGP5 signature @deprecated legacy. */
+    RPMSIGTAG_PAYLOADSIZE = 1007,/*!< internal uncompressed payload size in bytes. */
+    RPMSIGTAG_BADSHA1_1	= RPMTAG_BADSHA1_1,	/*!< internal Broken SHA1, take 1. */
+    RPMSIGTAG_BADSHA1_2	= RPMTAG_BADSHA1_2,	/*!< internal Broken SHA1, take 2. */
+    RPMSIGTAG_SHA1	= RPMTAG_SHA1HEADER,	/*!< internal sha1 header digest. */
+    RPMSIGTAG_DSA	= RPMTAG_DSAHEADER,	/*!< internal DSA header signature. */
+    RPMSIGTAG_RSA	= RPMTAG_RSAHEADER	/*!< internal RSA header signature. */
 };
 
-int rpmQuery(const char * prefix, enum rpmQuerySources source, int queryFlags, 
-	     const char * arg, const char * queryFormat);
-void rpmDisplayQueryTags(FILE * f);
+/** \ingroup signature
+ * Verify a signature from a package.
+ *
+ * This needs the following variables from the transaction set:
+ *	- ts->sigtag	type of signature
+ *	- ts->sig	signature itself (from signature header)
+ *	- ts->siglen	no. of bytes in signature
+ *	- ts->dig	signature/pubkey parameters (malloc'd workspace)
+ *
+ * @param ts		transaction set
+ * @retval result	detailed text result of signature verification
+ * @return		result of signature verification
+ */
+rpmRC rpmVerifySignature(const rpmts ts,
+		/*@out@*/ char * result)
+	/*@globals rpmGlobalMacroContext, h_errno, fileSystem, internalState @*/
+	/*@modifies ts, *result, rpmGlobalMacroContext,
+		fileSystem, internalState @*/;
+
+/** \ingroup signature
+ * Destroy signature header from package.
+ * @param sigh		signature header
+ * @return		NULL always
+ */
+/*@null@*/ Header rpmFreeSignature(/*@null@*/ /*@killref@*/ Header sigh)
+	/*@modifies sigh @*/;
+
+/*@}*/
 
 #ifdef __cplusplus
 }

@@ -1,0 +1,139 @@
+# Makefile for rpm library.
+
+AUTOMAKE_OPTIONS = 1.4 foreign
+
+LINT = splint
+
+EXTRA_DIST = tax.c tdir.c tficl.c tfts.c tget.c thkp.c tput.c tglob.c tinv.c tkey.c trpmio.c lookup3.c librpmio.vers
+
+EXTRA_PROGRAMS = tax tdir tfts tget thkp tput tglob tinv tkey trpmio tsw dumpasn1 lookup3
+
+INCLUDES = -I. \
+	-I$(top_srcdir) \
+	@WITH_BEECRYPT_INCLUDE@ \
+	@WITH_NEON_INCLUDE@ \
+	@WITH_LUA_INCLUDE@ \
+	@WITH_SYCK_INCLUDE@ \
+	@WITH_POPT_INCLUDE@ \
+	-I$(top_srcdir)/misc \
+	@INCPATH@
+
+pkgincdir = $(pkgincludedir)
+pkginc_HEADERS = \
+	argv.h envvar.h fts.h mire.h rpmdav.h rpmhash.h \
+	rpmio.h rpmurl.h rpmmacro.h rpmlog.h rpmmessages.h rpmerr.h rpmpgp.h \
+	rpmsq.h rpmsw.h ugid.h
+noinst_HEADERS = \
+	md2.h md4.h rmd128.h rmd160.h rmd256.h rmd320.h sha224.h \
+	salsa10.h salsa20.h tiger.h \
+	LzmaDecode.h rpmio_internal.h rpmlua.h rpmhook.h
+
+BEECRYPTLOBJS = $(shell test X"@WITH_BEECRYPT_SUBDIR@" != X && cat $(top_builddir)/@WITH_BEECRYPT_SUBDIR@/listobjs)
+
+LDFLAGS = -L$(RPM_BUILD_ROOT)$(usrlibdir) -L$(DESTDIR)$(usrlibdir)
+
+usrlibdir = $(libdir)@MARK64@
+usrlib_LTLIBRARIES = librpmio.la
+librpmio_la_SOURCES = \
+	argv.c digest.c fts.c getpass.c macro.c mire.c \
+	md2.c md4.c rmd128.c rmd160.c rmd256.c rmd320.c sha224.c \
+	salsa10.c salsa20.c tiger.c \
+	rpmdav.c rpmhash.c rpmhook.c rpmio.c rpmlog.c rpmlua.c rpmmalloc.c \
+	rpmpgp.c rpmrpc.c rpmsq.c rpmsw.c strcasecmp.c strtolocale.c \
+	stubs.c url.c ugid.c \
+	LzmaDecode.c
+librpmio_la_LDFLAGS = -no-undefined -release $(LT_CURRENT).$(LT_REVISION) $(LDFLAGS) \
+	@WITH_BEECRYPT_LIB@ \
+	@WITH_NEON_LIB@ \
+	@WITH_LUA_LIB@ \
+	@WITH_SYCK_LIB@ \
+	@WITH_MAGIC_LIB@ \
+	@WITH_KEYUTILS_LIB@ \
+	@WITH_ZLIB_LIB@ \
+	-lpthread \
+	@LTLIBINTL@
+librpmio_la_LIBADD = # $(BEECRYPTLOBJS)
+librpmio_la_DEPENDENCIES = # .created
+
+if HAVE_LD_VERSION_SCRIPT
+librpmio_la_LDFLAGS += -Wl,--version-script=$(srcdir)/librpmio.vers
+endif
+
+.created:
+	if test X"@WITH_BEECRYPT_SUBDIR@" != X; then \
+	${MAKE} -C $(top_builddir)/@WITH_BEECRYPT_SUBDIR@ listobjs ; \
+	for lo in $(BEECRYPTLOBJS); do \
+	  [ -f $$lo ] || $(LN_S) $(top_builddir)/@WITH_BEECRYPT_SUBDIR@/$$lo $$lo ; \
+	done \
+	fi
+	touch $@
+
+clean-local:
+	rm -f $(BEECRYPTLOBJS) *.o .created
+
+#BUILT_SOURCES = rpmio.lcd
+
+rpmio.lcd: Makefile.am ${librpmio_la_SOURCES} ${pkginc_HEADERS} ${noinst_HEADERS}
+	-lclint -load ../beecrypt/beecrypt.lcd $(DEFS) $(INCLUDES) $(librpmio_la_SOURCES) -dump $@ 2>/dev/null
+
+.PHONY:	sources
+sources:
+	@echo $(librpmio_la_SOURCES:%=rpmio/%)
+
+.PHONY:	lint
+lint:
+	$(LINT) $(DEFS) $(INCLUDES) $(librpmio_la_SOURCES)
+
+tax_SOURCES = tax.c
+tax_LDADD = librpmio.la
+
+tdir_SOURCES = tdir.c
+tdir_LDFLAGS = @LDFLAGS_STATIC@
+tdir_LDADD = librpmio.la $(top_builddir)/popt/libpopt.la
+
+tfts_SOURCES = tfts.c
+tfts_LDFLAGS = @LDFLAGS_STATIC@
+tfts_LDADD = librpmio.la $(top_builddir)/popt/libpopt.la
+
+tget_SOURCES = tget.c
+tget_LDFLAGS = @LDFLAGS_STATIC@
+tget_LDADD = librpmio.la $(top_builddir)/popt/libpopt.la
+
+thkp_SOURCES = thkp.c
+thkp_LDFLAGS = @LDFLAGS_STATIC@
+thkp_LDADD = librpmio.la $(top_builddir)/popt/libpopt.la
+
+tput_SOURCES = tput.c
+tput_LDFLAGS = @LDFLAGS_STATIC@
+tput_LDADD = librpmio.la $(top_builddir)/popt/libpopt.la
+
+
+tglob_SOURCES = tglob.c
+tglob_LDFLAGS = @LDFLAGS_STATIC@
+tglob_LDADD = librpmio.la $(top_builddir)/popt/libpopt.la
+
+tinv_SOURCES = tinv.c
+tinv_LDFLAGS = @LDFLAGS_STATIC@
+tinv_LDADD = librpmio.la $(top_builddir)/popt/libpopt.la
+
+tkey_SOURCES = tkey.c
+tkey_LDFLAGS = @LDFLAGS_STATIC@
+tkey_LDADD = librpmio.la $(top_builddir)/popt/libpopt.la
+
+trpmio_SOURCES = trpmio.c
+trpmio_LDADD = librpmio.la $(top_builddir)/popt/libpopt.la
+
+tsw_SOURCES = tsw.c
+tsw_LDFLAGS = librpmio.la
+
+dumpasn1_SOURCES = dumpasn1.c
+
+lookup3_SOURCES = lookup3.c
+lookup3_CFLAGS	= $(CFLAGS) -D_JLU3_SELFTEST
+lookup3_LDADD = librpmio.la
+
+tficl.o: tficl.c
+	$(COMPILE) -I/usr/include/ficl -o $@ -c tficl.c 
+
+tficl: tficl.o
+	$(LINK) -o $@ tficl.o -lficl -lm
