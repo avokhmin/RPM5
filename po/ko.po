@@ -1,78 +1,77 @@
 msgid ""
 msgstr ""
-"Project-Id-Version: rpm 4.0.3\n"
+"Project-Id-Version: rpm 4.0.4\n"
 "Report-Msgid-Bugs-To: <rpm-devel@lists.dulug.duke.edu>\n"
 "POT-Creation-Date: 2007-05-25 21:25-0400\n"
-"PO-Revision-Date: 2002-08-27 13:36-0400\n"
-"Last-Translator: Eugene Kanter, <eugene@blackcatlinux.com>\n"
-"Language-Team: Black Cat Linux Team <blackcat-support@blackcatlinux.com>\n"
+"PO-Revision-Date: 2002-03-04 17:17+0900\n"
+"Last-Translator: Jong-Hoon Ryu <redhat4u@netian.com>\n"
+"Language-Team: GNU Translation project <ko@li.org>\n"
 "MIME-Version: 1.0\n"
-"Content-Type: text/plain; charset=KOI8-R\n"
-"Content-Transfer-Encoding: 8bit\n"
-"Date: 1999-04-03 12:20+0200\n"
-"X-Generator: KBabel 0.9.6\n"
+"Content-Type: text/plain; charset=EUC-KR\n"
+"Content-Transfer-Encoding: 8-bit\n"
 
 #: build.c:40
+#, fuzzy
 msgid "Failed build dependencies:\n"
-msgstr "Неудовлетворенные зависимости сборки:\n"
+msgstr "юга╦╪╨ ╧╝а╕╥н юнгь а╕юш©║ ╫гфпгт:\n"
 
 #: build.c:71
 #, c-format
 msgid "Unable to open spec file %s: %s\n"
-msgstr "Ошибка открытия файла спецификации %s: %s\n"
+msgstr "%s spec фдюою╩ ©╜ ╪Ж ╬Ью╫: %s\n"
 
 #: build.c:146 build.c:158
 #, c-format
 msgid "Failed to open tar pipe: %m\n"
-msgstr "Ошибка открытия канала tar: %m\n"
+msgstr "tar фдюлга╦╕ ©╘╢б╣╔ ╫гфпгт: %m\n"
 
 #: build.c:165
 #, c-format
 msgid "Failed to read spec file from %s\n"
-msgstr "Ошибка чтения файла спецификации из %s\n"
+msgstr "%s©║╪╜ spec фдюою╩ юп╢б╣╔ ╫гфпгъ╫ю╢о╢ы\n"
 
 #: build.c:193
 #, c-format
 msgid "Failed to rename %s to %s: %m\n"
-msgstr "Невозможно переименовать %s в %s: %m\n"
+msgstr "%sюг юл╦╖ю╩ %s(ю╦)╥н ╨╞╟Фго╢б╣╔ ╫гфпгт: %m\n"
 
 #: build.c:233
 #, c-format
 msgid "failed to stat %s: %m\n"
-msgstr "невозможно получить информацию о %s: %m\n"
+msgstr "%sюг ╩Себ(stat)╦╕ г╔╫цго╢б╣╔ ╫гфпгт: %m\n"
 
 #: build.c:238
 #, c-format
 msgid "File %s is not a regular file.\n"
-msgstr "Не обычный файл: %s.\n"
+msgstr "%s фдюою╨ а╓╠т(regular) фдюоюл ╬ф╢у╢о╢ы.\n"
 
 #: build.c:247
 #, c-format
 msgid "File %s does not appear to be a specfile.\n"
-msgstr "Файл %s не похож на файл спецификации.\n"
+msgstr "%s фдюою╨ spec фдюоюл ╬ф╢я ╟м ╟╟╫ю╢о╢ы.\n"
 
 #: build.c:320
 #, c-format
 msgid "Building target platforms: %s\n"
-msgstr "Платформы для сборки: %s\n"
+msgstr "╦Яг╔╢К╩С(target) гц╥╖фШю╦╥н а╕юш аъ: %s\n"
 
 #: build.c:335 build/spec.c:786
 #, fuzzy, c-format
 msgid "    target platform: %s\n"
-msgstr "Платформы для сборки: %s\n"
+msgstr "╦Яг╔╢К╩С(target) гц╥╖фШю╦╥н а╕юш аъ: %s\n"
 
 #: rpmqv.c:77
 msgid "Query options (with -q or --query):"
-msgstr "Параметры запроса (с -q или --query):"
+msgstr "аЗюг ©и╪г (-q ╤г╢б --query ©и╪г╟З гт╡╡ ╩Г©К):"
 
 #: rpmqv.c:80
 msgid "Verify options (with -V or --verify):"
-msgstr "Параметры проверки (с -V или --verify):"
+msgstr "╟каУ ©и╪г (-V ╤г╢б --verify ©и╪г╟З гт╡╡ ╩Г©К):"
 
 #: rpmqv.c:84
 #, fuzzy
 msgid "Source options (with --query or --verify):"
-msgstr "Параметры проверки (с -V или --verify):"
+msgstr "╟каУ ©и╪г (-V ╤г╢б --verify ©и╪г╟З гт╡╡ ╩Г©К):"
 
 #: rpmqv.c:91
 msgid "Dependency check/order options:"
@@ -84,24 +83,25 @@ msgstr ""
 
 #: rpmqv.c:103
 msgid "Signature options:"
-msgstr "Параметры подписи:"
+msgstr "╪╜╦М ©и╪г:"
 
 #: rpmqv.c:109
 msgid "Database options:"
-msgstr "Параметры базы данных"
+msgstr "╣╔юлем╨ёюл╫╨ ©и╪г:"
 
 #: rpmqv.c:115
 msgid "Build options with [ <specfile> | <tarball> | <source package> ]:"
 msgstr ""
-"Параметры сборки с [ <файл спецификации> | <тар архив> | <исходный пакет> ]:"
+"╢ыю╫╟З гт╡╡ ╩Г©Кго╢б а╕юш ©и╪г [ <specфдюо> | <tarфдюо> | <╪р╫╨ фпе╟аЖ> ]:"
 
 #: rpmqv.c:121
 msgid "Install/Upgrade/Erase options:"
-msgstr "Параметры Установки/Обновления/Удаления:"
+msgstr "╪Ёд║/╬В╠в╥╧юл╣Е/╩Ха╕ ©и╪г:"
 
 #: rpmqv.c:126 tools/rpmdeps.c:154
+#, fuzzy
 msgid "Common options for all rpm modes and executables:"
-msgstr "Общие параметры для всех режимов и компонентов rpm:"
+msgstr "╦П╣Г rpm ╦П╣Е©║╪╜юг юо╧щюШюн ©и╪г:"
 
 #: rpmqv.c:143 lib/poptI.c:43
 #, c-format
@@ -111,48 +111,46 @@ msgstr "%s: %s\n"
 #: rpmqv.c:151 lib/poptALL.c:152
 #, c-format
 msgid "RPM version %s\n"
-msgstr "RPM версия %s\n"
+msgstr "RPM ╧ЖюЭ - %s\n"
 
 #: rpmqv.c:158
-#, c-format
+#, fuzzy, c-format
 msgid "Copyright (C) 1998-2002 - Red Hat, Inc.\n"
-msgstr "Copyright (C) 1998-2002 - Red Hat, Inc.\n"
+msgstr "Copyright (C) 1998-2000 - Red Hat, Inc."
 
 #: rpmqv.c:159
-#, c-format
+#, fuzzy, c-format
 msgid ""
 "This program may be freely redistributed under the terms of the GNU GPL\n"
-msgstr "Эту программу можно свободно распространять на условиях GNU GPL\n"
+msgstr "юл га╥н╠в╥╔ю╨ GNU Public License Ё╩©║╪╜ юзю╞╥с╟т юГ╧ХфВгр ╪Ж юж╫ю╢о╢ы"
 
 #: rpmqv.c:295 rpmqv.c:301 rpmqv.c:307 rpmqv.c:344
 msgid "only one major mode may be specified"
-msgstr "может быть указан только один из основных режимов"
+msgstr "гоЁ╙юг аж(major) ╦П╣Е╦╦ аЖа╓гр ╪Ж юж╫ю╢о╢ы"
 
 #: rpmqv.c:323
 msgid "one type of query/verify may be performed at a time"
-msgstr "за один раз может быть исполнен только один тип проверки или запроса"
+msgstr "аЗюг/╟каУ ю╞гЭю╨ ╟╒╟╒ ╢ы╦╔ ю╞гЭ╟З ╣©╫ц©║ ╪ЖгЮгр ╪Ж юж╫ю╢о╢ы"
 
 #: rpmqv.c:327
 msgid "unexpected query flags"
-msgstr "неожиданные флаги запроса"
+msgstr "╨нюШюЩгя аЗюг гц╥║╠в ют╢о╢ы"
 
 #: rpmqv.c:330
 msgid "unexpected query format"
-msgstr "неожиданный формат запроса"
+msgstr "╨нюШюЩгя аЗюг гЭ╫д ют╢о╢ы"
 
 #: rpmqv.c:333
 msgid "unexpected query source"
-msgstr "неожиданный источник запроса"
+msgstr "╨нюШюЩгя аЗюг ╪р╫╨ ют╢о╢ы"
 
 #: rpmqv.c:376
 msgid "only installation, upgrading, rmsource and rmspec may be forced"
-msgstr ""
-"принудительными могут быть только установка, обновление, удаление исходников "
-"и файла спецификации"
+msgstr "╪Ёд║, ╬В╠в╥╧юл╣Е, ╪р╫╨ ╩Ха╕, spec фдюо ╩Ха╕╫ц©║╦╦ ╪ЖгЮ╣к╢о╢ы"
 
 #: rpmqv.c:378
 msgid "files may only be relocated during package installation"
-msgstr "файлы могут быть перемещены только при установке пакета"
+msgstr "фпе╟аЖ ╪Ёд║╫ц©║╦╦ фдюою╩ юГ╧Хд║гр ╪Ж юж╫ю╢о╢ы"
 
 #: rpmqv.c:381
 msgid "cannot use --prefix with --relocate or --excludepath"
@@ -162,203 +160,197 @@ msgstr ""
 msgid ""
 "--relocate and --excludepath may only be used when installing new packages"
 msgstr ""
-"варианты --relocate и --excludepath можно использовать только при установке "
-"новых пакетов"
+"--relocate ©м --excludepath ©и╪гю╨ цж╫еюг фпе╟аЖ╦╕ ╪Ёд║гр ╤╖©║╦╦ ╩Г©Кгр ╪Ж юж"
+"╫ю╢о╢ы"
 
 #: rpmqv.c:387
 msgid "--prefix may only be used when installing new packages"
-msgstr "вариант --prefix можно использовать только при установке новых пакетов"
+msgstr "--prefix ©и╪гю╨ цж╫еюг фпе╟аЖ╦╕ ╪Ёд║гр ╤╖©║╦╦ ╩Г©Кгр ╪Ж юж╫ю╢о╢ы"
 
 #: rpmqv.c:390
 msgid "arguments to --prefix must begin with a /"
-msgstr "аргументы для --prefix должны начинаться с /"
+msgstr "--prefix ©и╪гюг юн╪Ж╢б ╧щ╣Е╫ц '/' ╥н ╫цюшгь╬ъ гу╢о╢ы"
 
 #: rpmqv.c:393
 msgid "--hash (-h) may only be specified during package installation"
-msgstr "--hash (-h) может быть указан только при установке пакета"
+msgstr "--hash (-h) ©и╪гю╨ фпе╟аЖ ╪Ёд║╫ц©║╦╦ аЖа╓гр ╪Ж юж╫ю╢о╢ы"
 
 #: rpmqv.c:397
 msgid "--percent may only be specified during package installation"
-msgstr "--percent может быть указан только при установке пакета"
+msgstr "--percent ©и╪гю╨ фпе╟аЖ ╪Ёд║╫ц©║╦╦ аЖа╓гр ╪Ж юж╫ю╢о╢ы"
 
 #: rpmqv.c:401
 msgid "--replacepkgs may only be specified during package installation"
-msgstr "--replacepkgs может быть указан только при установке пакета"
+msgstr "--replacepkgs ©и╪гю╨ фпе╟аЖ ╪Ёд║╫ц©║╦╦ аЖа╓гр ╪Ж юж╫ю╢о╢ы"
 
 #: rpmqv.c:405
 msgid "--excludedocs may only be specified during package installation"
-msgstr "--excludedocs может быть указан только при установке пакета"
+msgstr "--excludedocs ©и╪гю╨ фпе╟аЖ ╪Ёд║╫ц©║╦╦ аЖа╓гр ╪Ж юж╫ю╢о╢ы"
 
 #: rpmqv.c:409
 msgid "--includedocs may only be specified during package installation"
-msgstr "--includedocs может быть указан только при установке пакета"
+msgstr "--includedocs ©и╪гю╨ фпе╟аЖ ╪Ёд║╫ц©║╦╦ аЖа╓гр ╪Ж юж╫ю╢о╢ы"
 
 #: rpmqv.c:413
 msgid "only one of --excludedocs and --includedocs may be specified"
-msgstr ""
-"может быть использован только один из параметров --excludedocs или --"
-"includedocs"
+msgstr "--excludedocs ©м --includedocs ©и╪г╦╦ аЖа╓гр ╪Ж юж╫ю╢о╢ы"
 
 #: rpmqv.c:417
 msgid "--ignorearch may only be specified during package installation"
-msgstr "--ignorearch может быть указан только при установке пакета"
+msgstr "--ignorearch ©и╪гю╨ фпе╟аЖ ╪Ёд║╫ц©║╦╦ аЖа╓гр ╪Ж юж╫ю╢о╢ы"
 
 #: rpmqv.c:421
 msgid "--ignoreos may only be specified during package installation"
-msgstr "--ignoreos может быть указан только при установке пакета"
+msgstr "--ignoreos ©и╪гю╨ фпе╟аЖ ╪Ёд║╫ц©║╦╦ аЖа╓гр ╪Ж юж╫ю╢о╢ы"
 
 #: rpmqv.c:426
 msgid "--ignoresize may only be specified during package installation"
-msgstr "--ignoresize может быть указан только при установке пакета"
+msgstr "--ignoresize ©и╪гю╨ фпе╟аЖ ╪Ёд║╫ц©║╦╦ аЖа╓гр ╪Ж юж╫ю╢о╢ы"
 
 #: rpmqv.c:430
 msgid "--allmatches may only be specified during package erasure"
-msgstr "--allmatches может быть указан только при удалении пакета"
+msgstr "--allmatches ©и╪гю╨ фпе╟аЖ ╩Ха╕╫ц©║╦╦ аЖа╓гр ╪Ж юж╫ю╢о╢ы"
 
 #: rpmqv.c:434
 msgid "--allfiles may only be specified during package installation"
-msgstr "--allfiles может быть указан только при установке пакета"
+msgstr "--allfiles ©и╪гю╨ фпе╟аЖ ╪Ёд║╫ц©║╦╦ аЖа╓гр ╪Ж юж╫ю╢о╢ы"
 
 #: rpmqv.c:439
 msgid "--justdb may only be specified during package installation and erasure"
-msgstr "--justdb может быть указан только при установке или удалении пакета"
+msgstr "--justdb ©и╪гю╨ фпе╟аЖ ╪Ёд║©м ╩Ха╕╫ц©║╦╦ аЖа╓гр ╪Ж юж╫ю╢о╢ы"
 
 #: rpmqv.c:444
 msgid ""
 "script disabling options may only be specified during package installation "
 "and erasure"
-msgstr ""
-"параметры запрета сценариев могут быть указаны только при установке или "
-"удалении пакета"
+msgstr "╫╨е╘╦Ёф╝ гьа╕ ©и╪гю╨ фпе╟аЖ ╪Ёд║©м ╩Ха╕╫ц©║╦╦ аЖа╓гр ╪Ж юж╫ю╢о╢ы"
 
 #: rpmqv.c:449
 msgid ""
 "trigger disabling options may only be specified during package installation "
 "and erasure"
-msgstr ""
-"параметры запрета триггеров могут быть указан только при установке или "
-"удалении пакета(ов)"
+msgstr "ф╝╦╝╟е гьа╕ ©и╪гю╨ фпе╟аЖ ╪Ёд║©м ╩Ха╕╫ц©║╦╦ аЖа╓гр ╪Ж юж╫ю╢о╢ы"
 
 #: rpmqv.c:453
 msgid ""
 "--nodeps may only be specified during package building, rebuilding, "
 "recompilation, installation,erasure, and verification"
 msgstr ""
-"--nodeps может быть указан только при сборке, установке, удалении и проверки "
-"пакетов"
+"--nodeps ©и╪гю╨ фпе╟аЖ а╕юш, юГа╕юш(rebuild), юГддфдюо(recompile), ╪Ёд║, ╩Х"
+"а╕, ╟каУ╫ц©║╦╦ аЖа╓гр ╪Ж юж╫ю╢о╢ы"
 
 #: rpmqv.c:458
 msgid ""
 "--test may only be specified during package installation, erasure, and "
 "building"
-msgstr ""
-"--test может быть указан только при установке, удалении и сборке пакета"
+msgstr "--test ©и╪гю╨ фпе╟аЖ ╪Ёд║, ╩Ха╕, а╕юш╫ц©║╦╦ аЖа╓гр ╪Ж юж╫ю╢о╢ы"
 
 #: rpmqv.c:463
 msgid ""
 "--root (-r) may only be specified during installation, erasure, querying, "
 "and database rebuilds"
 msgstr ""
-"--root (-r) может быть указана только при установке, удалении, запросах "
-"пакета и перестроении базы данных"
+"--root (-r) ©и╪гю╨ фпе╟аЖ ╪Ёд║, ╩Ха╕, аЗюг, ╣╔юлем╨ёюл╫╨ юГ╠╦цЮ╫ц©║╦╦ аЖа╓гр "
+"╪Ж юж╫ю╢о╢ы"
 
 #: rpmqv.c:475
 msgid "arguments to --root (-r) must begin with a /"
-msgstr "аргументы для --root (-r) должны начинаться с /"
+msgstr "--root (-r) ©и╪гюг юн╪Ж╢б ╧щ╣Е╫ц '/' ╥н ╫цюшгь╬ъ гу╢о╢ы"
 
 #: rpmqv.c:499
 #, c-format
 msgid "no files to sign\n"
-msgstr "нет файлов для подписи\n"
+msgstr "╪╜╦Мгр фдюоюл ╬Ь╫ю╢о╢ы\n"
 
 #: rpmqv.c:504
 #, c-format
 msgid "cannot access file %s\n"
-msgstr "нет доступа к файлу %s\n"
+msgstr "%s фдюо©║ а╒╠ыгр ╪Ж ╬Ь╫ю╢о╢ы\n"
 
 #: rpmqv.c:524
 #, c-format
 msgid "pgp not found: "
-msgstr "pgp не найден: "
+msgstr "pgp╦╕ цёю╩ ╪Ж ╬Ью╫: "
 
 #: rpmqv.c:532
 msgid "Enter pass phrase: "
-msgstr "Введите ключевую фразу: "
+msgstr "фп╫╨ ╠╦╧╝(pass phrase) ют╥б: "
 
 #: rpmqv.c:534
 #, c-format
 msgid "Pass phrase check failed\n"
-msgstr "Неверная ключевая фраза\n"
+msgstr "фп╫╨ ╠╦╧╝(pass phrase)юл ©ц╧ы╦ёаЖ ╬й╫ю╢о╢ы\n"
 
 #: rpmqv.c:538
 #, c-format
 msgid "Pass phrase is good.\n"
-msgstr "Ключевая фраза принята.\n"
+msgstr "фп╫╨ ╠╦╧╝(pass phrase)юл юод║гу╢о╢ы.\n"
 
 #: rpmqv.c:543
 #, c-format
 msgid "Invalid %%_signature spec in macro file.\n"
-msgstr "Неверная спецификация %%_signature в макрофайле.\n"
+msgstr "╦ее╘╥н фдюо©║ ╨нюШгугя %%_signatureюг Ё╩©Кюл юж╫ю╢о╢ы.\n"
 
 #: rpmqv.c:550
 msgid "--sign may only be used during package building"
-msgstr "--sign может быть использован только при сборке пакетов"
+msgstr "--sign ©и╪гю╨ фпе╟аЖ а╕юш╫ц©║╦╦ ╩Г©Кгр ╪Ж юж╫ю╢о╢ы"
 
 #: rpmqv.c:567
 #, c-format
 msgid "exec failed\n"
-msgstr "запуск не удался\n"
+msgstr "╫ггЮ©║ ╫гфпгъ╫ю╢о╢ы\n"
 
 #: rpmqv.c:603
 msgid "no packages files given for rebuild"
-msgstr "не заданы пакеты для пересборки"
+msgstr "юГа╕юш(rebuild)гр фпе╟аЖ фдюоюл аЖа╓╣гаЖ ╬й╬р╫ю╢о╢ы"
 
 #: rpmqv.c:673
 msgid "no spec files given for build"
-msgstr "не задан файл спецификации для сборки пакета"
+msgstr "фпе╟аЖ а╕юш©║ гй©Дгя spec фдюоюл аЖа╓╣гаЖ ╬й╬р╫ю╢о╢ы"
 
 #: rpmqv.c:675
 msgid "no tar files given for build"
-msgstr "не заданы tar-файлы для сборки пакета"
+msgstr "фпе╟аЖ а╕юш©║ гй©Дгя tar фдюоюл аЖа╓╣гаЖ ╬й╬р╫ю╢о╢ы"
 
 #: rpmqv.c:696
 msgid "no packages given for erase"
-msgstr "не заданы пакеты для удаления"
+msgstr "╩Ха╕гр фпе╟аЖ╟║ аЖа╓╣гаЖ ╬й╬р╫ю╢о╢ы"
 
 #: rpmqv.c:740
 msgid "no packages given for install"
-msgstr "не заданы пакеты для установки"
+msgstr "╪Ёд║гр фпе╟аЖ╟║ аЖа╓╣гаЖ ╬й╬р╫ю╢о╢ы"
 
 #: rpmqv.c:760
 msgid "no arguments given for query"
-msgstr "не заданы аргументы запроса"
+msgstr "аЗюг©║ гй©Дгя юн╪Ж╟║ аЖа╓╣гаЖ ╬й╬р╫ю╢о╢ы"
 
 #: rpmqv.c:777
 msgid "no arguments given for verify"
-msgstr "не заданы аргументы для верификации"
+msgstr "╟каУ©║ гй©Дгя юн╪Ж╟║ аЖа╓╣гаЖ ╬й╬р╫ю╢о╢ы"
 
 #: rpmqv.c:792
+#, fuzzy
 msgid "no arguments given"
-msgstr "не заданы аргументы"
+msgstr "аЗюг©║ гй©Дгя юн╪Ж╟║ аЖа╓╣гаЖ ╬й╬р╫ю╢о╢ы"
 
 #: build/build.c:138 build/pack.c:609
 msgid "Unable to open temp file.\n"
-msgstr "Невозможно открыть временный файл.\n"
+msgstr "юс╫ц фдюою╩ ©╜ ╪Ж ╬Ь╫ю╢о╢ы.\n"
 
 #: build/build.c:231
 #, c-format
 msgid "Executing(%s): %s\n"
-msgstr "Выполняется(%s): %s\n"
+msgstr "╫ггЮ аъ(%s): %s\n"
 
 #: build/build.c:241
 #, c-format
 msgid "Exec of %s failed (%s): %s\n"
-msgstr "Выполнить %s не удалось (%s): %s\n"
+msgstr "%sюг ╫ггЮ©║ ╫гфпгт (%s): %s\n"
 
 #: build/build.c:250
 #, c-format
 msgid "Bad exit status from %s (%s)\n"
-msgstr "Неверный код возврата из %s (%s)\n"
+msgstr "%sюг юъ╦Ь╣х а╬╥А ╩Сх╡ (%s)\n"
 
 #: build/build.c:361
 msgid ""
@@ -368,136 +360,136 @@ msgid ""
 msgstr ""
 "\n"
 "\n"
-"Ошибки сборки пакетов:\n"
+"RPM а╕юш ©ю╥Ы:\n"
 
 #: build/expression.c:228
 msgid "syntax error while parsing ==\n"
-msgstr "синтаксическая ошибка при анализе ==\n"
+msgstr "'==' ю╩ цЁ╦╝(parsing)го╢б ╣╣аъ ╠╦╧╝ ©ю╥Ы╟║ ╧ъ╩Щгъ╫ю╢о╢ы\n"
 
 #: build/expression.c:258
 msgid "syntax error while parsing &&\n"
-msgstr "синтаксическая ошибка при анализе &&\n"
+msgstr "'&&' ю╩ цЁ╦╝(parsing)го╢б ╣╣аъ ╠╦╧╝ ©ю╥Ы╟║ ╧ъ╩Щгъ╫ю╢о╢ы\n"
 
 #: build/expression.c:267
 msgid "syntax error while parsing ||\n"
-msgstr "синтаксическая ошибка при анализе ||\n"
+msgstr "'||' ю╩ цЁ╦╝(parsing)го╢б ╣╣аъ ╠╦╧╝ ©ю╥Ы╟║ ╧ъ╩Щгъ╫ю╢о╢ы\n"
 
 #: build/expression.c:310
 msgid "parse error in expression\n"
-msgstr "ошибка анализа выражения\n"
+msgstr "г╔гЖ╫д©║╪╜ ©ю╥Ы╟║ ╧ъ╩Щгъ╫ю╢о╢ы\n"
 
 #: build/expression.c:352
 msgid "unmatched (\n"
-msgstr "незакрытая (\n"
+msgstr "'(' ╟║ юод║гоаЖ ╬й╫ю╢о╢ы\n"
 
 #: build/expression.c:384
 msgid "- only on numbers\n"
-msgstr "- только для чисел\n"
+msgstr "'-' ╢б ╪Щюз©║╦╦ ╩Г©Кгу╢о╢ы\n"
 
 #: build/expression.c:400
 msgid "! only on numbers\n"
-msgstr "! только для чисел\n"
+msgstr "'!' ╢б ╪Щюз©║╦╦ ╩Г©Кгу╢о╢ы\n"
 
 #: build/expression.c:448 build/expression.c:503 build/expression.c:568
 #: build/expression.c:665
 msgid "types must match\n"
-msgstr "типы должны совпадать\n"
+msgstr "ю╞гЭю╨ ╧щ╣Е╫ц юод║гь╬ъ гу╢о╢ы\n"
 
 #: build/expression.c:461
 msgid "* / not suported for strings\n"
-msgstr "* / не поддерживается для строк\n"
+msgstr "'* /' ╢б ╧╝юз©╜©║╪╜ ╩Г©Кгр ╪Ж ╬Ь╫ю╢о╢ы\n"
 
 #: build/expression.c:519
 msgid "- not suported for strings\n"
-msgstr "- не поддерживается для строк\n"
+msgstr "'-' ╢б ╧╝юз©╜©║╪╜ ╩Г©Кгр ╪Ж ╬Ь╫ю╢о╢ы\n"
 
 #: build/expression.c:678
 msgid "&& and || not suported for strings\n"
-msgstr "&& и || не поддерживаются для строк\n"
+msgstr "'&&' ©м '||' ╢б ╧╝юз©╜©║╪╜ ╩Г©Кгр ╪Ж ╬Ь╫ю╢о╢ы\n"
 
 #: build/expression.c:712 build/expression.c:761
 msgid "syntax error in expression\n"
-msgstr "синтаксическая ошибка в выражении\n"
+msgstr "г╔гЖ╫д©║╪╜ ╠╦╧╝ ©ю╥Ы╟║ ╧ъ╩Щгъ╫ю╢о╢ы\n"
 
 #: build/files.c:290
 #, c-format
 msgid "TIMECHECK failure: %s\n"
-msgstr "Ошибка TIMECHECK: %s\n"
+msgstr "TIMECHECK ╫гфп: %s\n"
 
 #: build/files.c:355 build/files.c:555 build/files.c:751
 #, c-format
 msgid "Missing '(' in %s %s\n"
-msgstr "Отсутствует '(' в %s %s\n"
+msgstr "%s %s©║ '(' ╟║ ╬Ь╫ю╢о╢ы\n"
 
 #: build/files.c:366 build/files.c:685 build/files.c:762
 #, c-format
 msgid "Missing ')' in %s(%s\n"
-msgstr "отсутствует ')' в %s(%s\n"
+msgstr "%s(%s©║ ')' ╟║ ╬Ь╫ю╢о╢ы\n"
 
 #: build/files.c:404 build/files.c:710
 #, c-format
 msgid "Invalid %s token: %s\n"
-msgstr "Неверный токен %s: %s\n"
+msgstr "╨нюШгугя %s еДе╚: %s\n"
 
 #: build/files.c:514
 #, c-format
 msgid "Missing %s in %s %s\n"
-msgstr "Отсутствует %s в %s %s\n"
+msgstr "%2$s %3$s©║ %1$s ╟║ ╬Ь╫ю╢о╢ы\n"
 
 #: build/files.c:571
 #, c-format
 msgid "Non-white space follows %s(): %s\n"
-msgstr "Не пробел следует после %s(): %s\n"
+msgstr "%s() ╢ыю╫©║ ╟Ь╧Июл ╬Ью╫: %s\n"
 
 #: build/files.c:609
 #, c-format
 msgid "Bad syntax: %s(%s)\n"
-msgstr "Неверный синтаксис: %s(%s)\n"
+msgstr "юъ╦Ь╣х ╠╦╧╝: %s(%s)\n"
 
 #: build/files.c:619
 #, c-format
 msgid "Bad mode spec: %s(%s)\n"
-msgstr "Неверные права: %s(%s)\n"
+msgstr "юъ╦Ь╣х ╦П╣Е spec: %s(%s)\n"
 
 #: build/files.c:631
 #, c-format
 msgid "Bad dirmode spec: %s(%s)\n"
-msgstr "Неверные права на каталог %s(%s)\n"
+msgstr "юъ╦Ь╣х dir╦П╣Е spec: %s(%s)\n"
 
 #: build/files.c:789
-#, c-format
+#, fuzzy, c-format
 msgid "Unusual locale length: \"%.*s\" in %%lang(%s)\n"
-msgstr "Необычная длина locale: \"%.*s\" в %%lang(%s)\n"
+msgstr "╨Яа╓╩СюШюн ╥ндиюо ╠Фюл: %%lang(%2$s)©║ \"%1$.*s\"\n"
 
 #: build/files.c:800
-#, c-format
+#, fuzzy, c-format
 msgid "Duplicate locale %.*s in %%lang(%s)\n"
-msgstr "Дубликат locale %.*s в %%lang(%s)\n"
+msgstr "%%lang(%2$s)©║ аъ╨╧╣х ╥ндиюо %1$.*s╟║ а╦юГгу╢о╢ы\n"
 
 #: build/files.c:930
 #, c-format
 msgid "Hit limit for %%docdir\n"
-msgstr "Лимит для %%docdir превышен\n"
+msgstr "%%docdirюг гя╟Х╟║ цй╟З╣г╬З╫ю╢о╢ы\n"
 
 #: build/files.c:938
 #, c-format
 msgid "Only one arg for %%docdir\n"
-msgstr "Только один аргумент для %%docdir\n"
+msgstr "%%docdir©║ гоЁ╙юг юн╪Ж╦╦ аЖа╓гр ╪Ж юж╫ю╢о╢ы\n"
 
 #: build/files.c:972
 #, c-format
 msgid "Two files on one line: %s\n"
-msgstr "Два файла в одной строке: %s\n"
+msgstr "гоЁ╙юг гЮ©║ ╣н╟Ёюг фдюоюл а╦юГгт: %s\n"
 
 #: build/files.c:994
 #, c-format
 msgid "File must begin with \"/\": %s\n"
-msgstr "Файл должен начинаться с \"/\": %s\n"
+msgstr "фдюою╨ ╧щ╣Е╫ц \"/\" ╥н ╫цюшгь╬ъгт: %s\n"
 
 #: build/files.c:1012
 #, c-format
 msgid "Can't mix special %%doc with other forms: %s\n"
-msgstr "Нельзя смешивать спец. %%doc с другими формами: %s\n"
+msgstr "ф╞а╓ %%docю╩ ╢ы╦╔ гЭ╫д╟З гт╡╡ ╩Г©Кгр ╪Ж ╬Ью╫: %s\n"
 
 #: build/files.c:1029
 #, c-format
@@ -507,22 +499,22 @@ msgstr ""
 #: build/files.c:1307
 #, c-format
 msgid "File listed twice: %s\n"
-msgstr "Файл указан дважды: %s\n"
+msgstr "фдюо ╦Я╥оюл аъ╨╧╣й: %s\n"
 
 #: build/files.c:1481
 #, c-format
 msgid "Symlink points to BuildRoot: %s -> %s\n"
-msgstr "Символическая ссылка указывает на BuildRoot: %s -> %s\n"
+msgstr "BuildRoot©║ ╫и╨╪╦╞╦╣е╘гт: %s -> %s\n"
 
 #: build/files.c:1738
 #, c-format
 msgid "File doesn't match prefix (%s): %s\n"
-msgstr "Файл не соответстует префиксу (%s): %s\n"
+msgstr "фдюоюл prefix (%s)©м юод║гоаЖ ╬йю╫: %s\n"
 
 #: build/files.c:1762
 #, c-format
 msgid "File not found: %s\n"
-msgstr "Файл не найден: %s\n"
+msgstr "фдюою╩ цёю╩ ╪Ж ╬Ью╫: %s\n"
 
 #: build/files.c:1977
 #, c-format
@@ -532,57 +524,57 @@ msgstr ""
 #: build/files.c:1983
 #, fuzzy, c-format
 msgid "%s: public key read failed.\n"
-msgstr "%s: ошибка чтения во время импортирования.\n"
+msgstr "%s: readLeadюл ╫гфпгъ╫ю╢о╢ы\n"
 
 #: build/files.c:1987 lib/rpmchecksig.c:614
 #, c-format
 msgid "%s: not an armored public key.\n"
-msgstr "%s: это не открытый ключ.\n"
+msgstr ""
 
 #: build/files.c:1994
 #, fuzzy, c-format
 msgid "%s: *.te policy read failed.\n"
-msgstr "%s: ошибка чтения во время импортирования.\n"
+msgstr "%s: readLeadюл ╫гфпгъ╫ю╢о╢ы\n"
 
 #: build/files.c:2047
 #, c-format
 msgid "File needs leading \"/\": %s\n"
-msgstr "Файл должен начинаться с \"/\": %s\n"
+msgstr "фдюою╨ \"/\" ╥н ╫цюшгь╬ъгт: %s\n"
 
 #: build/files.c:2071
 #, c-format
 msgid "Glob not permitted: %s\n"
-msgstr "Glob не разрешаются: %s\n"
+msgstr "Globю╩ ╩Г©Кгр ╪Ж ╬Ью╫: %s\n"
 
 #: build/files.c:2088 lib/rpminstall.c:375
 #, c-format
 msgid "File not found by glob: %s\n"
-msgstr "Файл не найден: %s\n"
+msgstr "globю╦╥н фдюою╩ цёю╩ ╪Ж ╬Ью╫: %s\n"
 
 #: build/files.c:2148
 #, c-format
 msgid "Could not open %%files file %s: %s\n"
-msgstr "Невозможно открыть файл %%files %s: %s\n"
+msgstr "%s фдюоюг %%files╦╕ ©╜ ╪Ж ╬Ью╫: %s\n"
 
 #: build/files.c:2159 build/pack.c:155
 #, c-format
 msgid "line: %s\n"
-msgstr "строка: %s\n"
+msgstr "гЮ: %s\n"
 
 #: build/files.c:2544
 #, c-format
 msgid "Bad file: %s: %s\n"
-msgstr "Неверный файл %s: %s\n"
+msgstr "юъ╦Ь╣х фдюо: %s: %s\n"
 
 #: build/files.c:2556 build/parsePrep.c:50
 #, c-format
 msgid "Bad owner/group: %s\n"
-msgstr "Неверная пара владелец/группа: %s\n"
+msgstr "юъ╦Ь╣х ╪рю╞юз/╠в╥Л: %s\n"
 
 #: build/files.c:2601
-#, c-format
+#, fuzzy, c-format
 msgid "Checking for unpackaged file(s): %s\n"
-msgstr "Проверка на неупакованный(е) файл(ы): %s\n"
+msgstr "╬фд╚юл╨Й╦╕ г╙╢б╣╔ ╫гфпгт%s%s: %s\n"
 
 #: build/files.c:2618
 #, c-format
@@ -590,292 +582,290 @@ msgid ""
 "Installed (but unpackaged) file(s) found:\n"
 "%s"
 msgstr ""
-"Обнаружен(ы) установленный(е) (но не упакованный(е)) файл(ы):\n"
-"%s"
 
 #: build/files.c:2648
 #, c-format
 msgid "Processing files: %s-%s-%s\n"
-msgstr "Обрабатываются файлы: %s-%s-%s\n"
+msgstr "фдюо цЁ╦╝ аъ: %s-%s-%s\n"
 
 #: build/names.c:56
 msgid "getUname: too many uid's\n"
-msgstr "getUname: слишком много uid\n"
+msgstr "╩Г©Кюз юл╦╖ ╪Ёа╓[getUname]: uid╟║ Ёй╧╚ ╦╧╫ю╢о╢ы\n"
 
 #: build/names.c:82
 msgid "getUnameS: too many uid's\n"
-msgstr "getUnameS: слишком много uid\n"
+msgstr "╩Г©Кюз юл╦╖ ╪Ёа╓[getUnameS]: uid╟║ Ёй╧╚ ╦╧╫ю╢о╢ы\n"
 
 #: build/names.c:111
 msgid "getUidS: too many uid's\n"
-msgstr "getUidS: слишком много пользовательских идентификаторов\n"
+msgstr "╩Г©Кюз id ╪Ёа╓[getUidS]: uid╟║ Ёй╧╚ ╦╧╫ю╢о╢ы\n"
 
 #: build/names.c:140
 msgid "getGname: too many gid's\n"
-msgstr "getGname: слишком много gid\n"
+msgstr "╠в╥Л юл╦╖ ╪Ёа╓[getGname]: gid╟║ Ёй╧╚ ╦╧╫ю╢о╢ы\n"
 
 #: build/names.c:166
 msgid "getGnameS: too many gid's\n"
-msgstr "getGnameS: слишком много gid\n"
+msgstr "╠в╥Л юл╦╖ ╪Ёа╓[getGnameS]: gid╟║ Ёй╧╚ ╦╧╫ю╢о╢ы\n"
 
 #: build/names.c:195
 msgid "getGidS: too many gid's\n"
-msgstr "getGidS: слишком много идентификаторов групп.\n"
+msgstr "╠в╥Л id ╪Ёа╓[getGidS]: gid╟║ Ёй╧╚ ╦╧╫ю╢о╢ы\n"
 
 #: build/names.c:237
 #, c-format
 msgid "Could not canonicalize hostname: %s\n"
-msgstr "Невозможно канонизировать имя компьютера: %s\n"
+msgstr "хё╫╨ф╝╦Мю╩ а╓╠тх╜(canonicalize) гр ╪Ж ╬Ью╫: %s\n"
 
 #: build/pack.c:90
 #, c-format
 msgid "create archive failed on file %s: %s\n"
-msgstr "ошибка создания архива на файле %s: %s\n"
+msgstr "%s фдюоюг ╬фд╚юл╨Й╦╕ ╩Щ╪╨го╢б╣╔ ╫гфпгт: %s\n"
 
 #: build/pack.c:93
 #, c-format
 msgid "create archive failed: %s\n"
-msgstr "ошибка создания архива: %s\n"
+msgstr "╬фд╚юл╨Й ╩Щ╪╨©║ ╫гфпгт: %s\n"
 
 #: build/pack.c:115
 #, c-format
 msgid "cpio_copy write failed: %s\n"
-msgstr "cpio_copy: ошибка записи: %s\n"
+msgstr "cpio_copy юш╪╨©║ ╫гфпгт: %s\n"
 
 #: build/pack.c:122
 #, c-format
 msgid "cpio_copy read failed: %s\n"
-msgstr "cpio_copy: ошибка чтения: %s\n"
+msgstr "cpio_copy юп╠Б©║ ╫гфпгт: %s\n"
 
 #: build/pack.c:219 build/pack.c:233
 #, c-format
 msgid "Could not open PreIn file: %s\n"
-msgstr "Невозможно открыть файл PreIn: %s\n"
+msgstr "PreIn фдюою╩ ©╜ ╪Ж ╬Ью╫: %s\n"
 
 #: build/pack.c:226
 #, c-format
 msgid "Could not open PreUn file: %s\n"
-msgstr "Невозможно открыть файл PreUn: %s\n"
+msgstr "PreUn фдюою╩ ©╜ ╪Ж ╬Ью╫: %s\n"
 
 #: build/pack.c:240
 #, c-format
 msgid "Could not open PostIn file: %s\n"
-msgstr "Невозможно открыть файл PostIn: %s\n"
+msgstr "PostIn фдюою╩ ©╜ ╪Ж ╬Ью╫: %s\n"
 
 #: build/pack.c:247 build/pack.c:254
 #, c-format
 msgid "Could not open PostUn file: %s\n"
-msgstr "Невозможно открыть файл PostUn: %s\n"
+msgstr "PostUn фдюою╩ ©╜ ╪Ж ╬Ью╫: %s\n"
 
 #: build/pack.c:262
 #, c-format
 msgid "Could not open VerifyScript file: %s\n"
-msgstr "Невозможно открыть файл VerifyScript: %s\n"
+msgstr "VerifyScript фдюою╩ ©╜ ╪Ж ╬Ью╫: %s\n"
 
 #: build/pack.c:277
 #, c-format
 msgid "Could not open Trigger script file: %s\n"
-msgstr "Невозможно открыть файл Trigger script: %s\n"
+msgstr "ф╝╦╝╟е ╫╨е╘╦Ёф╝ фдюою╩ ©╜ ╪Ж ╬Ью╫: %s\n"
 
 #: build/pack.c:306
 #, c-format
 msgid "readRPM: open %s: %s\n"
-msgstr "readRPM: открытие %s: %s\n"
+msgstr "RPM юп╠Б(readRPM): %s(ю╩)╦╕ ©╠╢о╢ы: %s\n"
 
 #: build/pack.c:316
 #, c-format
 msgid "readRPM: read %s: %s\n"
-msgstr "readRPM: чтение %s: %s\n"
+msgstr "RPM юп╠Б(readRPM): %s(ю╩)╦╕ юп╫ю╢о╢ы: %s\n"
 
 #: build/pack.c:325 build/pack.c:656
 #, c-format
 msgid "%s: Fseek failed: %s\n"
-msgstr "%s: ошибка Fseek: %s\n"
+msgstr "%s: Fseekюл ╫гфпгъ╫ю╢о╢ы: %s\n"
 
 #: build/pack.c:357
 #, c-format
 msgid "readRPM: %s is not an RPM package\n"
-msgstr "readRPM: %s  не является пакетом RPM\n"
+msgstr "RPM юп╠Б(readRPM): %s(ю╨)╢б RPM фпе╟аЖ╟║ ╬ф╢у╢о╢ы\n"
 
 #: build/pack.c:362
 #, c-format
 msgid "readRPM: reading header from %s\n"
-msgstr "readRPM: читается заголовок из %s\n"
+msgstr "RPM юп╠Б(readRPM): %s©║╪╜ гЛ╢У╦╕ юп╟М юж╫ю╢о╢ы\n"
 
 #: build/pack.c:596
 msgid "Unable to create immutable header region.\n"
-msgstr "Невозможно поместить заголовок в нерперывную область памяти.\n"
+msgstr "╟Ма╓ гЛ╢У ©╣©╙(immutable header region)ю╩ ╩Щ╪╨гр ╪Ж ╬Ь╫ю╢о╢ы.\n"
 
 #: build/pack.c:616
 msgid "Unable to write temp header\n"
-msgstr "Невозможно записать временный заголовок\n"
+msgstr "юс╫ц(temp) гЛ╢У╦╕ юш╪╨гр ╪Ж ╬Ь╫ю╢о╢ы\n"
 
 #: build/pack.c:626
 msgid "Bad CSA data\n"
-msgstr "Неверные данные CSA\n"
+msgstr "юъ╦Ь╣х CSA ╣╔юлем\n"
 
 #: build/pack.c:663
 msgid "Unable to write final header\n"
-msgstr "Невозможно записать окончательный заголовок\n"
+msgstr "╦╤аЖ╦╥(final) гЛ╢У╦╕ юш╪╨гр ╪Ж ╬Ь╫ю╢о╢ы\n"
 
 #: build/pack.c:683
 #, c-format
 msgid "Generating signature: %d\n"
-msgstr "Генерируется подпись: %d\n"
+msgstr "╪╜╦М ╩Щ╪╨ аъ: %d\n"
 
 #: build/pack.c:701
 msgid "Unable to reload signature header.\n"
-msgstr "Невозможно перезагрузить заголовок подписи.\n"
+msgstr "╪╜╦М(signature) гЛ╢У╦╕ ╢ы╫ц юп╬Н©ц ╪Ж ╬Ь╫ю╢о╢ы.\n"
 
 #: build/pack.c:709
 #, c-format
 msgid "Could not open %s: %s\n"
-msgstr "Невозможно открыть %s: %s\n"
+msgstr "%s(ю╩)╦╕ ©╜ ╪Ж ╬Ью╫: %s\n"
 
 #: build/pack.c:744 lib/psm.c:1844
 #, c-format
 msgid "Unable to write package: %s\n"
-msgstr "Невозможно записать пакет: %s\n"
+msgstr "фпе╟аЖ╦╕ юш╪╨гр ╪Ж ╬Ью╫: %s\n"
 
 #: build/pack.c:759
 #, c-format
 msgid "Unable to open sigtarget %s: %s\n"
-msgstr "Невозможно открыть цель подписи %s: %s\n"
+msgstr "╪╜╦Мгр ╢К╩С %s(ю╩)╦╕ ©╜ ╪Ж ╬Ью╫: %s\n"
 
 #: build/pack.c:770
 #, c-format
 msgid "Unable to read header from %s: %s\n"
-msgstr "Невозможно прочитать заголовок из %s: %s\n"
+msgstr "%sюг гЛ╢У╦╕ юпю╩ ╪Ж ╬Ью╫: %s\n"
 
 #: build/pack.c:784
 #, c-format
 msgid "Unable to write header to %s: %s\n"
-msgstr "Невозможно записать заголовок в %s: %s\n"
+msgstr "%s©║ гЛ╢У╦╕ юш╪╨гр ╪Ж ╬Ью╫: %s\n"
 
 #: build/pack.c:794
 #, c-format
 msgid "Unable to read payload from %s: %s\n"
-msgstr "Невозможно прочитать содержимое из %s: %s\n"
+msgstr "%sюг payload╦╕ юпю╩ ╪Ж ╬Ью╫: %s\n"
 
 #: build/pack.c:800
 #, c-format
 msgid "Unable to write payload to %s: %s\n"
-msgstr "Невозможно записать содержимое в %s: %s\n"
+msgstr "%s©║ payload╦╕ юш╪╨гр ╪Ж ╬Ью╫: %s\n"
 
 #: build/pack.c:837 lib/psm.c:2119
 #, c-format
 msgid "Wrote: %s\n"
-msgstr "Записан: %s\n"
+msgstr "юш╪╨: %s\n"
 
 #: build/pack.c:905
 #, c-format
 msgid "Could not generate output filename for package %s: %s\n"
-msgstr "Невозможно создать имя файла для пакета %s: %s\n"
+msgstr "%s фпе╟аЖюг цБ╥б фдюо╦Мю╩ ╩Щ╪╨гр ╪Ж ╬Ью╫: %s\n"
 
 #: build/pack.c:922
 #, c-format
 msgid "cannot create %s: %s\n"
-msgstr "невозможно создать %s: %s\n"
+msgstr "%s(ю╩)╦╕ ╩Щ╪╨гр ╪Ж ╬Ью╫: %s\n"
 
 #: build/parseBuildInstallClean.c:36
 #, c-format
 msgid "line %d: second %s\n"
-msgstr "строка %d: второе %s\n"
+msgstr "%d ╧Ьб╟ гЮ: ╣н╧Ьб╟ %s\n"
 
 #: build/parseChangelog.c:151
 #, c-format
 msgid "%%changelog entries must start with *\n"
-msgstr "записи %%changelog должны начинаться с *\n"
+msgstr "%%changelog гв╦Я(entry)ю╨ ╧щ╣Е╫ц '*' ╥н ╫цюшгь╬ъ гу╢о╢ы\n"
 
 #: build/parseChangelog.c:159
 #, c-format
 msgid "incomplete %%changelog entry\n"
-msgstr "неполная запись %%changelog\n"
+msgstr "%%changelog гв╦Я(entry)юл ©оюЭгоаЖ ╬й╫ю╢о╢ы\n"
 
 #: build/parseChangelog.c:176
 #, c-format
 msgid "bad date in %%changelog: %s\n"
-msgstr "неверная дата в %%changelog: %s\n"
+msgstr "%%changelog©║ юъ╦Ь╣х Ё╞б╔: %s\n"
 
 #: build/parseChangelog.c:181
 #, c-format
 msgid "%%changelog not in descending chronological order\n"
-msgstr "%%changelog не в нисходящем хронологическом порядке\n"
+msgstr "%%changelog╟║ Ё╞б╔(chronological) ╪Ью╦╥н ╣г╬НюжаЖ ╬й╫ю╢о╢ы\n"
 
 #: build/parseChangelog.c:189 build/parseChangelog.c:200
 #, c-format
 msgid "missing name in %%changelog\n"
-msgstr "пропущено имя в %%changelog\n"
+msgstr "%%changelog©║ юл╦╖юл ╨Эа╝юж╫ю╢о╢ы\n"
 
 #: build/parseChangelog.c:207
 #, c-format
 msgid "no description in %%changelog\n"
-msgstr "нет описания в %%changelog\n"
+msgstr "%%changelog©║ Ё╩©К(description)юл ╬Ь╫ю╢о╢ы\n"
 
 #: build/parseDescription.c:47
 #, c-format
 msgid "line %d: Error parsing %%description: %s\n"
-msgstr "строка %d: Ошибка анализа %%description: %s\n"
+msgstr "%d ╧Ьб╟ гЮ: %%description©║╪╜ ©ю╥Ы╟║ ╧ъ╩Щгъ╫ю╢о╢ы: %s\n"
 
 #: build/parseDescription.c:60 build/parseFiles.c:56 build/parseScript.c:232
 #, c-format
 msgid "line %d: Bad option %s: %s\n"
-msgstr "строка %d: Неверный параметр %s: %s\n"
+msgstr "%d ╧Ьб╟ гЮ: %s(ю╨)╢б юъ╦Ь╣х ©и╪гют╢о╢ы: %s\n"
 
 #: build/parseDescription.c:71 build/parseFiles.c:70 build/parseScript.c:246
 #, c-format
 msgid "line %d: Too many names: %s\n"
-msgstr "строка %d: Слишком много имен: %s\n"
+msgstr "%d ╧Ьб╟ гЮ: юл╦╖юл Ёй╧╚ ╦╧╫ю╢о╢ы: %s\n"
 
 #: build/parseDescription.c:79 build/parseFiles.c:79 build/parseScript.c:255
 #, c-format
 msgid "line %d: Package does not exist: %s\n"
-msgstr "строка %d: Пакет не существует: %s\n"
+msgstr "%d ╧Ьб╟ гЮ: фпе╟аЖ╟║ а╦юГгоаЖ ╬й╫ю╢о╢ы: %s\n"
 
 #: build/parseDescription.c:89
 #, c-format
 msgid "line %d: Second description\n"
-msgstr "строка %d: Второе описание\n"
+msgstr "%d ╧Ьб╟ гЮ: ╣н╧Ьб╟ Ё╩©К(description)\n"
 
 #: build/parseFiles.c:42
 #, c-format
 msgid "line %d: Error parsing %%files: %s\n"
-msgstr "строка %d: Ошибка разбора %%files: %s\n"
+msgstr "%d ╧Ьб╟ гЮ: %%files©║╪╜ ©ю╥Ы╟║ ╧ъ╩Щгъ╫ю╢о╢ы: %s\n"
 
 #: build/parseFiles.c:86
 #, c-format
 msgid "line %d: Second %%files list\n"
-msgstr "строка %d: Второй список %%files\n"
+msgstr "%d ╧Ьб╟ гЮ: ╣н╧Ьб╟ %%files ╦Я╥о\n"
 
 #: build/parsePreamble.c:243
 #, c-format
 msgid "Architecture is excluded: %s\n"
-msgstr "Архитектура исключена: %s\n"
+msgstr "╬фе╟еьцд╟║ а╕©э╣й: %s\n"
 
 #: build/parsePreamble.c:247
 #, c-format
 msgid "Architecture is not included: %s\n"
-msgstr "Архитектура не включена: %s\n"
+msgstr "╬фе╟еьцд╟║ фВгт╣г╬Н южаЖ ╬йю╫: %s\n"
 
 #: build/parsePreamble.c:251
 #, c-format
 msgid "OS is excluded: %s\n"
-msgstr "ОС исключена: %s\n"
+msgstr "©Н©╣ц╪а╕╟║ а╕©э╣й: %s\n"
 
 #: build/parsePreamble.c:255
 #, c-format
 msgid "OS is not included: %s\n"
-msgstr "ОС не включена: %s\n"
+msgstr "©Н©╣ц╪а╕╟║ фВгт╣г╬Н южаЖ ╬йю╫: %s\n"
 
 #: build/parsePreamble.c:281
 #, c-format
 msgid "%s field must be present in package: %s\n"
-msgstr "Поле %s обязано присутствовать в пакете: %s\n"
+msgstr "фпе╟аЖ©║ ╧щ╣Е╫ц %s гв╦Я(field)ю╩ фВгтгь╬ъгт: %s\n"
 
 #: build/parsePreamble.c:310
 #, c-format
 msgid "Duplicate %s entries in package: %s\n"
-msgstr "Повторяющиеся записи %s в пакете: %s\n"
+msgstr "фпе╟аЖ©║ %s гв╦Я(entry)юл аъ╨╧╣г╬Н южю╫: %s\n"
 
 #: build/parsePreamble.c:376
 msgid "No icon file in sources\n"
@@ -884,17 +874,17 @@ msgstr ""
 #: build/parsePreamble.c:393
 #, fuzzy, c-format
 msgid "Invalid icon URL: %s\n"
-msgstr "Неверный токен %s: %s\n"
+msgstr "╨нюШгугя %s еДе╚: %s\n"
 
 #: build/parsePreamble.c:400
 #, c-format
 msgid "Unable to open icon %s: %s\n"
-msgstr "Невозможно открыть пиктограмму %s: %s\n"
+msgstr "%s ╬фюлдэю╩ ©╜ ╪Ж ╬Ью╫: %s\n"
 
 #: build/parsePreamble.c:409
 #, c-format
 msgid "Unable to read icon %s: %s\n"
-msgstr "Невозможно прочитать пиктограмму %s: %s\n"
+msgstr "%s ╬фюлдэю╩ юпю╩ ╪Ж ╬Ью╫: %s\n"
 
 #: build/parsePreamble.c:414
 #, c-format
@@ -904,67 +894,67 @@ msgstr ""
 #: build/parsePreamble.c:424
 #, c-format
 msgid "Unknown icon type: %s\n"
-msgstr "Неизвестный тип пиктограммы: %s\n"
+msgstr "╬к ╪Ж ╬Ь╢б ╬фюлдэ ю╞гЭ: %s\n"
 
 #: build/parsePreamble.c:472
 #, c-format
 msgid "line %d: Tag takes single token only: %s\n"
-msgstr "строка %d: Ярлык требует только один аргумент: %s\n"
+msgstr "%d ╧Ьб╟ гЮ: еб╠в©║ гоЁ╙юг еДе╚╦╦ юж╫ю╢о╢ы: %s\n"
 
 #: build/parsePreamble.c:512
 #, c-format
 msgid "line %d: Malformed tag: %s\n"
-msgstr "строка %d: Неверный тэг: %s\n"
+msgstr "%d ╧Ьб╟ гЮ: ©ц╧ы╦ёаЖ ╦Ьгя еб╠вют╢о╢ы: %s\n"
 
 #: build/parsePreamble.c:520
 #, c-format
 msgid "line %d: Empty tag: %s\n"
-msgstr "строка %d: Пустой тэг: %s\n"
+msgstr "%d ╧Ьб╟ гЮ: еб╠в╟║ ╨Я╬Нюж╫ю╢о╢ы: %s\n"
 
 #: build/parsePreamble.c:544 build/parsePreamble.c:551
 #, c-format
 msgid "line %d: Illegal char '-' in %s: %s\n"
-msgstr "строка %d: Недопустимый символ '-' в %s: %s\n"
+msgstr "%d ╧Ьб╟ гЮ: %s©║ ╨нюШгугя ╧╝юз '-' ╟║ южю╫: %s\n"
 
 #: build/parsePreamble.c:584
 #, c-format
 msgid "BuildRoot can not be \"/\": %s\n"
-msgstr "BuildRoot не может быть \"/\": %s\n"
+msgstr "BuildRoot╦╕ \"/\" ╥н аЖа╓гр ╪Ж ╬Ью╫: %s\n"
 
 #: build/parsePreamble.c:600
 #, fuzzy, c-format
 msgid "line %d: Prefixes must begin with \"/\": %s\n"
-msgstr "строка %d: Префикс не может заканчиваться на \"/\": %s\n"
+msgstr "%d ╧Ьб╟ гЮ: Prefixes╢б юЩ╢К \"/\" ╥н Ё║Ё╙╪╜╢б ╬х╣к╢о╢ы: %s\n"
 
 #: build/parsePreamble.c:608
 #, c-format
 msgid "line %d: Prefixes must not end with \"/\": %s\n"
-msgstr "строка %d: Префикс не может заканчиваться на \"/\": %s\n"
+msgstr "%d ╧Ьб╟ гЮ: Prefixes╢б юЩ╢К \"/\" ╥н Ё║Ё╙╪╜╢б ╬х╣к╢о╢ы: %s\n"
 
 #: build/parsePreamble.c:620
 #, c-format
 msgid "line %d: Docdir must begin with '/': %s\n"
-msgstr "строка %d: Docdir должен начинаться с '/': %s\n"
+msgstr "%d ╧Ьб╟ гЮ: Docdirю╨ ╧щ╣Е╫ц '/' ╥н ╫цюшгь╬ъ гу╢о╢ы: %s\n"
 
 #: build/parsePreamble.c:634
 #, fuzzy, c-format
 msgid "line %d: %s takes an integer value: %s\n"
-msgstr "строка %d: Ярлык требует только один аргумент: %s\n"
+msgstr "%d ╧Ьб╟ гЮ: еб╠в©║ гоЁ╙юг еДе╚╦╦ юж╫ю╢о╢ы: %s\n"
 
 #: build/parsePreamble.c:676 build/parsePreamble.c:687
 #, c-format
 msgid "line %d: Bad %s: qualifiers: %s\n"
-msgstr "строка %d: Неверное число %s: определяет: %s\n"
+msgstr "%d ╧Ьб╟ гЮ: юъ╦Ь╣х %s: ╪Ж╫дюз(qualifier): %s\n"
 
 #: build/parsePreamble.c:731
 #, c-format
 msgid "line %d: Bad BuildArchitecture format: %s\n"
-msgstr "строка %d: Неверный формат BuildArchitecture: %s\n"
+msgstr "%d ╧Ьб╟ гЮ: юъ╦Ь╣х BuildArchitecture гЭ╫дют╢о╢ы: %s\n"
 
 #: build/parsePreamble.c:740
 #, c-format
 msgid "Internal error: Bogus tag %d\n"
-msgstr "Внутренняя ошибка: Неизвестный ярлык %d\n"
+msgstr "Ё╩╨н ©ю╥Ы: ╨╦╟е╫╨(Bogus) еб╠в %d\n"
 
 #: build/parsePreamble.c:844
 #, c-format
@@ -974,340 +964,334 @@ msgstr ""
 #: build/parsePreamble.c:913
 #, c-format
 msgid "Bad package specification: %s\n"
-msgstr "Неверная спецификация пакета: %s\n"
+msgstr "юъ╦Ь╣х фпе╟аЖ аЖа╓: %s\n"
 
 #: build/parsePreamble.c:919
 #, c-format
 msgid "Package already exists: %s\n"
-msgstr "Пакет уже существует: %s\n"
+msgstr "фпе╟аЖ╟║ юл╧л а╦юГгт: %s\n"
 
 #: build/parsePreamble.c:948
 #, c-format
 msgid "line %d: Unknown tag: %s\n"
-msgstr "строка %d: Неизвестный тэг: %s\n"
+msgstr "%d ╧Ьб╟ гЮ: ╬к ╪Ж ╬Ь╢б еб╠вют╢о╢ы: %s\n"
 
 #: build/parsePrep.c:45
 #, c-format
 msgid "Bad source: %s: %s\n"
-msgstr "Неверный исходник: %s: %s\n"
+msgstr "юъ╦Ь╣х ╪р╫╨: %s: %s\n"
 
 #: build/parsePrep.c:101
 #, c-format
 msgid "No patch number %d\n"
-msgstr "Нет заплаты номер %d\n"
+msgstr "фпд║ ╧Ьхё %d╟║ ╬Ь╫ю╢о╢ы\n"
 
 #: build/parsePrep.c:200
 #, c-format
 msgid "No source number %d\n"
-msgstr "Нет исходника номер %d\n"
+msgstr "╪р╫╨ ╧Ьхё %d╟║ ╬Ь╫ю╢о╢ы\n"
 
 #: build/parsePrep.c:316
 #, c-format
 msgid "Error parsing %%setup: %s\n"
-msgstr "Ошибка анализа %%setup: %s\n"
+msgstr "%%setup©║╪╜ ©ю╥Ы ╧ъ╩Щ: %s\n"
 
 #: build/parsePrep.c:331
 #, c-format
 msgid "line %d: Bad arg to %%setup: %s\n"
-msgstr "строка %d: Неверный аргумент для %%setup %s\n"
+msgstr "%d ╧Ьб╟ гЮ: %%setup©║ юъ╦Ь╣х юн╪Ж╟║ юж╫ю╢о╢ы: %s\n"
 
 #: build/parsePrep.c:349
 #, c-format
 msgid "line %d: Bad %%setup option %s: %s\n"
-msgstr "строка %d: Неверный параметр %%setup %s: %s\n"
+msgstr "%d ╧Ьб╟ гЮ: %%setup©║ юъ╦Ь╣х %s ©и╪г: %s\n"
 
 #: build/parsePrep.c:491
 #, c-format
 msgid "line %d: Need arg to %%patch -b: %s\n"
-msgstr "строка %d: Для %%patch -b нужен аргумент: %s\n"
+msgstr "%d ╧Ьб╟ гЮ: %%patch -b ©║ юн╪Ж╟║ гй©Дгу╢о╢ы: %s\n"
 
 #: build/parsePrep.c:500
 #, c-format
 msgid "line %d: Need arg to %%patch -z: %s\n"
-msgstr "строка %d: Для %%patch -z нужен аргумент: %s\n"
+msgstr "%d ╧Ьб╟ гЮ: %%patch -z ©║ юн╪Ж╟║ гй©Дгу╢о╢ы: %s\n"
 
 #: build/parsePrep.c:512
 #, c-format
 msgid "line %d: Need arg to %%patch -p: %s\n"
-msgstr "строка %d: Для %%patch -p нужен аргумент: %s\n"
+msgstr "%d ╧Ьб╟ гЮ: %%patch -p ©║ юн╪Ж╟║ гй©Дгу╢о╢ы: %s\n"
 
 #: build/parsePrep.c:519
 #, c-format
 msgid "line %d: Bad arg to %%patch -p: %s\n"
-msgstr "строка %d: Неверный аргумент для %%patch -p: %s\n"
+msgstr "%d ╧Ьб╟ гЮ: %%patch -p ©║ юъ╦Ь╣х юн╪Ж╟║ юж╫ю╢о╢ы: %s\n"
 
 #: build/parsePrep.c:526
 msgid "Too many patches!\n"
-msgstr "Слишком много заплат!\n"
+msgstr "фпд║╟║ Ёй╧╚ ╦╧╫ю╢о╢ы!\n"
 
 #: build/parsePrep.c:530
 #, c-format
 msgid "line %d: Bad arg to %%patch: %s\n"
-msgstr "строка %d: Неверный аргумент для %%patch: %s\n"
+msgstr "%d ╧Ьб╟ гЮ: %%patch©║ юъ╦Ь╣х юн╪Ж╟║ юж╫ю╢о╢ы: %s\n"
 
 #: build/parsePrep.c:624
 #, fuzzy, c-format
 msgid "Missing %s%d %s: %s\n"
-msgstr "Отсутствует %s в %s %s\n"
+msgstr "%2$s %3$s©║ %1$s ╟║ ╬Ь╫ю╢о╢ы\n"
 
 #: build/parsePrep.c:632
 #, fuzzy, c-format
 msgid "file %s missing: %s\n"
-msgstr "файл %s: %s\n"
+msgstr "%s фдюо: %s\n"
 
 #: build/parsePrep.c:640
 #, fuzzy, c-format
 msgid "Fetching %s failed: %s\n"
-msgstr "%s не удалось: %s\n"
+msgstr "%s(юл)╟║ ╫гфпгт: %s\n"
 
 #: build/parsePrep.c:662
 #, c-format
 msgid "line %d: second %%prep\n"
-msgstr "строка %d: второй %%prep\n"
+msgstr "%d ╧Ьб╟ гЮ: ╣н╧Ьб╟ %%prep\n"
 
 #: build/parseReqs.c:101
 #, fuzzy, c-format
 msgid ""
 "line %d: Dependency \"%s\" must begin with alpha-numeric, '_' or '/': %s\n"
 msgstr ""
-"строка %d: Токены зависимостей должны начинаться с буквы, цифры, '_' или "
-"'/': %s\n"
+"%d ╧Ьб╟ гЮ: юга╦╪╨ еДе╚(token)ю╨ ╧щ╣Е╫ц '╧╝юз-╪Щюз а╤гу', '_' ╤г╢б '/' ╥н ╫ц"
+"юшгь╬ъ гу╢о╢ы: %s\n"
 
 #: build/parseReqs.c:125
 #, c-format
 msgid "line %d: Versioned file name not permitted: %s\n"
-msgstr "строка %d: Версии в именах файлов недопустимы: %s\n"
+msgstr "%d ╧Ьб╟ гЮ: ╧ЖюЭюл ╦М╫ц╣х фдюо╦Мю╩ ╩Г©Кгр ╪Ж ╬Ь╫ю╢о╢ы: %s\n"
 
 #: build/parseReqs.c:143
 #, c-format
 msgid "line %d: Version required: %s\n"
-msgstr "строка %d: Требуется версия: %s\n"
+msgstr "%d ╧Ьб╟ гЮ: ╧ЖюЭюл гй©Дгу╢о╢ы: %s\n"
 
 #: build/parseScript.c:188
 #, c-format
 msgid "line %d: triggers must have --: %s\n"
-msgstr "строка %d: триггеры должны содержать --: %s\n"
+msgstr "%d ╧Ьб╟ гЮ: ф╝╦╝╟е╢б ╧щ╣Е╫ц '--' ╦╕ фВгтгь╬ъ гу╢о╢ы: %s\n"
 
 #: build/parseScript.c:198 build/parseScript.c:271
 #, c-format
 msgid "line %d: Error parsing %s: %s\n"
-msgstr "строка %d: Ошибка анализа %s: %s\n"
+msgstr "%d ╧Ьб╟ гЮ: %s©║╪╜ ©ю╥Ы╟║ ╧ъ╩Щгъ╫ю╢о╢ы: %s\n"
 
 #: build/parseScript.c:210
 #, fuzzy, c-format
 msgid "line %d: internal script must end with '>': %s\n"
-msgstr "строка %d: Программы в сценариях должны начинаться с '/': %s\n"
+msgstr "%d ╧Ьб╟ гЮ: ╫╨е╘╦Ёф╝ га╥н╠в╥╔ю╨ ╧щ╣Е╫ц '/' ╥н ╫цюшгь╬ъ гу╢о╢ы: %s\n"
 
 #: build/parseScript.c:219
 #, c-format
 msgid "line %d: script program must begin with '/': %s\n"
-msgstr "строка %d: Программы в сценариях должны начинаться с '/': %s\n"
+msgstr "%d ╧Ьб╟ гЮ: ╫╨е╘╦Ёф╝ га╥н╠в╥╔ю╨ ╧щ╣Е╫ц '/' ╥н ╫цюшгь╬ъ гу╢о╢ы: %s\n"
 
 #: build/parseScript.c:263
 #, c-format
 msgid "line %d: Second %s\n"
-msgstr "строка %d: Второе %s\n"
+msgstr "%d ╧Ьб╟ гЮ: ╣н╧Ьб╟ %s\n"
 
 #: build/parseScript.c:309
 #, fuzzy, c-format
 msgid "line %d: unsupported internal script: %s\n"
-msgstr "строка %d: Ошибка анализа %%description: %s\n"
+msgstr "%d ╧Ьб╟ гЮ: %%description©║╪╜ ©ю╥Ы╟║ ╧ъ╩Щгъ╫ю╢о╢ы: %s\n"
 
 #: build/parseSpec.c:202
 #, c-format
 msgid "line %d: %s\n"
-msgstr "строка %d: %s\n"
+msgstr "%d ╧Ьб╟ гЮ: %s\n"
 
 #: build/parseSpec.c:254
 #, c-format
 msgid "Unable to open %s: %s\n"
-msgstr "Невозможно открыть %s: %s\n"
+msgstr "%s(ю╩)╦╕ ©╜ ╪Ж ╬Ью╫: %s\n"
 
 #: build/parseSpec.c:270
 #, c-format
 msgid "Unclosed %%if\n"
-msgstr "Незакрытый %%if\n"
+msgstr "%%if╟║ ╢щхВаЖ ╬й╬р╫ю╢о╢ы\n"
 
 #: build/parseSpec.c:340
 #, c-format
 msgid "%s:%d: parseExpressionBoolean returns %d\n"
-msgstr "%s:%d: parseExpressionBoolean код возврата: %d\n"
+msgstr "%s:%d: parseExpressionBoolean©║╪╜ %d ╟╙юл ╧щх╞╣г╬З╫ю╢о╢ы\n"
 
 #: build/parseSpec.c:349
 #, c-format
 msgid "%s:%d: Got a %%else with no %%if\n"
-msgstr "%s:%d: Найден %%else без %%if\n"
+msgstr "%s:%d: %%else╟║ %%if ╬Ьюл ╩Г©К╣г╬З╫ю╢о╢ы\n"
 
 #: build/parseSpec.c:361
 #, c-format
 msgid "%s:%d: Got a %%endif with no %%if\n"
-msgstr "%s:%d: Найден %%endif без %%if\n"
+msgstr "%s:%d: %%endif╟║ %%if ╬Ьюл ╩Г©К╣г╬З╫ю╢о╢ы\n"
 
 #: build/parseSpec.c:375 build/parseSpec.c:384
 #, c-format
 msgid "malformed %%include statement\n"
-msgstr "неверное объявление %%include\n"
+msgstr "%%include ╧╝юл ©ц╧ы╦ёаЖ ╬й╫ю╢о╢ы\n"
 
 #: build/parseSpec.c:564
 msgid "No compatible architectures found for build\n"
-msgstr "Не найдены совместимые архитектуры для сборки.\n"
+msgstr "фпе╟аЖ а╕юш©║ хёх╞го╢б ╬фе╟еьцд╦╕ цёю╩ ╪Ж ╬Ь╫ю╢о╢ы\n"
 
 #: build/parseSpec.c:605
 #, c-format
 msgid "Package has no %%description: %s\n"
-msgstr "Пакет не имеет %%description: %s\n"
+msgstr "фпе╟аЖ©║ %%descriptionюл ╬Ью╫: %s\n"
 
 #: build/poptBT.c:142
 #, c-format
 msgid "build through %prep (unpack sources and apply patches) from <specfile>"
-msgstr ""
-"выполнить по стадию %prep (развернуть исходники и наложить заплаты) из <файл "
-"спецификации>"
+msgstr "<specфдюо>юг %prep (╪р╫╨╦╕ г╝╟М фпд║╦╕ юШ©Кго╢б ╟За╓)ю╦╥н а╕юшгу╢о╢ы"
 
 #: build/poptBT.c:143 build/poptBT.c:146 build/poptBT.c:149 build/poptBT.c:152
 #: build/poptBT.c:155 build/poptBT.c:158 build/poptBT.c:161
 msgid "<specfile>"
-msgstr "<файл спецификации>"
+msgstr "<specфдюо>"
 
 #: build/poptBT.c:145
 msgid "build through %build (%prep, then compile) from <specfile>"
-msgstr ""
-"выполнить по стадию %build (%prep, затем компиляция) из <файл спецификации>"
+msgstr "<specфдюо>юг %build (%prep╟З ддфдюого╢б ╟За╓)ю╦╥н а╕юшгу╢о╢ы"
 
 #: build/poptBT.c:148
 msgid "build through %install (%prep, %build, then install) from <specfile>"
-msgstr ""
-"выполнить по стадию %install (%prep, %build, затем установка) из <файл "
-"спецификации>"
+msgstr "<specфдюо>юг %install (%prep, %build©м ╪Ёд║го╢б ╟За╓)ю╦╥н а╕юшгу╢о╢ы"
 
 #: build/poptBT.c:151
 #, c-format
 msgid "verify %files section from <specfile>"
-msgstr "проверить раздел %files из <файл спецификации>"
+msgstr "<specфдюо>юг %files гв╦Я(section)ю╩ ╟к╩Ггу╢о╢ы"
 
 #: build/poptBT.c:154
 msgid "build source and binary packages from <specfile>"
-msgstr "собрать исходный и двоичный пакеты по <файл спецификации>"
+msgstr "<specфдюо>╥н ╪р╫╨©м ╧ыюлЁй╦╝ фпе╟аЖ╦╕ а╕юшгу╢о╢ы"
 
 #: build/poptBT.c:157
 msgid "build binary package only from <specfile>"
-msgstr "собрать двоичный пакет по <файл спецификации>"
+msgstr "<specфдюо>╥н ╧ыюлЁй╦╝ фпе╟аЖ ╦╦ю╩ а╕юшгу╢о╢ы"
 
 #: build/poptBT.c:160
 msgid "build source package only from <specfile>"
-msgstr "собрать исходный пакет по <файлу спецификации>"
+msgstr "<specфдюо>╥н ╪р╫╨ фпе╟аЖ ╦╦ю╩ а╕юшгу╢о╢ы"
 
 #: build/poptBT.c:164
 #, c-format
 msgid "build through %prep (unpack sources and apply patches) from <tarball>"
-msgstr ""
-"выполнить по стадию %prep (развернуть исходники и наложить заплаты) из "
-"<архив tar>"
+msgstr "<tarфдюо>ю╩ %prep (╪р╫╨╦╕ г╝╟М фпд║╦╕ юШ©Кго╢б ╟За╓)ю╦╥н а╕юшгу╢о╢ы"
 
 #: build/poptBT.c:165 build/poptBT.c:168 build/poptBT.c:171 build/poptBT.c:174
 #: build/poptBT.c:177 build/poptBT.c:180 build/poptBT.c:183
 msgid "<tarball>"
-msgstr "<архив tar>"
+msgstr "<tarфдюо>"
 
 #: build/poptBT.c:167
 msgid "build through %build (%prep, then compile) from <tarball>"
-msgstr "выполнить по стадию %build (%prep, затем компиляция) из <архив tar>"
+msgstr "<tarфдюо>ю╩ %build (%prep╟З ддфдюого╢б ╟За╓)ю╦╥н а╕юшгу╢о╢ы"
 
 #: build/poptBT.c:170
 msgid "build through %install (%prep, %build, then install) from <tarball>"
-msgstr ""
-"выполнить по стадию %install (%prep, %build, затем установка) из <архив tar>"
+msgstr "<tarфдюо>ю╩ %install (%prep, %build©м ╪Ёд║го╢б ╟За╓)ю╦╥н а╕юшгу╢о╢ы"
 
 #: build/poptBT.c:173
 #, c-format
 msgid "verify %files section from <tarball>"
-msgstr "проверить секцию %files из <архив tar>"
+msgstr "<tarфдюо>юг %files гв╦Я(section)ю╩ ╟к╩Ггу╢о╢ы"
 
 #: build/poptBT.c:176
 msgid "build source and binary packages from <tarball>"
-msgstr "собрать исходный и двоичный пакеты из <архив tar>"
+msgstr "<tarфдюо>╥н ╪р╫╨©м ╧ыюлЁй╦╝ фпе╟аЖ╦╕ а╕юшгу╢о╢ы"
 
 #: build/poptBT.c:179
 msgid "build binary package only from <tarball>"
-msgstr "собрать двоичный пакет из <архив tar>"
+msgstr "<tarфдюо>╥н ╧ыюлЁй╦╝ фпе╟аЖ ╦╦ю╩ а╕юшгу╢о╢ы"
 
 #: build/poptBT.c:182
 msgid "build source package only from <tarball>"
-msgstr "собрать исходный пакет из <архив tar>"
+msgstr "<tarфдюо>╥н ╪р╫╨ фпе╟аЖ ╦╦ю╩ а╕юшгу╢о╢ы"
 
 #: build/poptBT.c:186
 msgid "build binary package from <source package>"
-msgstr "собрать двоичный пакет из <исходный пакет>"
+msgstr "<╪р╫╨ фпе╟аЖ>╥н ╧ыюлЁй╦╝ фпе╟аЖ╦╕ а╕юшгу╢о╢ы"
 
 #: build/poptBT.c:187 build/poptBT.c:190
 msgid "<source package>"
-msgstr "<исходный пакет>"
+msgstr "<╪р╫╨ фпе╟аЖ>"
 
 #: build/poptBT.c:189
 msgid ""
 "build through %install (%prep, %build, then install) from <source package>"
 msgstr ""
-"выполнить по стадию %install (%prep, %build, затем установка)  из <исходный "
-"пакет>"
+"<╪р╫╨ фпе╟аЖ>╦╕ %install (%prep, %build©м ╪Ёд║го╢б ╟За╓)ю╦╥н а╕юшгу╢о╢ы"
 
 #: build/poptBT.c:193
 msgid "remove build tree when done"
-msgstr "после завершения удалить дерево исходников"
+msgstr "фпе╟аЖ а╕юш хд©║ ╪р╫╨ фдюою╩ г╝╟М юш╬Вгя ╣П╥╨еД╦╝╦╕ ╩Ха╕гу╢о╢ы"
 
 #: build/poptBT.c:195
 msgid "ignore ExcludeArch: directives from spec file"
-msgstr "игнорировать ExcludeArch: в файле конфигурации"
+msgstr "ExcludeArch╦╕ ╧╚╫цгт: spec фдюо©║╪╜ аЖа╓(directive)╣к╢о╢ы"
 
 #: build/poptBT.c:197
 msgid "debug file state machine"
-msgstr "отладка машины состояния файлов"
+msgstr "ддг╩емюг ╩Себ(state) фдюою╩ ╣П╧Ж╠в гу╢о╢ы"
 
 #: build/poptBT.c:199
 msgid "do not execute any stages of the build"
-msgstr "не выполнять никаких этапов сборки"
+msgstr "фпе╟аЖ а╕юшюг ╬Н╤╟гя ╢э╟Х╣╣ ╫ггЮгоаЖ ╬й╫ю╢о╢ы"
 
 #: build/poptBT.c:201
 msgid "do not verify build dependencies"
-msgstr "не проверять зависимости пакета перед сборкой"
+msgstr "фпе╟аЖ а╕юш юга╦╪╨ю╩ ╟к╩ГгоаЖ ╬й╫ю╢о╢ы"
 
 #: build/poptBT.c:204 lib/poptALL.c:374 lib/poptI.c:355 lib/poptQV.c:415
 #: lib/poptQV.c:424 lib/poptQV.c:466
+#, fuzzy
 msgid "don't verify package digest(s)"
-msgstr "не проверять дайджест пакета(ов)"
+msgstr "фпе╟аЖюг юга╦╪╨ю╩ ╟к╩ГгоаЖ ╬й╫ю╢о╢ы"
 
 #: build/poptBT.c:206 lib/poptALL.c:376 lib/poptI.c:357 lib/poptQV.c:418
 #: lib/poptQV.c:426 lib/poptQV.c:469
+#, fuzzy
 msgid "don't verify database header(s) when retrieved"
-msgstr "не проверять заголовки, извлекаемые из базы данных"
+msgstr "фпе╟аЖюг ╬фе╟еьцд╦╕ ╟к╩ГгоаЖ ╬й╫ю╢о╢ы"
 
 #: build/poptBT.c:208 lib/poptALL.c:382 lib/poptI.c:359 lib/poptQV.c:421
 #: lib/poptQV.c:428 lib/poptQV.c:471
+#, fuzzy
 msgid "don't verify package signature(s)"
-msgstr "не проверять подпись(и) в пакете(ах)"
+msgstr "фпе╟аЖюг ╪╜╦Мю╩ ╟к╩Ггу╢о╢ы"
 
 #: build/poptBT.c:211
 msgid "do not accept i18N msgstr's from specfile"
-msgstr "игнорировать строки i18N из файла спецификации"
+msgstr "specфдюоюг i18N msgstrю╩ ╩Г©К(accept)гоаЖ ╬й╫ю╢о╢ы"
 
 #: build/poptBT.c:213
 msgid "remove sources when done"
-msgstr "после завершения удалить исходники"
+msgstr "фпе╟аЖ а╕юш хд©║ ╪р╫╨ фдюою╩ ╩Ха╕гу╢о╢ы"
 
 #: build/poptBT.c:215
 msgid "remove specfile when done"
-msgstr "после завершения удалить файл спецификации"
+msgstr "фпе╟аЖ а╕юш хд©║ specфдюою╩ ╩Ха╕гу╢о╢ы"
 
 #: build/poptBT.c:217
 msgid "skip straight to specified stage (only for c,i)"
-msgstr "перейти непосредственно к указанному этапу (только для c,i)"
+msgstr "аЖа╓╣х ╢э╟Х╥н ╧ы╥н аЬгЮгу╢о╢ы (c,i ©║╪╜╦╦ ╩Г©К ╟║╢и)"
 
 #: build/poptBT.c:219
 msgid "generate PGP/GPG signature"
-msgstr "генерировать PGP/GPG-подпись"
+msgstr "PGP/GPG ╪╜╦Мю╩ юш╪╨гу╢о╢ы"
 
 #: build/poptBT.c:221
 msgid "override target platform"
-msgstr "переопределить целевую платформу"
+msgstr "╦Яг╔╢К╩С(target) гц╥╖фШю╩ ╠Ёц╪(override)гу╢о╢ы"
 
 #: build/poptBT.c:221 lib/poptALL.c:371 lib/poptQV.c:326
 msgid "CPU-VENDOR-OS"
@@ -1315,94 +1299,95 @@ msgstr ""
 
 #: build/poptBT.c:223
 msgid "lookup i18N strings in specfile catalog"
-msgstr "искать строки I18N в каталоге файла спецификации"
+msgstr "specфдюо ╦Я╥о(catalog)©║╪╜ i18N ╧╝юз©╜ю╩ ╟к╩Жгу╢о╢ы"
 
 #: build/spec.c:235
 #, c-format
 msgid "line %d: Bad number: %s\n"
-msgstr "строка %d: Неверное число: %s\n"
+msgstr "%d ╧Ьб╟ гЮ: юъ╦Ь╣х ╪Щюзют╢о╢ы: %s\n"
 
 #: build/spec.c:241
 #, c-format
 msgid "line %d: Bad no%s number: %d\n"
-msgstr "строка %d: Неверное число no%s: %d\n"
+msgstr "%d ╧Ьб╟ гЮ: no%s(ю╨)╢б юъ╦Ь╣х ╪Щюзют╢о╢ы: %d\n"
 
 #: build/spec.c:310
 #, c-format
 msgid "line %d: Bad %s number: %s\n"
-msgstr "строка %d: Неверное число %s: %s\n"
+msgstr "%d ╧Ьб╟ гЮ: %s(ю╨)╢б юъ╦Ь╣х ╪Щюзют╢о╢ы: %s\n"
 
 #: build/spec.c:634
 #, c-format
 msgid "can't query %s: %s\n"
-msgstr "невозможно запросить %s: %s\n"
+msgstr "%s(ю╩)╦╕ аЗюггр ╪Ж ╬Ью╫: %s\n"
 
 #: build/spec.c:718
 #, c-format
 msgid "query of specfile %s failed, can't parse\n"
-msgstr "запрос файла спецификации %s не удался, невозможно разобрать файл\n"
+msgstr ""
+"%s spec фдюою╩ аЗюгго╢б╣╔ ╫гфпгъ╫ю╢о╢ы, фдюою╩ цЁ╦╝(parse)гр ╪Ж ╬Ь╫ю╢о╢ы\n"
 
 #: build/spec.c:774
 #, fuzzy, c-format
 msgid "Query specfile for platform(s): %s\n"
-msgstr "Платформы для сборки: %s\n"
+msgstr "╦Яг╔╢К╩С(target) гц╥╖фШю╦╥н а╕юш аъ: %s\n"
 
 #: lib/cpio.c:248
 #, c-format
 msgid "(error 0x%x)"
-msgstr "(ошибка 0x%x)"
+msgstr "(©ю╥Ы 0x%x)"
 
 #: lib/cpio.c:251
 msgid "Bad magic"
-msgstr "Неверный magic"
+msgstr "юъ╦Ь╣х magic ют╢о╢ы"
 
 #: lib/cpio.c:252
 msgid "Bad/unreadable  header"
-msgstr "Неверный/нечитаемый заголовок"
+msgstr "юъ╦Ь╣х/юпю╩ ╪Ж ╬Ь╢б гЛ╢Уют╢о╢ы"
 
 #: lib/cpio.c:274
 msgid "Header size too big"
-msgstr "Заголовок слишком велик"
+msgstr "гЛ╢Уюг е╘╠Б╟║ Ёй╧╚ е╝╢о╢ы"
 
 #: lib/cpio.c:275
 msgid "Unknown file type"
-msgstr "Неизвестный тип файла"
+msgstr "╬к ╪Ж ╬Ь╢б фдюо ю╞гЭют╢о╢ы"
 
 #: lib/cpio.c:276
 msgid "Missing hard link(s)"
-msgstr "Отсутствует жесткая ссылка"
+msgstr "го╣Е ╦╣е╘╦╕ цёю╩ ╪Ж ╬Ь╫ю╢о╢ы"
 
 #: lib/cpio.c:277
 #, fuzzy
 msgid "File digest mismatch"
-msgstr "контрольные MD5-суммы не совпадают"
+msgstr "MD5 гу╟Х╟║ юод║гоаЖ ╬й╫ю╢о╢ы"
 
 #: lib/cpio.c:278
 msgid "Internal error"
-msgstr "Внутренняя ошибка"
+msgstr "Ё╩╨н ©ю╥Ы"
 
 #: lib/cpio.c:279
 msgid "Archive file not in header"
-msgstr "Файл архива не найден в заголовке пакета"
+msgstr "гЛ╢У©║ ╬фд╚юл╨Й фдюоюл ╬Ь╫ю╢о╢ы"
 
 #: lib/cpio.c:292
 msgid " failed - "
-msgstr "не удалось - "
+msgstr " ╫гфпгт - "
 
 #: lib/depends.c:299
 #, fuzzy, c-format
 msgid "package %s was already added, skipping %s\n"
-msgstr "пакет %s уже был добавлен, заменяется %s\n"
+msgstr "%s фпе╟аЖ╢б юл╧л ╪Ёд║╣г╬Н юж╫ю╢о╢ы"
 
 #: lib/depends.c:313
-#, c-format
+#, fuzzy, c-format
 msgid "package %s was already added, replacing with %s\n"
-msgstr "пакет %s уже был добавлен, заменяется %s\n"
+msgstr "%s фпе╟аЖ╢б юл╧л ╪Ёд║╣г╬Н юж╫ю╢о╢ы"
 
 #: lib/depends.c:420
 #, fuzzy, c-format
 msgid "   upgrade erases %s\n"
-msgstr "ни один из пакетов не требует %s\n"
+msgstr "%s(ю╩)╦╕ гй©Д╥н го╢б фпе╟аЖ╟║ ╬Ь╫ю╢о╢ы\n"
 
 #: lib/depends.c:490
 #, c-format
@@ -1411,12 +1396,12 @@ msgstr ""
 
 #: lib/depends.c:591
 msgid "(cached)"
-msgstr "(кэширован)"
+msgstr ""
 
 #: lib/depends.c:606
 #, fuzzy
 msgid "(function probe)"
-msgstr "(rpmrc provides)"
+msgstr "%s: %-45s ©╧ (rpmrcюл а╕╟Ьгт)\n"
 
 #: lib/depends.c:625
 msgid "(user lookup)"
@@ -1429,79 +1414,82 @@ msgstr ""
 #: lib/depends.c:651
 #, fuzzy
 msgid "(access probe)"
-msgstr "(rpmrc provides)"
+msgstr "%s: %-45s ©╧ (rpmrcюл а╕╟Ьгт)\n"
 
 #: lib/depends.c:673
 #, fuzzy
 msgid "(mtab probe)"
-msgstr "(rpmrc provides)"
+msgstr "%s: %-45s ©╧ (rpmrcюл а╕╟Ьгт)\n"
 
 #: lib/depends.c:728
 #, fuzzy
 msgid "(diskspace probe)"
-msgstr "(rpmrc provides)"
+msgstr "%s: %-45s ©╧ (rpmrcюл а╕╟Ьгт)\n"
 
 #: lib/depends.c:758
 #, fuzzy
 msgid "(digest probe)"
-msgstr "(rpmrc provides)"
+msgstr "%s: %-45s ©╧ (rpmrcюл а╕╟Ьгт)\n"
 
 #: lib/depends.c:771
 #, fuzzy
 msgid "(gnupg probe)"
-msgstr "(rpmrc provides)"
+msgstr "%s: %-45s ©╧ (rpmrcюл а╕╟Ьгт)\n"
 
 #: lib/depends.c:784
 #, fuzzy
 msgid "(macro probe)"
-msgstr "(rpmrc provides)"
+msgstr "%s: %-45s ©╧ (rpmrcюл а╕╟Ьгт)\n"
 
 #: lib/depends.c:812
 #, fuzzy
 msgid "(envvar probe)"
-msgstr "(rpmrc provides)"
+msgstr "%s: %-45s ©╧ (rpmrcюл а╕╟Ьгт)\n"
 
 #: lib/depends.c:839
 #, fuzzy
 msgid "(running probe)"
-msgstr "(rpmrc provides)"
+msgstr "%s: %-45s ©╧ (rpmrcюл а╕╟Ьгт)\n"
 
 #: lib/depends.c:852
 #, fuzzy
 msgid "(sysinfo provides)"
-msgstr "(rpmlib provides)"
+msgstr "%s: %-45s ©╧ (rpmlibюл а╕╟Ьгт)\n"
 
 #: lib/depends.c:872
+#, fuzzy
 msgid "(rpmlib provides)"
-msgstr "(rpmlib provides)"
+msgstr "%s: %-45s ©╧ (rpmlibюл а╕╟Ьгт)\n"
 
 #: lib/depends.c:888
 #, fuzzy
 msgid "(cpuinfo provides)"
-msgstr "(rpmlib provides)"
+msgstr "%s: %-45s ©╧ (rpmlibюл а╕╟Ьгт)\n"
 
 #: lib/depends.c:904
 #, fuzzy
 msgid "(getconf provides)"
-msgstr "(rpmlib provides)"
+msgstr "%s: %-45s ©╧ (rpmlibюл а╕╟Ьгт)\n"
 
 #: lib/depends.c:920
 #, fuzzy
 msgid "(uname provides)"
-msgstr "(added provide)"
+msgstr "%s: %-45s ©╧ (а╕╟Ьюл цъ╟║╣й)\n"
 
 #: lib/depends.c:952
 #, fuzzy
 msgid "(soname provides)"
-msgstr "(added provide)"
+msgstr "%s: %-45s ©╧ (а╕╟Ьюл цъ╟║╣й)\n"
 
 #: lib/depends.c:979
+#, fuzzy
 msgid "(db files)"
-msgstr "(db files)"
+msgstr "юъ╦Ь╣х db фдюо %s\n"
 
 #: lib/depends.c:992
+#, fuzzy
 msgid "(db provides)"
-msgstr "(db provides)"
+msgstr "%s: %-45s ©╧ (db╟║ а╕╟Ьгт)\n"
 
 #: lib/depends.c:1022
 msgid "(hint skipped)"
@@ -1510,16 +1498,16 @@ msgstr ""
 #: lib/depends.c:1476
 #, c-format
 msgid "ignore package name relation(s) [%d]\t%s -> %s\n"
-msgstr "игнорировать зависимост(и) имён пакета(ов) [%d]\t%s -> %s\n"
+msgstr "╢ыю╫╟З ╟Э╥ц╣х фпе╟аЖ юл╦╖ю╩ ╧╚╫цгу╢о╢ы [%d]\t%s -> %s\n"
 
 #: lib/depends.c:1604
-#, c-format
+#, fuzzy, c-format
 msgid "removing %s \"%s\" from tsort relations.\n"
-msgstr "удаляется %s \"%s\" из сортированных связей.\n"
+msgstr "tsort ╟Э╟Х©║╪╜ %s-%s-%s \"%s\"(ю╩)╦╕ ╩Ха╕гу╢о╢ы.\n"
 
 #: lib/depends.c:1899
 msgid "========== recording tsort relations\n"
-msgstr "========== запись упорядоченных зависимостей\n"
+msgstr "========== tsort ╟Э╟Х╦╕ ╠Б╥о(record)гу╢о╢ы\n"
 
 #: lib/depends.c:2020
 #, fuzzy
@@ -1527,158 +1515,159 @@ msgid ""
 "========== tsorting packages (order, #predecessors, #succesors, tree, "
 "Ldepth, Rbreadth)\n"
 msgstr ""
-"========== сортировка пакетов (очередность, #predecessors, #succesors, "
-"дерево, глубина)\n"
+"========== фпе╟аЖ╦╕ tsort гу╢о╢ы (╪Ь╪╜, #╪╠юсюз, #хдюсюз, ф╝╦╝, ╠Мюл"
+"[depth])\n"
 
 #: lib/depends.c:2111
 #, fuzzy, c-format
 msgid "========== successors only (%d bytes)\n"
-msgstr "========== только последователи (в порядке представления)\n"
+msgstr "========== хдюсюз╦╦ [successors only] (г╔гЖ ╪Ь)\n"
 
 #: lib/depends.c:2184
 msgid "LOOP:\n"
-msgstr "ЦИКЛ:\n"
+msgstr "╥Гга(LOOP):\n"
 
 #: lib/depends.c:2215
 msgid "========== continuing tsort ...\n"
-msgstr "========== продолжение упорядочения ...\n"
+msgstr "========== tsort╦╕ аЬгЮгу╢о╢ы...\n"
 
 #: lib/depends.c:2220
 #, c-format
 msgid "rpmtsOrder failed, %d elements remain\n"
-msgstr "ошибка rpmtsOrder, осталось %d элементов\n"
+msgstr ""
 
 #: lib/formats.c:44 lib/formats.c:76 lib/formats.c:111 lib/formats.c:189
 #: lib/formats.c:780
 msgid "(invalid type)"
-msgstr "(неправильный тип)"
+msgstr "(╨нюШгугя е╦ют)"
 
 #: lib/formats.c:178
 msgid "(not base64)"
-msgstr "(не base64)"
+msgstr "(base64╟║ ╬ф╢у╢о╢ы)"
 
 #: lib/formats.c:214 lib/formats.c:668
 msgid "(not a blob)"
-msgstr "(not a blob)"
+msgstr "(BLOB[Binary Large OBject]юл ╬ф╢у╢о╢ы)"
 
 #: lib/formats.c:370
 #, fuzzy
 msgid "(invalid xml type)"
-msgstr "(неправильный тип)"
+msgstr "(╨нюШгугя е╦ют)"
 
 #: lib/formats.c:584
 #, fuzzy
 msgid "(invalid yaml type)"
-msgstr "(неправильный тип)"
+msgstr "(╨нюШгугя е╦ют)"
 
 #: lib/formats.c:693
+#, fuzzy
 msgid "(not an OpenPGP signature)"
-msgstr "(не подпись формата OpenPGP)"
+msgstr "╬Н╤╟гя PGP ╪╜╦М╣╣ ╟к╩ГгоаЖ ╬й╫ю╢о╢ы"
 
 #: lib/fs.c:80
 #, c-format
 msgid "mntctl() failed to return size: %s\n"
-msgstr "mntctl() не возвратил значение размера fugger: %s\n"
+msgstr "mntctl()©║╪╜ е╘╠Б╦╕ ╧щх╞го╢б╣╔ ╫гфпгт: %s\n"
 
 #: lib/fs.c:95
 #, c-format
 msgid "mntctl() failed to return mount points: %s\n"
-msgstr "mntctl() не возвратил значение размера fugger: %s\n"
+msgstr "mntctl()©║╪╜ ╦╤©Нф╝гр аЖа║ю╩ ╧щх╞го╢б╣╔ ╫гфпгт: %s\n"
 
 #: lib/fs.c:115 lib/fs.c:218 lib/fs.c:342
 #, c-format
 msgid "failed to stat %s: %s\n"
-msgstr "невозможно получить информацию о %s: %s\n"
+msgstr "%sюг ╩Себ(stat)╦╕ г╔╫цго╢б╣╔ ╫гфпгт: %s\n"
 
 #: lib/fs.c:160 rpmio/url.c:556
 #, c-format
 msgid "failed to open %s: %s\n"
-msgstr "невозможно открыть %s: %s\n"
+msgstr "%s(ю╩)╦╕ ©╘╢б╣╔ ╫гфпгт: %s\n"
 
 #: lib/fs.c:240
 #, fuzzy, c-format
 msgid "%5d 0x%04x %s %s\n"
-msgstr "Файл%5d: %07o %s.%s\t %s\n"
+msgstr "фдюо%5d: %07o %s.%s\t %s\n"
 
 #: lib/fs.c:365
 #, c-format
 msgid "file %s is on an unknown device\n"
-msgstr "файл %s - на неизвестном устройстве\n"
+msgstr "%s фдюою╨ ╬к ╪Ж ╬Ь╢б юЕд║ ╩С©║ юж╫ю╢о╢ы\n"
 
 #: lib/fsm.c:358
 #, fuzzy
 msgid "========== Directories not explicitly included in package:\n"
-msgstr "========= Каталоги, которые не включены в пакет явно:\n"
+msgstr "========= фпе╟аЖ©║ ╣П╥╨еД╦╝╟║ фВгт╣г╬Н южаЖ ╬йю╫:\n"
 
 #: lib/fsm.c:361
-#, c-format
+#, fuzzy, c-format
 msgid "%10d %s\n"
-msgstr "%10d %s\n"
+msgstr "%9d %s\n"
 
 #: lib/fsm.c:805
 #, c-format
 msgid "user %s does not exist - using root\n"
-msgstr "пользователь %s не существует - используется root\n"
+msgstr "%s ╩Г©Кюз╟║ а╦юГгоаЖ ╬й╫ю╢о╢ы - root╦╕ юл©Кгу╢о╢ы\n"
 
 #: lib/fsm.c:813
 #, c-format
 msgid "group %s does not exist - using root\n"
-msgstr "группа %s не существует - используется root\n"
+msgstr "%s ╠в╥Люл а╦юГгоаЖ ╬й╫ю╢о╢ы - root╦╕ юл©Кгу╢о╢ы\n"
 
 #: lib/fsm.c:1416
 #, fuzzy, c-format
 msgid "%s directory created with perms %04o, no context.\n"
-msgstr "каталог %s создан с правами доступа %04o.\n"
+msgstr "%2$04oюг гЦ╟║╠г(perms)ю╩ ╟║аЬ %1$s ╣П╥╨еД╦╝╟║ ╩Щ╪╨╣г╬З╫ю╢о╢ы.\n"
 
 #: lib/fsm.c:1420
 #, fuzzy, c-format
 msgid "%s directory created with perms %04o, context %s.\n"
-msgstr "каталог %s создан с правами доступа %04o.\n"
+msgstr "%2$04oюг гЦ╟║╠г(perms)ю╩ ╟║аЬ %1$s ╣П╥╨еД╦╝╟║ ╩Щ╪╨╣г╬З╫ю╢о╢ы.\n"
 
 #: lib/fsm.c:1729
 #, c-format
 msgid "archive file %s was not found in header file list\n"
-msgstr "файл архива %s не найден в списке файлов заголовка\n"
+msgstr "гЛ╢У фдюо ╦Я╥о©║╪╜ ╬фд╚юл╨Й фдюо %s(ю╩)╦╕ цёю╩ ╪Ж ╬Ь╫ю╢о╢ы\n"
 
 #: lib/fsm.c:1879 lib/fsm.c:2003
 #, c-format
 msgid "%s saved as %s\n"
-msgstr "%s сохранен как %s\n"
+msgstr "%s(юл)╟║ %s(ю╦)╥н юЗюЕ╣г╬З╫ю╢о╢ы\n"
 
 #: lib/fsm.c:2030
 #, c-format
 msgid "%s rmdir of %s failed: Directory not empty\n"
-msgstr "%s невозможно удалить %s: каталог не пуст\n"
+msgstr "%s %s ╣П╥╨еД╦╝ ╩Ха╕©║ ╫гфпгт: ╨С ╣П╥╨еД╦╝╟║ ╬ф╢у╢о╢ы\n"
 
 #: lib/fsm.c:2036
 #, c-format
 msgid "%s rmdir of %s failed: %s\n"
-msgstr "%s ошибка удаления каталога %s: %s\n"
+msgstr "%s %s ╣П╥╨еД╦╝ ╩Ха╕©║ ╫гфпгт: %s\n"
 
 #: lib/fsm.c:2051
 #, fuzzy, c-format
 msgid " %s: unlink of %s failed: %s\n"
-msgstr "%s невозможно удалить %s: %s\n"
+msgstr "%s %s ╦╣е╘ гьа╕©║ ╫гфпгт: %s\n"
 
 #: lib/fsm.c:2076
 #, c-format
 msgid "%s created as %s\n"
-msgstr "%s создан как %s\n"
+msgstr "%s(юл)╟║ %s(ю╦)╥н ╩Щ╪╨╣г╬З╫ю╢о╢ы\n"
 
 #: lib/manifest.c:152
 #, fuzzy, c-format
 msgid "adding %d args from manifest.\n"
-msgstr "добавляется %d записей в индекс %s\n"
+msgstr "%2$s юн╣╕╫╨©║ %1$d гв╦Я╣И(entries)ю╩ цъ╟║гу╢о╢ы.\n"
 
 #: lib/misc.c:41
 #, c-format
 msgid "cannot create %%%s %s\n"
-msgstr "невозможно создать %%%s %s\n"
+msgstr "%%%s %s(ю╩)╦╕ ╩Щ╪╨гр ╪Ж ╬Ь╫ю╢о╢ы\n"
 
 #: lib/misc.c:187 lib/misc.c:192 lib/misc.c:198
 #, c-format
 msgid "error creating temporary file %s\n"
-msgstr "ошибка создания временного файла %s\n"
+msgstr "юс╫ц фдюо %s(ю╩)╦╕ ╩Щ╪╨го╢б ╣╣аъ ©ю╥Ы╟║ ╧ъ╩Щгъ╫ю╢о╢ы\n"
 
 #: lib/package.c:362
 #, c-format
@@ -1722,10 +1711,9 @@ msgstr ""
 
 #: lib/package.c:545 lib/package.c:585 lib/package.c:929 lib/package.c:955
 #: lib/package.c:987
-#, fuzzy, c-format
+#, c-format
 msgid "only V3 and V4 signatures can be verified, skipping V%u signature\n"
 msgstr ""
-"только подписи версии 3 могут быть проверены, пропускается подпись версии %u"
 
 #: lib/package.c:673
 #, c-format
@@ -1759,32 +1747,32 @@ msgstr ""
 
 #: lib/package.c:799
 msgid "packaging version 1 is not supported by this version of RPM\n"
-msgstr "пакеты версии 1 не поддерживаются этой версией RPM\n"
+msgstr "юл RPM ╧ЖюЭю╨ фпе╟б║ ╧ЖюЭ '1' ю╩ аЖ©ЬгоаЖ ╬й╫ю╢о╢ы\n"
 
 #: lib/package.c:808
 msgid ""
 "only packaging with major numbers <= 4 is supported by this version of RPM\n"
-msgstr "эта версия RPM поддерживает только пакеты версии <= 4\n"
+msgstr "юл RPM ╧ЖюЭю╨ аж ╧Ьхё(major number)╟║ <= 4 юн фпе╟б║ ╦╦ю╩ аЖ©Ьгу╢о╢ы\n"
 
 #: lib/package.c:820 lib/rpmchecksig.c:236 lib/rpmchecksig.c:773
 #, fuzzy, c-format
 msgid "%s: rpmReadSignature failed: %s"
-msgstr "%s: ошибка rpmReadSignature\n"
+msgstr "%s: rpmReadSignatureюл ╫гфпгъ╫ю╢о╢ы\n"
 
 #: lib/package.c:827 lib/rpmchecksig.c:243 lib/rpmchecksig.c:781
 #, c-format
 msgid "%s: No signature available\n"
-msgstr "%s: Подпись недоступна\n"
+msgstr "%s: ю╞х©гя ╪╜╦Мюл ╬Ь╫ю╢о╢ы\n"
 
 #: lib/package.c:894
 #, fuzzy, c-format
 msgid "%s: headerRead failed: %s"
-msgstr "%s: ошибка headerRead\n"
+msgstr "%s: readLeadюл ╫гфпгъ╫ю╢о╢ы\n"
 
 #: lib/package.c:1002 lib/rpmchecksig.c:118 lib/rpmchecksig.c:689
 #, c-format
 msgid "%s: Fread failed: %s\n"
-msgstr "%s: ошибка Fread: %s\n"
+msgstr "%s: Freadюл ╫гфпгъ╫ю╢о╢ы: %s\n"
 
 #: lib/poptALL.c:285
 msgid "FTS_COMFOLLOW: follow command line symlinks"
@@ -1797,12 +1785,11 @@ msgstr ""
 #: lib/poptALL.c:289
 #, fuzzy
 msgid "FTS_NOCHDIR: don't change directories"
-msgstr "не менять каталоги"
+msgstr "%s ╣П╥╨еД╦╝╦╕ ╩Щ╪╨гу╢о╢ы\n"
 
 #: lib/poptALL.c:291
-#, fuzzy
 msgid "FTS_NOSTAT: don't get stat info"
-msgstr "не запрашивать информацию о файлах"
+msgstr ""
 
 #: lib/poptALL.c:293
 msgid "FTS_PHYSICAL: physical walk"
@@ -1813,18 +1800,17 @@ msgid "FTS_SEEDOT: return dot and dot-dot"
 msgstr ""
 
 #: lib/poptALL.c:297
-#, fuzzy
 msgid "FTS_XDEV: don't cross devices"
-msgstr "не пересекать границы файловых систем"
+msgstr ""
 
 #: lib/poptALL.c:299
-#, fuzzy
 msgid "FTS_WHITEOUT: return whiteout information"
-msgstr "не возвращать информацию"
+msgstr ""
 
 #: lib/poptALL.c:309 lib/poptI.c:221 lib/poptQV.c:296 lib/poptQV.c:343
+#, fuzzy
 msgid "add suggested packages to transaction"
-msgstr "добавить предложенные пакеты в транзакцию"
+msgstr "╪Ёд║ Ё╩©Кю╩ еКгь фпе╟аЖ╦╕ аЗюг/╟каУ гу╢о╢ы"
 
 #: lib/poptALL.c:312 lib/poptI.c:224
 msgid "use anaconda \"presentation order\""
@@ -1836,12 +1822,12 @@ msgstr ""
 
 #: lib/poptALL.c:318 lib/poptI.c:230
 msgid "do not suggest missing dependency resolution(s)"
-msgstr "не предлагать разрешение пропущенной(ых) зависимости(ей)"
+msgstr ""
 
 #: lib/poptALL.c:321 lib/poptI.c:233
 #, fuzzy
 msgid "do not check added package conflicts"
-msgstr "не исполнять никаких сценариев пакета(ов)"
+msgstr "фпе╟аЖ а╕╟е╫ц ╬Н╤╟гя а╕╟е╟Э╥ц ╫╨е╘╦Ёф╝╣╣ ╫ггЮгоаЖ ╬й╫ю╢о╢ы"
 
 #: lib/poptALL.c:324 lib/poptI.c:236
 msgid "ignore added package requires on symlink targets"
@@ -1854,108 +1840,113 @@ msgstr ""
 #: lib/poptALL.c:330 lib/poptI.c:242
 #, fuzzy
 msgid "ignore added package requires on file parent directory"
-msgstr "сохранить в подкаталоге подлежащие удалению файлы пакета"
+msgstr "го╨н-╣П╥╨еД╦╝╥н юл╦╖ ╨╞╟Ф╫ц ╩Ха╕╣х фпе╟аЖ фдюою╩ юЗюЕгу╢о╢ы"
 
 #: lib/poptALL.c:333 lib/poptI.c:245
 #, fuzzy
 msgid "do not check added package requires"
-msgstr "не исполнять никаких сценариев пакета(ов)"
+msgstr "фпе╟аЖ ╫╨е╘╦Ёф╡╦╢(scriptlet)ю╩ ╫ггЮгоаЖ ╬й╫ю╢о╢ы"
 
 #: lib/poptALL.c:336 lib/poptI.c:248
 #, fuzzy
 msgid "ignore added package upgrades"
-msgstr "ни один из пакетов не предоставляет %s\n"
+msgstr "%s(ю╩)╦╕ а╕╟Ьго╢б фпе╟аЖ╟║ ╬Ь╫ю╢о╢ы\n"
 
 #: lib/poptALL.c:359
 msgid "predefine MACRO with value EXPR"
-msgstr "преопределить MACRO со значением EXPR"
+msgstr ""
 
 #: lib/poptALL.c:360 lib/poptALL.c:363
 msgid "'MACRO EXPR'"
-msgstr "'MACRO EXPR'"
+msgstr ""
 
 #: lib/poptALL.c:362
 msgid "define MACRO with value EXPR"
-msgstr "определить MACRO со значением EXPR"
+msgstr ""
 
 #: lib/poptALL.c:365
+#, fuzzy
 msgid "print macro expansion of EXPR"
-msgstr "вывести значение макроса EXPR"
+msgstr "<г╔гЖ╫д>+ юг ╦ее╘╥н х╝юЕю╩ цБ╥бгу╢о╢ы"
 
 #: lib/poptALL.c:366
 msgid "'EXPR'"
-msgstr "'EXPR'"
+msgstr ""
 
 #: lib/poptALL.c:368 lib/poptALL.c:389 lib/poptALL.c:393
+#, fuzzy
 msgid "read <FILE:...> instead of default file(s)"
-msgstr "использовать <FILE:...> вместо файла(ов) по умолчанию"
+msgstr "╠Б╨╩ ╦ее╘╥н фдюо ╢К╫е <фдюо:..>ю╩ юп╬Н╣Иют╢о╢ы"
 
 #: lib/poptALL.c:369 lib/poptALL.c:390 lib/poptALL.c:394
 msgid "<FILE:...>"
-msgstr "<FILE:...>"
+msgstr ""
 
 #: lib/poptALL.c:371 lib/poptQV.c:326
 #, fuzzy
 msgid "specify target platform"
-msgstr "переопределить целевую платформу"
+msgstr "╦Яг╔╢К╩С(target) гц╥╖фШю╩ ╠Ёц╪(override)гу╢о╢ы"
 
 #: lib/poptALL.c:379 lib/poptALL.c:413
 msgid "disable use of libio(3) API"
-msgstr "запретить использование libio(3) API"
+msgstr "libio(3) APIюг ╩Г©Кю╩ гьа╕гу╢о╢ы"
 
 #: lib/poptALL.c:385
+#, fuzzy
 msgid "send stdout to CMD"
-msgstr "послать стандартный вывод в CMD"
+msgstr "г╔аьцБ╥бю╩ <╦М╥и>ю╦╥н ╨╦Ёю╢о╢ы"
 
 #: lib/poptALL.c:386
 msgid "CMD"
-msgstr "CMD"
+msgstr ""
 
 #: lib/poptALL.c:397
+#, fuzzy
 msgid "use ROOT as top level directory"
-msgstr "использовать ROOT как корневой каталог"
+msgstr "<╣П╥╨еД╦╝>╦╕ цж╩Сю╖ ╣П╥╨еД╦╝╥н ╩Г©Кгу╢о╢ы"
 
 #: lib/poptALL.c:398
 msgid "ROOT"
-msgstr "ROOT"
+msgstr ""
 
 #: lib/poptALL.c:401
 msgid "display known query tags"
-msgstr "отобразить известные ключи запроса"
+msgstr "аЗюг еб╠в╦╕ ╨╦©╘ащ╢о╢ы"
 
 #: lib/poptALL.c:403
 msgid "display final rpmrc and macro configuration"
-msgstr "показать текущее значение rpmrc и макросов"
+msgstr "гЖюГ ╪Ёа╓╣г╬Н юж╢б rpmrcюг Ё╩©К╟З ╦ее╘╥н╦╕ ╨╦©╘ащ╢о╢ы"
 
 #: lib/poptALL.c:405
 msgid "provide less detailed output"
-msgstr "выводить минимум сообщений"
+msgstr "юз╪╪гя цБ╥бю╩ а╕╟Ьгу╢о╢ы"
 
 #: lib/poptALL.c:407
 msgid "provide more detailed output"
-msgstr "выводить более детальные сообщения"
+msgstr "╬фаж ╩С╪╪гя цБ╥бю╩ а╕╟Ьгу╢о╢ы"
 
 #: lib/poptALL.c:409
 msgid "print the version of rpm being used"
-msgstr "вывести номер версии этой прграммы"
+msgstr "гЖюГ ╩Г©К╣г╟М юж╢б rpm ╧ЖюЭю╩ г╔╫цгу╢о╢ы"
 
 #: lib/poptALL.c:420
 msgid "debug cpio payloads"
 msgstr ""
 
 #: lib/poptALL.c:424
+#, fuzzy
 msgid "debug payload file state machine"
-msgstr "отладка машины состояния присоединенных файлов "
+msgstr "ддг╩емюг ╩Себ(state) фдюою╩ ╣П╧Ж╠в гу╢о╢ы"
 
 #: lib/poptALL.c:426
 #, fuzzy
 msgid "use threads for file state machine"
-msgstr "отладка машины состояния присоединенных файлов "
+msgstr "ддг╩емюг ╩Себ(state) фдюою╩ ╣П╧Ж╠в гу╢о╢ы"
 
 #: lib/poptALL.c:428
 #, fuzzy
 msgid "debug FTP/HTTP data stream"
-msgstr "отладка протокола потока данных"
+msgstr "╣╔юлем ╫╨ф╝╦╡ га╥неДдщю╩ ╣П╧Ж╠в гу╢о╢ы"
 
 #: lib/poptALL.c:430
 msgid "debug argv collections"
@@ -1964,24 +1955,26 @@ msgstr ""
 #: lib/poptALL.c:432
 #, fuzzy
 msgid "debug WebDAV data stream"
-msgstr "отладка протокола потока данных"
+msgstr "╣╔юлем ╫╨ф╝╦╡ га╥неДдщю╩ ╣П╧Ж╠в гу╢о╢ы"
 
 #: lib/poptALL.c:439
+#, fuzzy
 msgid "debug option/argument processing"
-msgstr "отладка обработки параметров/аргументов"
+msgstr "юн╪Ж цЁ╦╝╟За╓ (%d) ╣╣аъ Ё╩╨н ©ю╥Ы╟║ ╧ъ╩Щгъ╫ю╢о╢ы :-(\n"
 
 #: lib/poptALL.c:444
+#, fuzzy
 msgid "debug package state machine"
-msgstr "отладка машины состояния пакетов"
+msgstr "ддг╩емюг ╩Себ(state) фдюою╩ ╣П╧Ж╠в гу╢о╢ы"
 
 #: lib/poptALL.c:446
 #, fuzzy
 msgid "use threads for package state machine"
-msgstr "отладка машины состояния пакетов"
+msgstr "ддг╩емюг ╩Себ(state) фдюою╩ ╣П╧Ж╠в гу╢о╢ы"
 
 #: lib/poptALL.c:460
 msgid "debug rpmio I/O"
-msgstr "отладка процесса ввода/вывода rpmio"
+msgstr "rpmio ют/цБ╥бю╩ ╣П╧Ж╠в гу╢о╢ы"
 
 #: lib/poptALL.c:472
 msgid "debug tar payloads"
@@ -1989,253 +1982,260 @@ msgstr ""
 
 #: lib/poptALL.c:476
 msgid "debug URL cache handling"
-msgstr "отладка обработки URL кэш"
+msgstr "URL дЁ╫ц гз╣И╦╣ю╩ ╣П╧Ж╠в гу╢о╢ы"
 
 #: lib/poptALL.c:561
 #, c-format
 msgid "%s: option table misconfigured (%d)\n"
-msgstr "%s: таблица параметров неправильно настроена (%d)\n"
+msgstr ""
 
 #: lib/poptI.c:71
 msgid "exclude paths must begin with a /"
-msgstr "исключения должны начинаться с /"
+msgstr "а╕©э╫цеЁ ╟Ф╥н╢б ╧щ╣Е╫ц '/' ╥н ╫цюшгь╬ъ гу╢о╢ы"
 
 #: lib/poptI.c:85
+#, fuzzy
 msgid "Option --relocate needs /old/path=/new/path argument"
-msgstr ""
+msgstr "      --relocate <юлюЭ╟Ф╥н>=<╩У╥н©Н╟Ф╥н>"
 
 #: lib/poptI.c:87
 msgid "relocations must begin with a /"
-msgstr "перемещения должны начинаться с /"
+msgstr "юГ╧Хд║╫ц©║╢б ╧щ╣Е╫ц '/' ╥н ╫цюшгь╬ъ гу╢о╢ы"
 
 #: lib/poptI.c:90
 msgid "relocations must contain a ="
-msgstr "перемещения должны содержать ="
+msgstr "юГ╧Хд║╫ц©║╢б ╧щ╣Е╫ц '=' ю╩ фВгтгь╬ъ гу╢о╢ы"
 
 #: lib/poptI.c:93
 msgid "relocations must have a / following the ="
-msgstr "перемещения должны иметь / после ="
+msgstr "юГ╧Хд║╫ц©║╢б ╧щ╣Е╫ц '=' ╣з©║ '/' ╟║ ©м╬ъ гу╢о╢ы"
 
 #: lib/poptI.c:111
 #, fuzzy
 msgid "Option --rbexclude needs transaction id argument(s)"
-msgstr "откат требует аргумент времени"
+msgstr "      --relocate <юлюЭ╟Ф╥н>=<╩У╥н©Н╟Ф╥н>"
 
 #: lib/poptI.c:142
 #, fuzzy
 msgid "Option --rollback needs a time/date stamp argument"
-msgstr "откат требует аргумент времени"
+msgstr "╥я╧И(rollback)юг юн╪Ж╢б ╫ц╟ё/Ё╞б╔ ╫╨ефга ют╢о╢ы"
 
 #: lib/poptI.c:146
-#, fuzzy, c-format
+#, c-format
 msgid "Rollback goal:  %-24.24s (0x%08x)\n"
-msgstr "Откат пакетов (+%d/-%d) на %-24.24s (0x%08x):\n"
+msgstr ""
 
 #: lib/poptI.c:150
 msgid "malformed rollback time/date stamp argument"
-msgstr "неправильный формат времени отката"
+msgstr "╥я╧И(rollback)юг юн╪Жюн ╫ц╟ё/Ё╞б╔ ╫╨ефга╟║ ©ц╧ы╦ёаЖ ╬й╫ю╢о╢ы"
 
 #: lib/poptI.c:157
 #, fuzzy
 msgid "arbgoal takes a time/date stamp argument"
-msgstr "откат требует аргумент времени"
+msgstr "╥я╧И(rollback)юг юн╪Ж╢б ╫ц╟ё/Ё╞б╔ ╫╨ефга ют╢о╢ы"
 
 #: lib/poptI.c:164
 #, fuzzy
 msgid "malformed arbgoal time/date stamp argument"
-msgstr "неправильный формат времени отката"
+msgstr "╥я╧И(rollback)юг юн╪Жюн ╫ц╟ё/Ё╞б╔ ╫╨ефга╟║ ©ц╧ы╦ёаЖ ╬й╫ю╢о╢ы"
 
 #: lib/poptI.c:253
 msgid "install all files, even configurations which might otherwise be skipped"
 msgstr ""
-"устанавливать все файлы, даже конфигурационные, которые могли бы быть "
-"пропущены"
+"ф╞а╓ фдюою╩ ╩Щ╥╚го╠Б ю╖гя ╪Ёа╓юл юШ©К╣х ╟Ф©Л©║╣╣, фпе╟аЖ ╬хюг ╦П╣Г фдюою╩ ╪Ё"
+"д║гу╢о╢ы"
 
 #: lib/poptI.c:257
 msgid ""
 "remove all packages which match <package> (normally an error is generated if "
 "<package> specified multiple packages)"
 msgstr ""
-"удалить все пакеты, совпадающие с <пакет> (обычно, если <пакет> "
-"соответствует нескольким пакетам, генерируется ошибка)"
+"<фпе╟аЖ> юл╦╖╟З юод║го╢б фпе╟аЖ╢б ╦П╣н а╕╟егу╢о╢ы (<фпе╟аЖ>©║ ©╘╥╞╟Ёюг фпе╟аЖ"
+"╦╕ ╣©╫ц©║ аЖа╓гр ╟Ф©Л©║╢б ©ю╥Ы╟║ ╧ъ╩Щгу╢о╢ы)"
 
 #: lib/poptI.c:263 lib/poptI.c:339
 msgid "do not execute package scriptlet(s)"
-msgstr "не исполнять никаких сценариев пакета(ов)"
+msgstr "фпе╟аЖ ╫╨е╘╦Ёф╡╦╢(scriptlet)ю╩ ╫ггЮгоаЖ ╬й╫ю╢о╢ы"
 
 #: lib/poptI.c:267
 #, fuzzy
 msgid "relocate files in non-relocatable package"
-msgstr "переместить файлы в неперемещаемом пакете"
+msgstr "юГ╧Хд║ ╠Б╢июл ╬Ь╢б фпе╟аЖюг фдюою╩ юГ╧Хд║го©╘ ╪Ёд║гу╢о╢ы"
 
 #: lib/poptI.c:271
 msgid "save erased package files by renaming into sub-directory"
-msgstr "сохранить в подкаталоге подлежащие удалению файлы пакета"
+msgstr "го╨н-╣П╥╨еД╦╝╥н юл╦╖ ╨╞╟Ф╫ц ╩Ха╕╣х фпе╟аЖ фдюою╩ юЗюЕгу╢о╢ы"
 
 #: lib/poptI.c:274
 msgid "erase (uninstall) package"
-msgstr "удалить (деинсталлировать) пакет"
+msgstr "фпе╟аЖ╦╕ (а╕╟е) ╩Ха╕гу╢о╢ы"
 
 #: lib/poptI.c:274
 msgid "<package>+"
-msgstr "<пакет>+"
+msgstr "<фпе╟аЖ>+"
 
 #: lib/poptI.c:277 lib/poptI.c:319
 #, fuzzy
 msgid "do not install configuration files"
-msgstr "показать все файлы конфигурации"
+msgstr "╦П╣Г ╪Ёа╓ фдюою╩ Ё╙©╜гу╢о╢ы"
 
 #: lib/poptI.c:280 lib/poptI.c:324
 msgid "do not install documentation"
-msgstr "не устанавливать документацию"
+msgstr "фпе╟аЖ©║ фВгт╣х ╧╝╪╜ фдюою╩ ╪Ёд║гоаЖ ╬й╫ю╢о╢ы"
 
 #: lib/poptI.c:282
 msgid "skip files with leading component <path> "
-msgstr "пропустить файлы в пути <путь>"
+msgstr "<╟Ф╥н>╥н ╫цюш╣г╢б фдюою╨ ╪Ёд║гоаЖ ╬й╫ю╢о╢ы "
 
 #: lib/poptI.c:283
 msgid "<path>"
-msgstr "<путь>"
+msgstr "<╟Ф╥н>"
 
 #: lib/poptI.c:287
 #, fuzzy
 msgid "detect file conflicts between packages"
-msgstr "переместить файлы в неперемещаемом пакете"
+msgstr "юГ╧Хд║ ╠Б╢июл ╬Ь╢б фпе╟аЖюг фдюою╩ юГ╧Хд║го©╘ ╪Ёд║гу╢о╢ы"
 
 #: lib/poptI.c:289
 msgid "short hand for --replacepkgs --replacefiles"
-msgstr "сокращение для --replacepkgs --replacefiles"
+msgstr "--replacepkgs ©м --replacefiles ©и╪гю╩ ╣©╫ц©║ ╩Г©Кгу╢о╢ы"
 
 #: lib/poptI.c:293
 msgid "upgrade package(s) if already installed"
-msgstr "обновить пакет(ы) если уже установлен"
+msgstr "╠Ба╦©║ ╪Ёд║╣х фпе╟аЖ╦╕ ╬В╠в╥╧юл╣Е гу╢о╢ы"
 
 #: lib/poptI.c:294 lib/poptI.c:312 lib/poptI.c:412
 msgid "<packagefile>+"
-msgstr "<файл пакета>+"
+msgstr "<фпе╟аЖфдюо>+"
 
 #: lib/poptI.c:296
 msgid "print hash marks as package installs (good with -v)"
-msgstr "выводить \"#\" по мере установки пакета (хорошо с -v)"
+msgstr ""
+"фпе╟аЖ ╪Ёд║╦╕ гь╫ц╦╤е╘(#)╥н г╔╫цгу╢о╢ы (-v ©и╪г╟З гт╡╡ ╩Г©Кго╢б ╟мюл аа╫ю╢о"
+"╢ы)"
 
 #: lib/poptI.c:300
 msgid "don't verify package architecture"
-msgstr "не проверять архитектуру пакета"
+msgstr "фпе╟аЖюг ╬фе╟еьцд╦╕ ╟к╩ГгоаЖ ╬й╫ю╢о╢ы"
 
 #: lib/poptI.c:303
 msgid "don't verify package operating system"
-msgstr "не проверять операционную систему пакета"
+msgstr "фпе╟аЖюг ©Н©╣ц╪а╕╦╕ ╟к╩ГгоаЖ ╬й╫ю╢о╢ы"
 
 #: lib/poptI.c:307
 msgid "don't check disk space before installing"
-msgstr "не проверять дисковое пространство перед установкой"
+msgstr "фпе╟аЖ╦╕ ╪Ёд║го╠Б юЭ©║ ╣П╫╨е╘ ╟Ь╟ёю╩ ╟к╩ГгоаЖ ╬й╫ю╢о╢ы"
 
 #: lib/poptI.c:309
 msgid "install documentation"
-msgstr "установить документацию"
+msgstr "фпе╟аЖ©║ фВгт╣х ╧╝╪╜ фдюою╩ ╪Ёд║гу╢о╢ы"
 
 #: lib/poptI.c:312
+#, fuzzy
 msgid "install package(s)"
-msgstr "установить пакет(ы)"
+msgstr "фпе╟аЖ╦╕ ╪Ёд║гу╢о╢ы"
 
 #: lib/poptI.c:315
 msgid "update the database, but do not modify the filesystem"
-msgstr "обновить базу данных, но не модифицировать файловую систему"
+msgstr "фдюо╫ц╫╨ешю╩ ╨╞╟ФгоаЖ ╬й╟М, ╣╔юлем╨ёюл╫╨╦╕ ╟╩╫егу╢о╢ы"
 
 #: lib/poptI.c:321
 msgid "do not verify package dependencies"
-msgstr "не проверять зависимости пакета"
+msgstr "фпе╟аЖюг юга╦╪╨ю╩ ╟к╩ГгоаЖ ╬й╫ю╢о╢ы"
 
 #: lib/poptI.c:327 lib/poptI.c:329 lib/poptQV.c:357 lib/poptQV.c:360
 #: lib/poptQV.c:362
 #, fuzzy
 msgid "don't verify file digests"
-msgstr "не проверять дайджест пакета(ов)"
+msgstr "фпе╟аЖюг юга╦╪╨ю╩ ╟к╩ГгоаЖ ╬й╫ю╢о╢ы"
 
 #: lib/poptI.c:331
 #, fuzzy
 msgid "don't install file security contexts"
-msgstr "показать все файлы конфигурации"
+msgstr "╦П╣Г ╪Ёа╓ фдюою╩ Ё╙©╜гу╢о╢ы"
 
 #: lib/poptI.c:335
 msgid "do not reorder package installation to satisfy dependencies"
-msgstr "не менять порядок установки пакетов для удовлетворения зависимостей"
+msgstr "юга╦╪╨юл юж╢б фпе╟аЖ╦╕ ╪Ёд║го╣╣╥о юГ©Д╠╦гоаЖ ╬й╫ю╢о╢ы"
 
 #: lib/poptI.c:343
 #, c-format
 msgid "do not execute %%pre scriptlet (if any)"
-msgstr "не исполнять  %%pre сценариев (если есть)"
+msgstr "%%pre ╫╨е╘╦Ёф╡╦╢(scriptlet)ю╩ ╫ггЮгоаЖ ╬й╫ю╢о╢ы (южю╩ ╟Ф©Л)"
 
 #: lib/poptI.c:346
 #, c-format
 msgid "do not execute %%post scriptlet (if any)"
-msgstr "не исполнять %%post сценариев (если есть)"
+msgstr "%%post ╫╨е╘╦Ёф╡╦╢(scriptlet)ю╩ ╫ггЮгоаЖ ╬й╫ю╢о╢ы (южю╩ ╟Ф©Л)"
 
 #: lib/poptI.c:349
 #, c-format
 msgid "do not execute %%preun scriptlet (if any)"
-msgstr "не исполнять %%preun сценариев (если есть)"
+msgstr "%%preun ╫╨е╘╦Ёф╡╦╢(scriptlet)ю╩ ╫ггЮгоаЖ ╬й╫ю╢о╢ы (южю╩ ╟Ф©Л)"
 
 #: lib/poptI.c:352
 #, c-format
 msgid "do not execute %%postun scriptlet (if any)"
-msgstr "не исполнять %%postun сценариев (если есть)"
+msgstr "%%postun ╫╨е╘╦Ёф╡╦╢(scriptlet)ю╩ ╫ггЮгоаЖ ╬й╫ю╢о╢ы (южю╩ ╟Ф©Л)"
 
 #: lib/poptI.c:362
 msgid "do not execute any scriptlet(s) triggered by this package"
-msgstr "не исполнять триггер-сценариев, взведенных этим пакетом"
+msgstr ""
+"юл фпе╟аЖ©║ юггь ╩Щ╪╨╣г╢б(triggered) ╬Н╤╟гя ╫╨е╘╦Ёф╡╦╢(scriptlet)╣╣ ╫ггЮгоаЖ "
+"╬й╫ю╢о╢ы"
 
 #: lib/poptI.c:365
 #, c-format
 msgid "do not execute any %%triggerprein scriptlet(s)"
-msgstr "не исполнять %%triggerprein сценариев"
+msgstr "╬Н╤╟гя %%triggerprein ╫╨е╘╦Ёф╡╦╢(scriptlet)╣╣ ╫ггЮгоаЖ ╬й╫ю╢о╢ы"
 
 #: lib/poptI.c:368
 #, c-format
 msgid "do not execute any %%triggerin scriptlet(s)"
-msgstr "не исполнять %%triggerin сценариев"
+msgstr "╬Н╤╟гя %%triggerin ╫╨е╘╦Ёф╡╦╢(scriptlet)╣╣ ╫ггЮгоаЖ ╬й╫ю╢о╢ы"
 
 #: lib/poptI.c:371
 #, c-format
 msgid "do not execute any %%triggerun scriptlet(s)"
-msgstr "не исполнять %%triggerun сценариев"
+msgstr "╬Н╤╟гя %%triggerun ╫╨е╘╦Ёф╡╦╢(scriptlet)╣╣ ╫ггЮгоаЖ ╬й╫ю╢о╢ы"
 
 #: lib/poptI.c:374
 #, c-format
 msgid "do not execute any %%triggerpostun scriptlet(s)"
-msgstr "не исполнять %%triggerpostun сценариев"
+msgstr "╬Н╤╟гя %%triggerpostun ╫╨е╘╦Ёф╡╦╢(scriptlet)╣╣ ╫ггЮгоаЖ ╬й╫ю╢о╢ы"
 
 #: lib/poptI.c:378
 msgid ""
 "upgrade to an old version of the package (--force on upgrades does this "
 "automatically)"
 msgstr ""
-"откат на более старую версию пакета (--force при обновлении делает это "
-"автоматически)"
+"юлюЭ ╧ЖюЭюг фпе╟аЖ╥н ╢ы©Н╠в╥╧юл╣Е гу╢о╢ы (--force ©и╪гю╩ ╩Г©К╫ц©║╢б юл ©и╪г"
+"юл юз╣©ю╦╥н юШ©К╣к╢о╢ы)"
 
 #: lib/poptI.c:382
 msgid "print percentages as package installs"
-msgstr "выводить процент готовности по мере установки пакета"
+msgstr "фпе╟аЖ ╪Ёд║╦╕ фш╪╬ф╝(%)╥н г╔╫цгу╢о╢ы"
 
 #: lib/poptI.c:384
 msgid "relocate the package to <dir>, if relocatable"
-msgstr "переместить пакет в <каталог>, если пакет это позволяет"
+msgstr ""
+"юГ╧Хд║ ╠Б╢июл юж╢б фпе╟аЖюг ╟Ф©Л, аЖа╓гя <╣П╥╨еД╦╝>╥н юГ╧Хд║го©╘ ╪Ёд║гу╢о╢ы"
 
 #: lib/poptI.c:385
 msgid "<dir>"
-msgstr "<каталог>"
+msgstr "<╣П╥╨еД╦╝>"
 
 #: lib/poptI.c:387
 msgid "relocate files from path <old> to <new>"
-msgstr "переместить файлы из пути <old> в <new>"
+msgstr "<юлюЭ╟Ф╥н>©║╪╜ <╩У╥н©Н╟Ф╥н>╥н фдюою╩ юГ╧Хд║ гу╢о╢ы"
 
 #: lib/poptI.c:388
 msgid "<old>=<new>"
-msgstr "<old>=<new>"
+msgstr "<юлюЭ╟Ф╥н>=<╩У╥н©Н╟Ф╥н>"
 
 #: lib/poptI.c:391
 msgid "save erased package files by repackaging"
-msgstr "сохранить подлежащие удалению файлы в новом пакете"
+msgstr "юГфпе╟б║(repackaging)ю╦╥н юнгь ╩Ха╕╣г╢б фпе╟аЖ фдюою╩ юЗюЕгу╢о╢ы"
 
 #: lib/poptI.c:394
 msgid "ignore file conflicts between packages"
@@ -2243,17 +2243,15 @@ msgstr ""
 
 #: lib/poptI.c:397
 msgid "reinstall if the package is already present"
-msgstr "переустановить, если пакет уже установлен"
+msgstr "фпе╟аЖ╟║ юл╧л ╪Ёд║╣г╬Н юж╢б ╟Ф©Л©║╣╣ ╪Ёд║гу╢о╢ы"
 
 #: lib/poptI.c:399
 msgid "deinstall new, reinstall old, package(s), back to <date>"
-msgstr ""
-"удалить новый(е) пакет(ы), переустановить старый(е) пакет(ы), обратно на "
-"указанную дату"
+msgstr "╩У╥н ╪Ёд║ ╩Ха╕, юлюЭ ╪Ёд║ юГ╪Ёд║, фпе╟аЖ, <Ё╞б╔> ╨╧╠╦(back to date)"
 
 #: lib/poptI.c:400 lib/poptI.c:403
 msgid "<date>"
-msgstr "<дата>"
+msgstr "<Ё╞б╔>"
 
 #: lib/poptI.c:402
 msgid "If transaction fails rollback to <date>"
@@ -2266,103 +2264,106 @@ msgstr ""
 #: lib/poptI.c:406
 #, fuzzy
 msgid "<tid>"
-msgstr "<параметр>"
+msgstr "<╦М╥и>"
 
 #: lib/poptI.c:408
 msgid "don't install, but tell if it would work or not"
-msgstr "не устанавливать, а только сообщить, удастся ли установка"
+msgstr "фпе╟аЖ╦╕ ╪Ёд║гоаЖ ╬й╟М, а╕╢К╥н ╪Ёд║╣г╢баЖ╦╦ х╝юнгу╢о╢ы"
 
 #: lib/poptI.c:411
 msgid "upgrade package(s)"
-msgstr "обновить пакет(ы)"
+msgstr "фпе╟аЖ╦╕ ╬В╠в╥╧юл╣Е гу╢о╢ы"
 
 #: lib/poptQV.c:115
 msgid "query/verify all packages"
-msgstr "запросить/проверить все пакеты"
+msgstr "╦П╣Г фпе╟аЖ©║ ╢Кгь аЗюг/╟каУгу╢о╢ы"
 
 #: lib/poptQV.c:117
+#, fuzzy
 msgid "rpm checksig mode"
-msgstr "режим проверки подписи"
+msgstr "rpm ╟каУ ╦П╣Е"
 
 #: lib/poptQV.c:119
 msgid "query/verify package(s) owning file"
-msgstr "запросить/проверить пакет, которому принадлежит файл"
+msgstr "фдюоюл ╣И╬Нюж╢б фпе╟аЖ©║ ╢Кгь аЗюг/╟каУ гу╢о╢ы"
 
 #: lib/poptQV.c:121
 msgid "query/verify package(s) in group"
-msgstr "запросить/проверить пакеты в группе"
+msgstr "╠в╥Л ╬хюг фпе╟аЖ╦╕ аЗюг/╟каУ гу╢о╢ы"
 
 #: lib/poptQV.c:123
+#, fuzzy
 msgid "query/verify a package file"
-msgstr "запросить/проверить файл пакета"
+msgstr "╦П╣Г фпе╟аЖ©║ ╢Кгь аЗюг/╟каУгу╢о╢ы"
 
 #: lib/poptQV.c:126
 #, fuzzy
 msgid "query/verify package(s) from TOP file tree walk"
-msgstr "запросить/проверить пакет(ы) из транзакции установки"
+msgstr "╪Ёд║ Ё╩©Кю╩ еКгь фпе╟аЖ╦╕ аЗюг/╟каУ гу╢о╢ы"
 
 #: lib/poptQV.c:128
 #, fuzzy
 msgid "query/verify package(s) from system HDLIST"
-msgstr "запросить/проверить пакет(ы) из транзакции установки"
+msgstr "╪Ёд║ Ё╩©Кю╩ еКгь фпе╟аЖ╦╕ аЗюг/╟каУ гу╢о╢ы"
 
 #: lib/poptQV.c:131
 msgid "query/verify package(s) with package identifier"
-msgstr "запросить/проверить пакет(ы) по идентификатору пакета"
+msgstr "фпе╟аЖ ╫д╨╟юз(identifier)╦╕ ╩Г©Кго©╘ фпе╟аЖ╦╕ аЗюг/╟каУ гу╢о╢ы"
 
 #: lib/poptQV.c:133
 msgid "query/verify package(s) with header identifier"
-msgstr "запросить/проверить пакет(ы), по идентификатору заголовка"
+msgstr "гЛ╢У ╫д╨╟юз(identifier)╦╕ ╩Г©Кго©╘ фпе╟аЖ╦╕ аЗюг/╟каУ гу╢о╢ы"
 
 #: lib/poptQV.c:135
 msgid "query/verify package(s) with file identifier"
-msgstr "запросить/проверить пакет(ы) по идентификатору файла"
+msgstr "фдюо ╫д╨╟юз(identifier)╦╕ ╩Г©Кго©╘ фпе╟аЖ╦╕ аЗюг/╟каУ гу╢о╢ы"
 
 #: lib/poptQV.c:138
 msgid "rpm query mode"
-msgstr "режим запроса rpm"
+msgstr "rpm аЗюг ╦П╣Е"
 
 #: lib/poptQV.c:140
+#, fuzzy
 msgid "query/verify a header instance"
-msgstr "запросить/проверить заголовок"
+msgstr "гЛ╢У ╫д╨╟юз(identifier)╦╕ ╩Г©Кго©╘ фпе╟аЖ╦╕ аЗюг/╟каУ гу╢о╢ы"
 
 #: lib/poptQV.c:142
 msgid "query a spec file"
-msgstr "запросить файл спецификации"
+msgstr "spec фдюо©║ ╢Кгь аЗюггу╢о╢ы"
 
 #: lib/poptQV.c:142 lib/poptQV.c:144
 msgid "<spec>"
-msgstr "<файл спецификации>"
+msgstr "<spec>"
 
 #: lib/poptQV.c:144
 #, fuzzy
 msgid "query source metadata from spec file parse"
-msgstr "собрать исходный пакет по <файлу спецификации>"
+msgstr "<specфдюо>╥н ╪р╫╨ фпе╟аЖ ╦╦ю╩ а╕юшгу╢о╢ы"
 
 #: lib/poptQV.c:146
 msgid "query/verify package(s) from install transaction"
-msgstr "запросить/проверить пакет(ы) из транзакции установки"
+msgstr "╪Ёд║ Ё╩©Кю╩ еКгь фпе╟аЖ╦╕ аЗюг/╟каУ гу╢о╢ы"
 
 #: lib/poptQV.c:148
 msgid "query the package(s) triggered by the package"
-msgstr "запросить пакеты с триггер-сценариями на пакет"
+msgstr "фпе╟аЖ╥н юнгь ╩Щ╪╨╣г╢б(triggered) фпе╟аЖ©║ ╢Кгь аЗюггу╢о╢ы"
 
 #: lib/poptQV.c:150
 msgid "rpm verify mode"
-msgstr "режим проверки rpm"
+msgstr "rpm ╟каУ ╦П╣Е"
 
 #: lib/poptQV.c:152
 msgid "query/verify the package(s) which require a dependency"
-msgstr "найти/проверить пакеты, требующие сервис"
+msgstr "юга╦╪╨ю╩ гй©Д╥н го╢б фпе╟аЖ©║ ╢Кгь аЗюг/╟каУ гу╢о╢ы"
 
 #: lib/poptQV.c:154
 #, fuzzy
 msgid "query/verify the package(s) which require any contained provide"
-msgstr "найти/проверить пакеты, требующие сервис"
+msgstr "юга╦╪╨ю╩ гй©Д╥н го╢б фпе╟аЖ©║ ╢Кгь аЗюг/╟каУ гу╢о╢ы"
 
 #: lib/poptQV.c:158
 msgid "query/verify the package(s) which provide a dependency"
-msgstr "найти/проверить пакеты, предоставляющие сервис"
+msgstr "юга╦╪╨ю╩ а╕╟Ьго╢б фпе╟аЖ©║ ╢Кгь аЗюг/╟каУ гу╢о╢ы"
 
 #: lib/poptQV.c:161
 msgid "create transaction set"
@@ -2375,7 +2376,7 @@ msgstr ""
 #: lib/poptQV.c:165
 #, fuzzy
 msgid "do not glob arguments"
-msgstr "не заданы аргументы"
+msgstr "аЗюг©║ гй©Дгя юн╪Ж╟║ аЖа╓╣гаЖ ╬й╬р╫ю╢о╢ы"
 
 #: lib/poptQV.c:167
 msgid "do not process non-package files as manifests"
@@ -2384,52 +2385,52 @@ msgstr ""
 #: lib/poptQV.c:169
 #, fuzzy
 msgid "do not read headers"
-msgstr "%s: невозможно прочесть заголовок в 0x%x\n"
+msgstr "%s: 0x%xюг гЛ╢У╦╕ юпю╩ ╪Ж ╬Ь╫ю╢о╢ы\n"
 
 #: lib/poptQV.c:284
 msgid "list all configuration files"
-msgstr "показать все файлы конфигурации"
+msgstr "╦П╣Г ╪Ёа╓ фдюою╩ Ё╙©╜гу╢о╢ы"
 
 #: lib/poptQV.c:286
 msgid "list all documentation files"
-msgstr "показать все файлы документации"
+msgstr "╦П╣Г ╧╝╪╜ фдюою╩ Ё╙©╜гу╢о╢ы"
 
 #: lib/poptQV.c:288
 msgid "dump basic file information"
-msgstr "показать основную информацию о файле"
+msgstr "╠Б╨╩ фдюо а╓╨╦╦╕ ╨╦©╘ащ╢о╢ы"
 
 #: lib/poptQV.c:292
 msgid "list files in package"
-msgstr "показать список файлов пакета"
+msgstr "фпе╟аЖ ╬хюг фдюою╩ Ё╙©╜гу╢о╢ы"
 
 #: lib/poptQV.c:301 lib/poptQV.c:348
 #, fuzzy, c-format
 msgid "skip %%config files"
-msgstr "пропустить файлы %%license"
+msgstr "%%license фдюою╩ ╩Щ╥╚гу╢о╢ы"
 
 #: lib/poptQV.c:304 lib/poptQV.c:351
 #, fuzzy, c-format
 msgid "skip %%doc files"
-msgstr "пропустить файлы %%ghost"
+msgstr "%%ghost фдюою╩ ╩Щ╥╚гу╢о╢ы"
 
 #: lib/poptQV.c:307
 #, c-format
 msgid "skip %%ghost files"
-msgstr "пропустить файлы %%ghost"
+msgstr "%%ghost фдюою╩ ╩Щ╥╚гу╢о╢ы"
 
 #: lib/poptQV.c:311
 #, c-format
 msgid "skip %%license files"
-msgstr "пропустить файлы %%license"
+msgstr "%%license фдюою╩ ╩Щ╥╚гу╢о╢ы"
 
 #: lib/poptQV.c:314
 #, c-format
 msgid "skip %%readme files"
-msgstr "пропустить файлы %%readme"
+msgstr "%%readme фдюою╩ ╩Щ╥╚гу╢о╢ы"
 
 #: lib/poptQV.c:320
 msgid "use the following query format"
-msgstr "используйте следующий формат запроса"
+msgstr "╢ыю╫юг аЗюг гЭ╫дю╩ ╩Г©Кго╫й╫ц©Д"
 
 #: lib/poptQV.c:320
 msgid "QUERYFORMAT"
@@ -2437,82 +2438,86 @@ msgstr ""
 
 #: lib/poptQV.c:322
 msgid "substitute i18n sections into spec file"
-msgstr "заменить секции i18n в файле спецификации"
+msgstr "spec фдюо ╬хюг i18n гв╦Я(section)ю╩ ╢Кц╪(substitute)гу╢о╢ы"
 
 #: lib/poptQV.c:324
 msgid "display the states of the listed files"
-msgstr "показать состояние перечисленных файлов"
+msgstr "Ё╙©╜╣х фдюоюг ╩Себ(state)╦╕ ╨╦©╘ащ╢о╢ы"
 
 #: lib/poptQV.c:366
 msgid "don't verify size of files"
-msgstr "не проверять размер файлов"
+msgstr "фдюоюг ©К╥╝ю╩ ╟к╩ГгоаЖ ╬й╫ю╢о╢ы"
 
 #: lib/poptQV.c:369
 msgid "don't verify symlink path of files"
-msgstr "не проверять путь символических ссылок"
+msgstr "фдюоюг ╫и╨╪╦╞ ╦╣е╘ ╟Ф╥н╦╕ ╟к╩ГгоаЖ ╬й╫ю╢о╢ы"
 
 #: lib/poptQV.c:372
 msgid "don't verify owner of files"
-msgstr "не проверять хозяина файлов"
+msgstr "фдюоюг ╪рю╞юз╦╕ ╟к╩ГгоаЖ ╬й╫ю╢о╢ы"
 
 #: lib/poptQV.c:375
 msgid "don't verify group of files"
-msgstr "не проверять группу файлов"
+msgstr "фдюоюг ╠в╥Лю╩ ╟к╩ГгоаЖ ╬й╫ю╢о╢ы"
 
 #: lib/poptQV.c:378
 msgid "don't verify modification time of files"
-msgstr "не проверять время модификации файлов"
+msgstr "фдюоюг цжа╬ ╨╞╟Ф ╫ц╟ёю╩ ╟к╩ГгоаЖ ╬й╫ю╢о╢ы"
 
 #: lib/poptQV.c:381 lib/poptQV.c:384
 msgid "don't verify mode of files"
-msgstr "не проверять права доступа файлов пакета"
+msgstr "фдюоюг ╦П╣Е╦╕ ╟к╩ГгоаЖ ╬й╫ю╢о╢ы"
 
 #: lib/poptQV.c:387
 #, fuzzy
 msgid "don't verify file security contexts"
-msgstr "не проверять файлы пакета"
+msgstr "фпе╟аЖ ╬хюг фдюою╩ ╟к╩ГгоаЖ ╬й╫ю╢о╢ы"
 
 #: lib/poptQV.c:389
 msgid "don't verify files in package"
-msgstr "не проверять файлы пакета"
+msgstr "фпе╟аЖ ╬хюг фдюою╩ ╟к╩ГгоаЖ ╬й╫ю╢о╢ы"
 
 #: lib/poptQV.c:392 lib/poptQV.c:395
 msgid "don't verify package dependencies"
-msgstr "не проверять зависимости пакета"
+msgstr "фпе╟аЖюг юга╦╪╨ю╩ ╟к╩ГгоаЖ ╬й╫ю╢о╢ы"
 
 #: lib/poptQV.c:400 lib/poptQV.c:404 lib/poptQV.c:407 lib/poptQV.c:410
+#, fuzzy
 msgid "don't execute verify script(s)"
-msgstr "не исполнять сценарий(и) проверки"
+msgstr "%verifyscript╦╕ ╫ггЮгоаЖ ╬й╫ю╢о╢ы (южю╩ ╟Ф©Л)"
 
 #: lib/poptQV.c:444
+#, fuzzy
 msgid "sign package(s) (identical to --resign)"
-msgstr "подписать пакет(ы) (то же самое что --resign)"
+msgstr "фпе╟аЖ©║ ╪╜╦Мгу╢о╢ы (╠Ба╦юг ╪╜╦Мю╨ ╩Ха╕╣к╢о╢ы)"
 
 #: lib/poptQV.c:446
+#, fuzzy
 msgid "verify package signature(s)"
-msgstr "проверить подпись(и) пакета"
+msgstr "фпе╟аЖюг ╪╜╦Мю╩ ╟к╩Ггу╢о╢ы"
 
 #: lib/poptQV.c:448
 #, fuzzy
 msgid "delete package signatures"
-msgstr "проверить подпись(и) пакета"
+msgstr "фпе╟аЖюг ╪╜╦Мю╩ ╟к╩Ггу╢о╢ы"
 
 #: lib/poptQV.c:450
 msgid "import an armored public key"
-msgstr "импортировать открытый ключ"
+msgstr ""
 
 #: lib/poptQV.c:452
+#, fuzzy
 msgid "sign package(s) (identical to --addsign)"
-msgstr "подписать пакет (то же самое что --addsign)"
+msgstr "фпе╟аЖ©║ ╪╜╦Мгу╢о╢ы (╠Ба╦юг ╪╜╦Мю╨ ╩Ха╕╣к╢о╢ы)"
 
 #: lib/poptQV.c:454
 msgid "generate signature"
-msgstr "генерировать подпись"
+msgstr "╪╜╦Мю╩ юш╪╨гу╢о╢ы"
 
 #: lib/poptQV.c:457
 #, fuzzy
 msgid "specify trust metric"
-msgstr "переопределить целевую платформу"
+msgstr "╦Яг╔╢К╩С(target) гц╥╖фШю╩ ╠Ёц╪(override)гу╢о╢ы"
 
 #: lib/poptQV.c:460
 msgid "set ultimate trust when importing pubkey(s)"
@@ -2524,114 +2529,121 @@ msgstr ""
 
 #: lib/psm.c:203
 msgid "source package expected, binary found\n"
-msgstr "обнаружен двоичный пакет вместо ожидаемого исходного\n"
+msgstr "╪р╫╨ фпе╟аЖ╟║ гй©Дго╦Г, ╧ыюлЁй╦╝╟║ ╟к╩Ж╣г╬З╫ю╢о╢ы\n"
 
 #: lib/psm.c:283 lib/psm.c:296
 #, c-format
 msgid "cannot write to %%%s %s\n"
-msgstr "невозможно писать в %%%s %s\n"
+msgstr "%%%s %s(ю╩)╦╕ юш╪╨гр ╪Ж ╬Ь╫ю╢о╢ы\n"
 
 #: lib/psm.c:329
 msgid "source package contains no .spec file\n"
-msgstr "исходный пакет не содержит файла спецификации\n"
+msgstr "╪р╫╨ фпе╟аЖ©║ .spec фдюоюл фВгт╣г╬Н южаЖ ╬й╫ю╢о╢ы\n"
 
 #: lib/psm.c:445
-#, fuzzy, c-format
+#, c-format
 msgid "%s: waitpid(%d) rc %d status %x secs %u.%03u\n"
-msgstr "%s: waitpid(%d) rc %d status %x\n"
+msgstr ""
 
 #: lib/psm.c:637
 #, fuzzy, c-format
 msgid "%s: %s(%s-%s-%s.%s) running <lua> scriptlet.\n"
-msgstr "%s: %s(%s-%s-%s) %sзапуск синхронного сценария\n"
+msgstr "%s: %s ╫╨е╘╦Ёф╝╦╕ ╫ггЮгу╢о╢ы (южю╩ ╟Ф©Л)\n"
 
 #: lib/psm.c:658
-#, fuzzy, c-format
+#, c-format
 msgid "%s: %s(%s-%s-%s.%s) skipping redundant \"%s\".\n"
-msgstr "%s: %s(%s-%s-%s) пропускается лишний \"%s\".\n"
+msgstr ""
 
 #: lib/psm.c:666
-#, fuzzy, c-format
+#, c-format
 msgid "%s: %s(%s-%s-%s.%s) %ssynchronous scriptlet start\n"
-msgstr "%s: %s(%s-%s-%s) %sзапуск синхронного сценария\n"
+msgstr ""
 
 #: lib/psm.c:878
-#, fuzzy, c-format
+#, c-format
 msgid "%s: %s(%s-%s-%s.%s)\texecv(%s) pid %d\n"
-msgstr "%s: %s(%s-%s-%s)\texecv(%s) pid %d\n"
+msgstr ""
 
 #: lib/psm.c:926
 #, fuzzy, c-format
 msgid "%s(%s-%s-%s.%s) scriptlet failed, waitpid(%d) rc %d: %s\n"
-msgstr "%s(%s-%s-%s) ошибка сценария, waitpid(%d) rc %d: %s\n"
+msgstr ""
+"%s: %s ╫╨е╘╦Ёф╡╦╢(scriptlet)юл ╫гфпгъ╫ю╢о╢ы (%d), %s-%s-%s(ю╩)╦╕ ╩Щ╥╚гу╢о╢ы\n"
 
 #: lib/psm.c:933
 #, fuzzy, c-format
 msgid "%s(%s-%s-%s.%s) scriptlet failed, signal %d\n"
-msgstr "%s(%s-%s-%s) ошибка выполнения сценария, код возврата %d\n"
+msgstr ""
+"%2$s-%3$s-%4$sюг %1$s ╫╨е╘╦Ёф╡╦╢(scriptlet) ╫ггЮ©║ ╫гфпгъ╫ю╢о╢ы, а╬╥А ╩Сх╡ %5"
+"$d\n"
 
 #: lib/psm.c:937
 #, fuzzy, c-format
 msgid "%s(%s-%s-%s.%s) scriptlet failed, exit status %d\n"
-msgstr "%s(%s-%s-%s) ошибка выполнения сценария, код возврата %d\n"
+msgstr ""
+"%2$s-%3$s-%4$sюг %1$s ╫╨е╘╦Ёф╡╦╢(scriptlet) ╫ггЮ©║ ╫гфпгъ╫ю╢о╢ы, а╬╥А ╩Сх╡ %5"
+"$d\n"
 
 #: lib/psm.c:1571
-#, c-format
+#, fuzzy, c-format
 msgid "%s: %s has %d files, test = %d\n"
-msgstr "%s: %s содержит %d файлов, результат проверки: %d\n"
+msgstr "%s: %s-%s-%s©║ %dюг фдюоюл юж╫ю╢о╢ы, ев╫╨ф╝ = %d\n"
 
 #: lib/psm.c:1745
-#, c-format
+#, fuzzy, c-format
 msgid "%s: %s scriptlet failed (%d), skipping %s\n"
-msgstr "%s: %s ошибка сценария (%d), пропускается %s\n"
+msgstr ""
+"%s: %s ╫╨е╘╦Ёф╡╦╢(scriptlet)юл ╫гфпгъ╫ю╢о╢ы (%d), %s-%s-%s(ю╩)╦╕ ╩Щ╥╚гу╢о╢ы\n"
 
 #: lib/psm.c:1856
+#, fuzzy
 msgid "Unable to reload signature header\n"
-msgstr "Невозможно перезагрузить заголовок подписи\n"
+msgstr "╪╜╦М(signature) гЛ╢У╦╕ ╢ы╫ц юп╬Н©ц ╪Ж ╬Ь╫ю╢о╢ы.\n"
 
 #: lib/psm.c:1949
 #, c-format
 msgid "unpacking of archive failed%s%s: %s\n"
-msgstr "распаковка архива не удалась%s%s: %s\n"
+msgstr "╬фд╚юл╨Й╦╕ г╙╢б╣╔ ╫гфпгт%s%s: %s\n"
 
 #: lib/psm.c:1950
 msgid " on file "
-msgstr " на файле "
+msgstr " ╢ыю╫ фдюоюг "
 
 #: lib/psm.c:2127
 #, c-format
 msgid "%s failed on file %s: %s\n"
-msgstr "%s ошибка на файле %s: %s\n"
+msgstr "%2$s фдюоюг %1$s(юл)╟║ ╫гфпгт: %3$s\n"
 
 #: lib/psm.c:2130
 #, c-format
 msgid "%s failed: %s\n"
-msgstr "%s не удалось: %s\n"
+msgstr "%s(юл)╟║ ╫гфпгт: %s\n"
 
 #: lib/query.c:123
 #, c-format
 msgid "incorrect format: %s\n"
-msgstr "ошибка в формате: %s\n"
+msgstr "©ц╧ы╦ёаЖ ╦Ьгя гЭ╫д: %s\n"
 
 #: lib/query.c:194
 msgid "(contains no files)"
-msgstr "(не содержит файлов)"
+msgstr "(фдюоюл фВгт╣г╬Н южаЖ ╬йю╫)"
 
 #: lib/query.c:288
 msgid "normal        "
-msgstr "нормальный    "
+msgstr "а╓╩С(normal)        "
 
 #: lib/query.c:291
 msgid "replaced      "
-msgstr "замененный    "
+msgstr "╠Ёц╪╣й(replaced)    "
 
 #: lib/query.c:294
 msgid "not installed "
-msgstr "не установлен "
+msgstr "╪Ёд║╣г╬Н южаЖ ╬йю╫  "
 
 #: lib/query.c:297
 msgid "net shared    "
-msgstr "сетевой       "
+msgstr "net ╟Ью╞╣й          "
 
 #: lib/query.c:300
 msgid "wrong color   "
@@ -2639,176 +2651,178 @@ msgstr ""
 
 #: lib/query.c:303
 msgid "(no state)    "
-msgstr "(сост. нет)   "
+msgstr "(╩Себ╦╕ ╬к ╪Ж ╬Ью╫) "
 
 #: lib/query.c:306
 #, c-format
 msgid "(unknown %3d) "
-msgstr "(неизв. %3d)  "
+msgstr "(╬к ╪Ж ╬Ь╢б %3d)    "
 
 #: lib/query.c:325
+#, fuzzy
 msgid "package has not file owner/group lists\n"
-msgstr "пакет не содержит списков владельцев/групп-владельцев файлов\n"
+msgstr "фпе╟аЖ©║ фдюо ╪рю╞юз ╤г╢б id ╦Я╥оюл ╬Ь╫ю╢о╢ы\n"
 
 #: lib/query.c:358
 msgid "package has neither file owner or id lists\n"
-msgstr "пакет не содержит списков ни хозяев файлов, ни их ID\n"
+msgstr "фпе╟аЖ©║ фдюо ╪рю╞юз ╤г╢б id ╦Я╥оюл ╬Ь╫ю╢о╢ы\n"
 
 #: lib/query.c:515
 #, c-format
 msgid "group %s does not contain any packages\n"
-msgstr "группа %s не содержит никаких пакетов\n"
+msgstr "%s ╠в╥Лю╨ ╬Н╤╡ фпе╟аЖ©║╣╣ фВгт╣г╬Н южаЖ ╬й╫ю╢о╢ы\n"
 
 #: lib/query.c:524
 #, c-format
 msgid "no package triggers %s\n"
-msgstr "ни один из пакетов не взводит триггер %s\n"
+msgstr "%s(ю╩)╦╕ ╩Щ╪╨го╢б(trigger) фпе╟аЖ╟║ ╬Ь╫ю╢о╢ы\n"
 
 #: lib/query.c:537 lib/query.c:558 lib/query.c:580 lib/query.c:615
 #, c-format
 msgid "malformed %s: %s\n"
-msgstr "ошибка формата %s: %s.\n"
+msgstr "%s(юл)╟║ юъ╦Ь╣й: %s\n"
 
 #: lib/query.c:547 lib/query.c:564 lib/query.c:591 lib/query.c:620
 #, c-format
 msgid "no package matches %s: %s\n"
-msgstr "ни один пакет не подходит к %s: %s\n"
+msgstr "%s(©м)╟З юод║го╢б фпе╟аЖ╟║ ╬Ью╫: %s\n"
 
 #: lib/query.c:631
 #, c-format
 msgid "no package requires %s\n"
-msgstr "ни один из пакетов не требует %s\n"
+msgstr "%s(ю╩)╦╕ гй©Д╥н го╢б фпе╟аЖ╟║ ╬Ь╫ю╢о╢ы\n"
 
 #: lib/query.c:642
 #, c-format
 msgid "no package provides %s\n"
-msgstr "ни один из пакетов не предоставляет %s\n"
+msgstr "%s(ю╩)╦╕ а╕╟Ьго╢б фпе╟аЖ╟║ ╬Ь╫ю╢о╢ы\n"
 
 #: lib/query.c:676
 #, c-format
 msgid "file %s: %s\n"
-msgstr "файл %s: %s\n"
+msgstr "%s фдюо: %s\n"
 
 #: lib/query.c:679
 #, c-format
 msgid "file %s is not owned by any package\n"
-msgstr "файл %s не принадлежит ни одному из пакетов\n"
+msgstr "%s фдюою╨ ╬Н╤╡ фпе╟аЖ©║╣╣ ╣И╬НюжаЖ ╬й╫ю╢о╢ы\n"
 
 #: lib/query.c:704
 #, c-format
 msgid "invalid package number: %s\n"
-msgstr "неверный номер пакета: %s\n"
+msgstr "╨нюШгугя фпе╟аЖ ╧Ьхё: %s\n"
 
 #: lib/query.c:707
 #, c-format
 msgid "package record number: %u\n"
-msgstr "номер записи пакета: %u\n"
+msgstr "фпе╟аЖ ╠Б╥о(record) ╧Ьхё: %u\n"
 
 #: lib/query.c:711
 #, c-format
 msgid "record %u could not be read\n"
-msgstr "невозможно прочитать запись %u\n"
+msgstr "╠Б╥о(record) ╧Ьхё %u(ю╨)╢б юпю╩ ╪Ж ╬Ь╫ю╢о╢ы\n"
 
 #: lib/query.c:721 lib/query.c:727 lib/rpminstall.c:817
 #, c-format
 msgid "package %s is not installed\n"
-msgstr "пакет %s не установлен\n"
+msgstr "%s фпе╟аЖ╟║ ╪Ёд║╣г╬Н южаЖ ╬й╫ю╢о╢ы\n"
 
 #: lib/rpmal.c:782
+#, fuzzy
 msgid "(added files)"
-msgstr "(файлы добавлены)"
+msgstr "юъ╦Ь╣х db фдюо %s\n"
 
 #: lib/rpmal.c:861
+#, fuzzy
 msgid "(added provide)"
-msgstr "(added provide)"
+msgstr "%s: %-45s ©╧ (а╕╟Ьюл цъ╟║╣й)\n"
 
 #: lib/rpmchecksig.c:57
 #, c-format
 msgid "%s: open failed: %s\n"
-msgstr "%s: ошибка открытия: %s\n"
+msgstr "%s: ©╘╢б╣╔ ╫гфпгъ╫ю╢о╢ы: %s\n"
 
 #: lib/rpmchecksig.c:69
 msgid "makeTempFile failed\n"
-msgstr "ошибка makeTempFile\n"
+msgstr "makeTempFileюл ╫гфпгъ╫ю╢о╢ы\n"
 
 #: lib/rpmchecksig.c:112
 #, c-format
 msgid "%s: Fwrite failed: %s\n"
-msgstr "%s: ошибка Fwrite: %s\n"
+msgstr "%s: Fwriteюл ╫гфпгъ╫ю╢о╢ы: %s\n"
 
 #: lib/rpmchecksig.c:122
 #, fuzzy, c-format
 msgid "%s: Fflush failed: %s\n"
-msgstr "%s: ошибка Fseek: %s\n"
+msgstr "%s: Fseekюл ╫гфпгъ╫ю╢о╢ы: %s\n"
 
 #: lib/rpmchecksig.c:216 lib/rpmchecksig.c:755
-#, c-format
+#, fuzzy, c-format
 msgid "%s: not an rpm package\n"
-msgstr "%s: это не пакет RPM\n"
+msgstr "юн╪Ж ╟╙ю╦╥н RPM фпе╟аЖ╟║ аЖа╓╣г╬Н╬ъ гу╢о╢ы\n"
 
 #: lib/rpmchecksig.c:221
-#, c-format
+#, fuzzy, c-format
 msgid "%s: Can't sign v1 packaging\n"
-msgstr "%s: Не могу подписать пакеты v1\n"
+msgstr "%s: v1.0 RPMю╨ ╪╜╦Мгр ╪Ж ╬Ь╫ю╢о╢ы\n"
 
 #: lib/rpmchecksig.c:225
-#, c-format
+#, fuzzy, c-format
 msgid "%s: Can't re-sign v2 packaging\n"
-msgstr "%s: Не могу переподписать пакеты v2\n"
+msgstr "%s: v2.0 RPMю╨ юГ-╪╜╦Мгр ╪Ж ╬Ь╫ю╢о╢ы\n"
 
 #: lib/rpmchecksig.c:345
 #, c-format
 msgid "%s: was already signed by key ID %s, skipping\n"
-msgstr "%s: уже был подписан ключём с идентификаторм %s, пропускается\n"
+msgstr ""
 
 #: lib/rpmchecksig.c:375
 #, c-format
 msgid "%s: writeLead failed: %s\n"
-msgstr "%s: ошибка writeLead: %s\n"
+msgstr "%s: writeLeadюл ╫гфпгъ╫ю╢о╢ы: %s\n"
 
 #: lib/rpmchecksig.c:381
 #, c-format
 msgid "%s: rpmWriteSignature failed: %s\n"
-msgstr "%s: ошибка rpmWriteSignature: %s\n"
+msgstr "%s: rpmWriteSignatureюл ╫гфпгъ╫ю╢о╢ы: %s\n"
 
 #: lib/rpmchecksig.c:609
 #, fuzzy, c-format
 msgid "%s: import read failed(%d).\n"
-msgstr "%s: ошибка чтения во время импортирования.\n"
+msgstr "%s: readLeadюл ╫гфпгъ╫ю╢о╢ы\n"
 
 #: lib/rpmchecksig.c:621
-#, c-format
+#, fuzzy, c-format
 msgid "%s: import failed.\n"
-msgstr "%s: ошибка импортирования.\n"
+msgstr "%s: readLeadюл ╫гфпгъ╫ю╢о╢ы\n"
 
 #: lib/rpmchecksig.c:657
-#, c-format
+#, fuzzy, c-format
 msgid "%s: headerRead failed\n"
-msgstr "%s: ошибка headerRead\n"
+msgstr "%s: readLeadюл ╫гфпгъ╫ю╢о╢ы\n"
 
 #: lib/rpmchecksig.c:671
-#, c-format
+#, fuzzy, c-format
 msgid "%s: headerGetEntry failed\n"
-msgstr "%s: ошибка headerGetEntry\n"
+msgstr "%s: readLeadюл ╫гфпгъ╫ю╢о╢ы\n"
 
 #: lib/rpmchecksig.c:761
 #, c-format
 msgid "%s: No signature available (v1.0 RPM)\n"
-msgstr "%s: Подписи нет (RPM v1.0)\n"
+msgstr "%s: ю╞х©гя ╪╜╦Мюл ╬Ь╫ю╢о╢ы (v1.0 RPM)\n"
 
 #: lib/rpmchecksig.c:870
-#, fuzzy, c-format
+#, c-format
 msgid "only V3 or V4 signatures can be verified, skipping V%u signature\n"
 msgstr ""
-"только подписи версии 3 могут быть проверены, пропускается подпись версии %u"
 
 #: lib/rpmchecksig.c:1036
 msgid "NOT OK"
-msgstr "НЕ ОК"
+msgstr "©ц╧ы╦ёаЖ ╬йю╫"
 
 #: lib/rpmchecksig.c:1037 lib/rpmchecksig.c:1051
 msgid " (MISSING KEYS:"
-msgstr " (ОТСУТСТВУЮТ КЛЮЧИ:"
+msgstr " (е╟╦╕ цёю╩ ╪Ж ╬Ью╫:"
 
 #: lib/rpmchecksig.c:1039 lib/rpmchecksig.c:1053
 msgid ") "
@@ -2816,7 +2830,7 @@ msgstr ") "
 
 #: lib/rpmchecksig.c:1040 lib/rpmchecksig.c:1054
 msgid " (UNTRUSTED KEYS:"
-msgstr " (НЕТ ДОВЕРИЯ К КЛЮЧАМ:"
+msgstr " (е╟╦╕ ╫е╥згр ╪Ж ╬Ью╫:"
 
 #: lib/rpmchecksig.c:1042 lib/rpmchecksig.c:1056
 msgid ")"
@@ -2824,48 +2838,47 @@ msgstr ")"
 
 #: lib/rpmchecksig.c:1050
 msgid "OK"
-msgstr "ОК"
+msgstr "х╝юн"
 
 #: lib/rpmds.c:922 lib/rpmds.c:3711
 msgid "NO "
-msgstr "НЕT"
+msgstr "╬ф╢о©ю"
 
 #: lib/rpmds.c:922 lib/rpmds.c:3711
 msgid "YES"
-msgstr "ДА"
+msgstr "©╧"
 
 #: lib/rpmds.c:1414
 msgid "PreReq:, Provides:, and Obsoletes: dependencies support versions."
-msgstr "PreReq:, Provides:, и Obsoletes: зависимости поддерживают версии."
+msgstr ""
 
 #: lib/rpmds.c:1417
 msgid "file name(s) stored as (dirName,baseName,dirIndex) tuple, not as path."
-msgstr "имена файла(ов) хранятся в формате (dirName,baseName,dirIndex)."
+msgstr ""
 
 #: lib/rpmds.c:1420
-#, fuzzy
 msgid "package payload can be compressed using bzip2."
-msgstr "для упаковки содержимого пакета используется bzip2"
+msgstr ""
 
 #: lib/rpmds.c:1423
 msgid "package payload file(s) have \"./\" prefix."
-msgstr "префикс \"./\" используется для фала(ов) содержимого пакета."
+msgstr ""
 
 #: lib/rpmds.c:1426
 msgid "package name-version-release is not implicitly provided."
-msgstr "имя-версия-выпуск пакета не предоставляется автоматически."
+msgstr ""
 
 #: lib/rpmds.c:1429
 msgid "header tags are always sorted after being loaded."
-msgstr "ярлыки заголовков всегда сортируются после загрузки."
+msgstr ""
 
 #: lib/rpmds.c:1432
 msgid "the scriptlet interpreter can use arguments from header."
-msgstr "интерпретатор сценариев может использовать аргументы из заголовка."
+msgstr ""
 
 #: lib/rpmds.c:1435
 msgid "a hardlink file set may be installed without being complete."
-msgstr "поддерживается частичная установка набора жестких ссылок пакета."
+msgstr ""
 
 #: lib/rpmds.c:1438
 msgid "package scriptlets may access the rpm database while installing."
@@ -2874,7 +2887,7 @@ msgstr ""
 #: lib/rpmds.c:1442
 #, fuzzy
 msgid "internal support for lua scripts."
-msgstr "- не поддерживается для строк\n"
+msgstr "'-' ╢б ╧╝юз©╜©║╪╜ ╩Г©Кгр ╪Ж ╬Ь╫ю╢о╢ы\n"
 
 #: lib/rpmds.c:1446
 msgid "header tags can be type int_64."
@@ -2885,9 +2898,8 @@ msgid "package payload can be in ustar tar archive format."
 msgstr ""
 
 #: lib/rpmds.c:1452
-#, fuzzy
 msgid "package payload can be compressed using lzma."
-msgstr "для упаковки содержимого пакета используется bzip2"
+msgstr ""
 
 #: lib/rpmds.c:1455
 msgid "file digests can be other than MD5."
@@ -2896,7 +2908,7 @@ msgstr ""
 #: lib/rpmds.c:1545 lib/rpmds.c:3535
 #, fuzzy, c-format
 msgid "%s:%d \"%s\" has invalid name. Skipping ...\n"
-msgstr "неверное числовое значение %s, пропущено\n"
+msgstr "%s(ю╨)╢б ╨нюШгугя ╪Жд║ ╟╙ют╢о╢ы, ╩Щ╥╚гу╢о╢ы\n"
 
 #: lib/rpmds.c:1569 lib/rpmds.c:3553
 #, c-format
@@ -2921,14 +2933,13 @@ msgid ""
 msgstr ""
 
 #: lib/rpmds.c:3675
-#, c-format
+#, fuzzy, c-format
 msgid ""
 "The \"B\" dependency needs an epoch (assuming same epoch as \"A\")\n"
 "\tA = \"%s\"\tB = \"%s\"\n"
 msgstr ""
-"Для зависимости \"B\" нужно указать \"epoch\" (предполагается тот же как для "
-"\"A\")\n"
-"\tA = \"%s\"\tB = \"%s\"\n"
+"\"B\" юга╦╪╨ю╨ аъ©Д╫ц ╣г╢б ╟м(epoch)ю╩ гй©Д╥н гу╢о╢ы (\"A\" ╥н ╟║а╓гу╢о╢ы)\n"
+"\tA %s\tB %s\n"
 
 #: lib/rpmds.c:3710
 #, c-format
@@ -2936,29 +2947,29 @@ msgid "  %s    A %s\tB %s\n"
 msgstr "  %s    A %s\tB %s\n"
 
 #: lib/rpmds.c:3734
-#, c-format
+#, fuzzy, c-format
 msgid "package %s has unsatisfied %s: %s\n"
-msgstr "пакет %s содержит неудовлетворенные %s: %s\n"
+msgstr "%s фпе╟аЖюг гй©Д╩Ггв(Ё╩©╙)юл ╦╦а╥гоаЖ ╬йю╫: %s\n"
 
 #: lib/rpmfc.c:93
-#, fuzzy, c-format
+#, c-format
 msgid "\texecv(%s) pid %d\n"
-msgstr "%s: %s(%s-%s-%s)\texecv(%s) pid %d\n"
+msgstr ""
 
 #: lib/rpmfc.c:99
 #, c-format
 msgid "Couldn't exec %s: %s\n"
-msgstr "Невозможно выполнить %s: %s\n"
+msgstr "%s(ю╩)╦╕ ╫ггЮгр ╪Ж ╬Ью╫: %s\n"
 
 #: lib/rpmfc.c:104
 #, c-format
 msgid "Couldn't fork %s: %s\n"
-msgstr "Сбой ветвления %s: %s\n"
+msgstr "%s(ю╩)╦╕ fork гр ╪Ж ╬Ью╫: %s\n"
 
 #: lib/rpmfc.c:189
-#, fuzzy, c-format
+#, c-format
 msgid "\twaitpid(%d) rc %d status %x\n"
-msgstr "%s: waitpid(%d) rc %d status %x\n"
+msgstr ""
 
 #: lib/rpmfc.c:196
 #, c-format
@@ -2968,17 +2979,17 @@ msgstr ""
 #: lib/rpmfc.c:201
 #, c-format
 msgid "failed to write all data to %s\n"
-msgstr "запись всех данных в %s не удалась\n"
+msgstr "%s©║ ╦П╣Г юз╥А╦╕ ╠Б╥ого╢б╣╔ ╫гфпгъ╫ю╢о╢ы\n"
 
 #: lib/rpmfc.c:1003
 #, fuzzy, c-format
 msgid "magic_open(0x%x) failed: %s\n"
-msgstr "невозможно открыть %s: %s\n"
+msgstr "%s(ю╩)╦╕ ©╘╢б╣╔ ╫гфпгт: %s\n"
 
 #: lib/rpmfc.c:1011
 #, fuzzy, c-format
 msgid "magic_load(ms, \"%s\") failed: %s\n"
-msgstr "%s ошибка удаления каталога %s: %s\n"
+msgstr "%s %s ╣П╥╨еД╦╝ ╩Ха╕©║ ╫гфпгт: %s\n"
 
 #: lib/rpmfc.c:1077
 #, c-format
@@ -2986,190 +2997,194 @@ msgid "magic_file(ms, \"%s\") failed: mode %06o %s\n"
 msgstr ""
 
 #: lib/rpmfc.c:1295
-#, c-format
+#, fuzzy, c-format
 msgid "Finding  %s: %s\n"
-msgstr "Идет поиск  %s: %s\n"
+msgstr "%s(ю╩)╦╕ цё╢б аъ: (%s ╩Г©К)...\n"
 
 #: lib/rpmfc.c:1301 lib/rpmfc.c:1312
 #, c-format
 msgid "Failed to find %s:\n"
-msgstr "Невозможно найти %s:\n"
+msgstr "%s(ю╩)╦╕ цё╢б╣╔ ╫гфпгт:\n"
 
 #: lib/rpmfi.c:622
 #, c-format
 msgid "%s skipped due to missingok flag\n"
-msgstr "%s пропущен из-за флага missingok\n"
+msgstr "missingok гц╥║╠в╥н юнгь %s(ю╩)╦╕ ╩Щ╥╚гу╢о╢ы\n"
 
 #: lib/rpmfi.c:874
 msgid "========== relocations\n"
-msgstr "========== перемещений\n"
+msgstr "========== юГ╧Хд║\n"
 
 #: lib/rpmfi.c:878
 #, c-format
 msgid "%5d exclude  %s\n"
-msgstr "%5d исключен %s\n"
+msgstr "%5d а╕©э  %s\n"
 
 #: lib/rpmfi.c:881
 #, c-format
 msgid "%5d relocate %s -> %s\n"
-msgstr "%5d перемещение %s -> %s\n"
+msgstr "%5d юГ╧Хд║ %s -> %s\n"
 
 #: lib/rpmfi.c:1015
 #, c-format
 msgid "excluding %s %s\n"
-msgstr "исключается %s %s\n"
+msgstr "%s %s(ю╩)╦╕ а╕©э╫це╣╢о╢ы\n"
 
 #: lib/rpmfi.c:1025
 #, c-format
 msgid "relocating %s to %s\n"
-msgstr "перемещается %s в %s\n"
+msgstr "%s(ю╩)╦╕ %s(ю╦)╥н юГ╧Хд║ гу╢о╢ы\n"
 
 #: lib/rpmfi.c:1117
 #, c-format
 msgid "relocating directory %s to %s\n"
-msgstr "перемещается каталог %s в %s\n"
+msgstr "%s ╣П╥╨еД╦╝╦╕ %s(ю╦)╥н юГ╧Хд║ гу╢о╢ы\n"
 
 #: lib/rpmgi.c:91 lib/rpminstall.c:125 lib/rpminstall.c:493
 #: lib/rpminstall.c:622 lib/rpmrollback.c:166 lib/rpmts.c:553
 #, c-format
 msgid "open of %s failed: %s\n"
-msgstr "невозможно открыть %s: %s\n"
+msgstr "%s(ю╩)╦╕ ©╘╢б╣╔ ╫гфпгт: %s\n"
 
 #: lib/rpmgi.c:423
 #, fuzzy, c-format
 msgid "unknown tag: \"%s\"\n"
-msgstr "неизвестный тэг"
+msgstr "╬к ╪Ж ╬Ь╢б еб╠в ют╢о╢ы"
 
 #: lib/rpmgi.c:764 lib/rpminstall.c:666 lib/rpminstall.c:851
+#, fuzzy
 msgid "Failed dependencies:\n"
-msgstr "Неудовлетворенные зависимости:\n"
+msgstr "юга╦╪╨ ╧╝а╕╥н юнгь ╫гфпгт:\n"
 
 #: lib/rpmgi.c:770 lib/rpminstall.c:673
 msgid "    Suggested resolutions:\n"
-msgstr "    Предлагаемое разрешение:\n"
+msgstr ""
 
 #: lib/rpminstall.c:192
 msgid "Preparing..."
-msgstr "Подготовка..."
+msgstr "аь╨Я аъ..."
 
 #: lib/rpminstall.c:194
 msgid "Preparing packages for installation..."
-msgstr "Подготовка пакетов для установки..."
+msgstr "╪Ёд║гр фпе╟аЖ╦╕ аь╨Яго╟М юж╫ю╢о╢ы..."
 
 #: lib/rpminstall.c:212
+#, fuzzy
 msgid "Repackaging..."
-msgstr "Переупаковка..."
+msgstr "аь╨Я аъ..."
 
 #: lib/rpminstall.c:214
 msgid "Repackaging erased files..."
-msgstr "Переупкавока файлов предназначенных для удаления..."
+msgstr ""
 
 #: lib/rpminstall.c:233
+#, fuzzy
 msgid "Upgrading..."
-msgstr "Обновление..."
+msgstr "аь╨Я аъ..."
 
 #: lib/rpminstall.c:235
+#, fuzzy
 msgid "Upgrading packages..."
-msgstr "Обновление пакетов..."
+msgstr "фпе╟аЖ╦╕ ╬В╠в╥╧юл╣Е гу╢о╢ы"
 
 #: lib/rpminstall.c:331 lib/rpminstall.c:795
-#, fuzzy, c-format
+#, c-format
 msgid "Autorollback Goal: %-24.24s (0x%08x)\n"
-msgstr "Откат пакетов (+%d/-%d) на %-24.24s (0x%08x):\n"
+msgstr ""
 
 #: lib/rpminstall.c:422
-#, c-format
+#, fuzzy, c-format
 msgid "Adding goal: %s\n"
-msgstr "Добавляется цель: %s\n"
+msgstr "%s(ю╩)╦╕ цё╢б аъ: (%s ╩Г©К)...\n"
 
 #: lib/rpminstall.c:438
 #, c-format
 msgid "Retrieving %s\n"
-msgstr "Загружается %s\n"
+msgstr "%s(ю╩)╦╕ ╨╧╠╦гу╢о╢ы\n"
 
 #: lib/rpminstall.c:451
 #, c-format
 msgid " ... as %s\n"
-msgstr " ... как %s\n"
+msgstr " ... %s(ю╦)╥н\n"
 
 #: lib/rpminstall.c:455
 #, c-format
 msgid "skipping %s - transfer failed - %s\n"
-msgstr "%s пропускается - ошибка передачи - %s\n"
+msgstr "%s(ю╩)╦╕ ╩Щ╥╚гу╢о╢ы - юЭ╪ш(transfer)©║ ╫гфпгт - %s\n"
 
 #: lib/rpminstall.c:512 lib/rpminstall.c:911
 #, c-format
 msgid "%s cannot be installed\n"
-msgstr "%s не может быть установлен\n"
+msgstr "%s(ю╨)╢б ╪Ёд║гр ╪Ж ╬Ь╫ю╢о╢ы\n"
 
 #: lib/rpminstall.c:529
 #, fuzzy, c-format
 msgid "\tadded source package [%d]\n"
-msgstr "<исходный пакет>"
+msgstr "<╪р╫╨ фпе╟аЖ>"
 
 #: lib/rpminstall.c:554
 #, fuzzy, c-format
 msgid "package %s is not relocatable\n"
-msgstr "пакет %s - не перемещаемый\n"
+msgstr "%s фпе╟аЖ╢б юГ╧Хд║гр ╪Ж ╬Ь╫ю╢о╢ы\n"
 
 #: lib/rpminstall.c:599
 #, fuzzy, c-format
 msgid "\tadded binary package [%d]\n"
-msgstr "устанавливаю бинарные пакеты\n"
+msgstr "╧ыюлЁй╦╝ фпе╟аЖ╦╕ ╪Ёд║гу╢о╢ы\n"
 
 #: lib/rpminstall.c:605
 #, fuzzy, c-format
 msgid "package file %s was skipped\n"
-msgstr "пакет %s содержит неудовлетворенные %s: %s\n"
+msgstr "%s фпе╟аЖюг гй©Д╩Ггв(Ё╩©╙)юл ╦╦а╥гоаЖ ╬йю╫: %s\n"
 
 #: lib/rpminstall.c:609
 #, c-format
 msgid "file %s requires a newer version of RPM\n"
-msgstr "для файла %s необходима более новая версия RPM\n"
+msgstr "%s фдюою╨ цж╫е ╧ЖюЭюг RPMю╩ гй©Д╥н гу╢о╢ы\n"
 
 #: lib/rpminstall.c:637
-#, c-format
+#, fuzzy, c-format
 msgid "%s: not an rpm package (or package manifest): %s\n"
-msgstr "%s: не пакет (или манифест пакета) rpm : %s\n"
+msgstr "%s(©м)╟З юод║го╢б фпе╟аЖ╟║ ╬Ью╫: %s\n"
 
 #: lib/rpminstall.c:652
 #, c-format
 msgid "found %d source and %d binary packages\n"
-msgstr "найдено %d исходных и %d бинарных пакетов\n"
+msgstr "%dюг ╪р╫╨©м %dюг ╧ыюлЁй╦╝ фпе╟аЖ╟║ ╟к╩Ж╣г╬З╫ю╢о╢ы\n"
 
 #: lib/rpminstall.c:703
 msgid "installing binary packages\n"
-msgstr "устанавливаю бинарные пакеты\n"
+msgstr "╧ыюлЁй╦╝ фпе╟аЖ╦╕ ╪Ёд║гу╢о╢ы\n"
 
 #: lib/rpminstall.c:727
 #, c-format
 msgid "cannot open file %s: %s\n"
-msgstr "невозможно открыть файл %s: %s\n"
+msgstr "%s фдюою╩ ©╜ ╪Ж ╬Ью╫: %s\n"
 
 #: lib/rpminstall.c:826
 #, c-format
 msgid "\"%s\" specifies multiple packages\n"
-msgstr "\"%s\" задает несколько пакетов\n"
+msgstr "\"%s\" ©╘╥╞╟Ёюг фпе╟аЖ╦╕ аЖа╓гу╢о╢ы\n"
 
 #: lib/rpminstall.c:895
 #, c-format
 msgid "cannot open %s: %s\n"
-msgstr "невозможно открыть %s: %s\n"
+msgstr "%s(ю╩)╦╕ ©╜ ╪Ж ╬Ью╫: %s\n"
 
 #: lib/rpminstall.c:901
 #, c-format
 msgid "Installing %s\n"
-msgstr "Устанавливается %s\n"
+msgstr "%s(ю╩)╦╕ ╪Ёд║гу╢о╢ы\n"
 
 #: lib/rpmlead.c:56
 #, c-format
 msgid "read failed: %s (%d)\n"
-msgstr "ошибка чтения: %s (%d)\n"
+msgstr "юп╢б╣╔ ╫гфпгт: %s (%d)\n"
 
 #: lib/rpmlock.c:149 lib/rpmlock.c:158
 #, fuzzy, c-format
 msgid "can't create transaction lock on %s\n"
-msgstr "невозможно получить блокировку %s на %s/%s\n"
+msgstr "%2$s/%3$sюг юА╠щ╣х(lock) %1$s(ю╩)╦╕ ╬Рю╩ ╪Ж ╬Ь╫ю╢о╢ы\n"
 
 #: lib/rpmlock.c:154
 #, c-format
@@ -3178,167 +3193,175 @@ msgstr ""
 
 #: lib/rpmps.c:201
 msgid "different"
-msgstr "различный"
+msgstr ""
 
 #: lib/rpmps.c:209
 #, fuzzy, c-format
 msgid "package %s is intended for a %s platform"
-msgstr "пакет %s предназначен для архитектуры %s"
+msgstr "%s(ю╨)╢б ╢ы╦╔ ╬фе╟еьцд╦╕ ю╖гя фпе╟аЖют╢о╢ы"
 
 #: lib/rpmps.c:214
 #, c-format
 msgid "package %s is already installed"
-msgstr "пакет %s уже установлен"
+msgstr "%s фпе╟аЖ╢б юл╧л ╪Ёд║╣г╬Н юж╫ю╢о╢ы"
 
 #: lib/rpmps.c:219
 #, fuzzy, c-format
 msgid "re-packaged package with %s: %s is missing"
-msgstr "ни один пакет не подходит к %s: %s\n"
+msgstr "%s(©м)╟З юод║го╢б фпе╟аЖ╟║ ╬Ью╫: %s\n"
 
 #: lib/rpmps.c:224
 #, fuzzy, c-format
 msgid "path %s in package %s is not relocatable"
-msgstr "путь %s в пакете %s - не перемещаемый"
+msgstr "%2$s фпе╟аЖ ╬хюг %1$s ╟Ф╥н╢б юГ╧Хд║гр ╪Ж ╬Ь╫ю╢о╢ы"
 
 #: lib/rpmps.c:229
 #, c-format
 msgid "file %s conflicts between attempted installs of %s and %s"
-msgstr "конфликт файла %s при попытках установки %s и %s"
+msgstr "%2$s(©м)╟З %3$sюг ╪Ёд║ ╟За╓©║╪╜ %1$s фдюоюл ╪╜╥н цФ╣╧гу╢о╢ы"
 
 #: lib/rpmps.c:234
 #, c-format
 msgid "file %s from install of %s conflicts with file from package %s"
-msgstr ""
-"файл %s из устанавливаемого пакета %s конфликтует с файлом из пакета %s"
+msgstr "%2$s©║╪╜ ╪Ёд║╣г╢б %1$s фдюою╨ %3$s фпе╟аЖюг фдюо╟З цФ╣╧гу╢о╢ы"
 
 #: lib/rpmps.c:239
 #, c-format
 msgid "package %s (which is newer than %s) is already installed"
-msgstr "пакет %s (который новее, чем %s) уже установлен"
+msgstr "%s фпе╟аЖ (%s ╨╦╢ы цж╫еюг фпе╟аЖ)╢б юл╧л ╪Ёд║╣г╬Н юж╫ю╢о╢ы"
 
 #: lib/rpmps.c:244
 #, fuzzy, c-format
 msgid "installing package %s needs %lu%cB on the %s filesystem"
-msgstr "для установки пакета %s нужно %ld%c байт на файловой системе %s"
+msgstr ""
+"%4$s фдюо╫ц╫╨еш ╩С©║╪╜ %1$s фпе╟аЖ╦╕ ╪Ёд║гр ╟Ф©Л©║╢б %2$ld%3$cb(юл)╟║ гй©Дгу"
+"╢о╢ы"
 
 #: lib/rpmps.c:254
 #, fuzzy, c-format
 msgid "installing package %s needs %lu inodes on the %s filesystem"
-msgstr "для установки пакета %s нужно %ld inodes на файловой системе %s"
+msgstr ""
+"%3$s фдюо╫ц╫╨еш ╩С©║╪╜ %1$s фпе╟аЖ╦╕ ╪Ёд║гр ╟Ф©Л©║╢б %2$ldюг ╬фюлЁК╣Е(inode)"
+"╟║ гй©Дгу╢о╢ы"
 
 #: lib/rpmps.c:259
 #, c-format
 msgid "package %s pre-transaction syscall(s): %s failed: %s"
-msgstr "пакет %s pre-transaction syscall(s): %s: ошибка: %s"
+msgstr ""
+"%s фпе╟аЖюг ╪╠(pre)-ф╝╥ёюХ╪г ╫ц╫╨ешдщ(syscall): %s(юл)╟║ ╫гфпгъ╫ю╢о╢ы: %s"
 
 #: lib/rpmps.c:263
-#, c-format
+#, fuzzy, c-format
 msgid "%s is needed by %s%s"
-msgstr "%s нужен для %s%s"
+msgstr " (ю╨)╢б %s-%s-%s ©║╪╜ гй©Д╥н гу╢о╢ы\n"
 
 #: lib/rpmps.c:265 lib/rpmps.c:270
+#, fuzzy
 msgid "(installed) "
-msgstr "(установлен)"
+msgstr "╪Ёд║╣г╬Н южаЖ ╬йю╫  "
 
 #: lib/rpmps.c:268
-#, c-format
+#, fuzzy, c-format
 msgid "%s conflicts with %s%s"
-msgstr "%s конфликтует с%s%s"
+msgstr " %s-%s-%s (©м)╟З цФ╣╧гу╢о╢ы\n"
 
 #: lib/rpmps.c:274
 #, fuzzy, c-format
 msgid "installing package %s on %s rdonly filesystem"
-msgstr "для установки пакета %s нужно %ld%c байт на файловой системе %s"
+msgstr ""
+"%4$s фдюо╫ц╫╨еш ╩С©║╪╜ %1$s фпе╟аЖ╦╕ ╪Ёд║гр ╟Ф©Л©║╢б %2$ld%3$cb(юл)╟║ гй©Дгу"
+"╢о╢ы"
 
 #: lib/rpmps.c:279
 #, c-format
 msgid "unknown error %d encountered while manipulating package %s"
-msgstr "неизвестная ошибка %d при работе с пакетом %s"
+msgstr ""
+"%2$s фпе╟аЖ╦╕ цЁ╦╝го╢б ╟За╓©║╪╜ ╬к ╪Ж ╬Ь╢б ©ю╥Ы %1$d(юл)╟║ ╧ъ╩Щгъ╫ю╢о╢ы"
 
 #: lib/rpmrc.c:191
 #, c-format
 msgid "missing second ':' at %s:%d\n"
-msgstr "отсутствует второе ':' в %s:%d\n"
+msgstr "%s©║ ╣н╧Ьб╟ ':' юл ╬Ью╫:%d\n"
 
 #: lib/rpmrc.c:194
 #, c-format
 msgid "missing architecture name at %s:%d\n"
-msgstr "отсутствует название архитектуры в %s:%d\n"
+msgstr "%s©║ ╬фе╟еьцд╦Мюл ╬Ью╫:%d\n"
 
 #: lib/rpmrc.c:360
 #, c-format
 msgid "Incomplete data line at %s:%d\n"
-msgstr "Неполная строка данных в %s:%d\n"
+msgstr "%sюг ╣╔юлем гв╦Я(line)юл ╨рцФ╨пгт:%d\n"
 
 #: lib/rpmrc.c:365
 #, c-format
 msgid "Too many args in data line at %s:%d\n"
-msgstr "Слишком много аргументов в строке данных в %s:%d\n"
+msgstr "%sюг ╣╔юлем гв╦Я(line)©║ юн╪Ж╟║ Ёй╧╚ ╦╧ю╫:%d\n"
 
 #: lib/rpmrc.c:373
 #, c-format
 msgid "Bad arch/os number: %s (%s:%d)\n"
-msgstr "Неверный номер arch/os: %s (%s:%d)\n"
+msgstr "юъ╦Ь╣х ╬фе╟еьцд/©Н©╣ц╪а╕ ╧Ьхё: %s (%s:%d)\n"
 
 #: lib/rpmrc.c:410
 #, c-format
 msgid "Incomplete default line at %s:%d\n"
-msgstr "Неполная строка по умолчанию в %s:%d\n"
+msgstr "%sюг ╠Б╨╩ гв╦Я(line)юл ╨рцФ╨пгт:%d\n"
 
 #: lib/rpmrc.c:415
 #, c-format
 msgid "Too many args in default line at %s:%d\n"
-msgstr "Слишком много аргументов в строке по умолчанию в %s:%d\n"
+msgstr "%sюг ╠Б╨╩ гв╦Я(line)©║ юн╪Ж╟║ Ёй╧╚ ╦╧ю╫:%d\n"
 
 #: lib/rpmrc.c:675
 #, c-format
 msgid "Failed to read %s: %s.\n"
-msgstr "Невозможно прочесть %s: %s.\n"
+msgstr "%s(ю╩)╦╕ юп╢б╣╔ ╫гфпгт: %s.\n"
 
 #: lib/rpmrc.c:713
 #, c-format
 msgid "missing ':' (found 0x%02x) at %s:%d\n"
-msgstr "отсутствует ':' (найден 0x%02x) в %s:%d\n"
+msgstr "%2$s©║ ':' (0x%1$02x цёю╫) юл ╬Ью╫:%3$d\n"
 
 #: lib/rpmrc.c:730 lib/rpmrc.c:793
 #, c-format
 msgid "missing argument for %s at %s:%d\n"
-msgstr "отсутствует аргумент для %s в %s:%d\n"
+msgstr "%2$s©║ %1$s(ю╩)╦╕ ю╖гя юн╪Ж╟║ ╬Ью╫:%3$d\n"
 
 #: lib/rpmrc.c:747 lib/rpmrc.c:769
 #, c-format
 msgid "%s expansion failed at %s:%d \"%s\"\n"
-msgstr "ошибка раскрытия %s на %s:%d \"%s\"\n"
+msgstr "%2$sюг %1$s х╝юЕ(expansion)©║ ╫гфпгт:%3$d \"%4$s\"\n"
 
 #: lib/rpmrc.c:756
 #, c-format
 msgid "cannot open %s at %s:%d: %s\n"
-msgstr "невозможно открыть %s в %s:%d %s\n"
+msgstr "%2$sюг %1$s(ю╩)╦╕ ©╜ ╪Ж ╬Ью╫:%3$d: %4$s\n"
 
 #: lib/rpmrc.c:785
 #, c-format
 msgid "missing architecture for %s at %s:%d\n"
-msgstr "отсутствует архитектура для %s в %s:%d\n"
+msgstr "%2$s©║ %1$s(ю╩)╦╕ ю╖гя ╬фе╟еьцд╟║ ╬Ью╫:%3$d\n"
 
 #: lib/rpmrc.c:852
 #, c-format
 msgid "bad option '%s' at %s:%d\n"
-msgstr "неверный параметр '%s' в %s:%d\n"
+msgstr "%2$s©║ юъ╦Ь╣х '%1$s' ©и╪г:%3$d\n"
 
 #: lib/rpmrc.c:1920
 #, c-format
 msgid "Cannot expand %s\n"
-msgstr "Невозможно раскрыть %s\n"
+msgstr "%s(ю╩)╦╕ х╝юЕ(expand)гр ╪Ж ╬Ь╫ю╢о╢ы\n"
 
 #: lib/rpmrc.c:1925
 #, c-format
 msgid "Cannot read %s, HOME is too large.\n"
-msgstr "Невозможно прочитать %s, значение HOME слишком велико.\n"
+msgstr "%s(ю╩)╦╕ юпю╩ ╪Ж ╬Ь╫ю╢о╢ы, HOMEюл Ёй╧╚ е╝╢о╢ы.\n"
 
 #: lib/rpmrc.c:1942
 #, c-format
 msgid "Unable to open %s for reading: %s.\n"
-msgstr "Невозможно открыть %s для чтения: %s.\n"
+msgstr "%s(ю╩)╦╕ ©╜ ╪Ж ╬Ью╫: %s.\n"
 
 #: lib/rpmrc.c:2087
 #, c-format
@@ -3368,7 +3391,7 @@ msgstr ""
 #: lib/rpmrollback.c:389
 #, fuzzy
 msgid "Failed dependencies"
-msgstr "Неудовлетворенные зависимости:\n"
+msgstr "юга╦╪╨ ╧╝а╕╥н юнгь ╫гфпгт:\n"
 
 #: lib/rpmrollback.c:394
 msgid "Ordering problems"
@@ -3386,12 +3409,12 @@ msgstr ""
 #: lib/rpmrollback.c:620
 #, fuzzy
 msgid "Missing re-packaged package(s)"
-msgstr "ошибка чтения заголовка из пакета\n"
+msgstr "фпе╟аЖюг гЛ╢У╦╕ юп╢б ╣╣аъ ©ю╥Ы╟║ ╧ъ╩Щгъ╫ю╢о╢ы\n"
 
 #: lib/rpmrollback.c:628
 #, c-format
 msgid "Rollback packages (+%d/-%d) to %-24.24s (0x%08x):\n"
-msgstr "Откат пакетов (+%d/-%d) на %-24.24s (0x%08x):\n"
+msgstr ""
 
 #: lib/rpmrollback.c:654
 msgid "Cleaning up repackaged packages:\n"
@@ -3400,7 +3423,7 @@ msgstr ""
 #: lib/rpmrollback.c:661
 #, fuzzy, c-format
 msgid "\tRemoving %s:\n"
-msgstr "Загружается %s\n"
+msgstr "%s(ю╩)╦╕ ╨╧╠╦гу╢о╢ы\n"
 
 #: lib/rpmsx.c:374
 #, c-format
@@ -3430,47 +3453,46 @@ msgstr ""
 #: lib/rpmts.c:126
 #, c-format
 msgid "cannot open Packages database in %s\n"
-msgstr "не могу открыть базу данных Packages в %s\n"
+msgstr "%s ╬хюг фпе╟аЖ ╣╔юлем╨ёюл╫╨╦╕ ©╜ ╪Ж ╬Ь╫ю╢о╢ы\n"
 
 #: lib/rpmts.c:187
 #, fuzzy, c-format
 msgid "extra '(' in package label: %s\n"
-msgstr "неверный номер пакета: %s\n"
+msgstr "╨нюШгугя фпе╟аЖ ╧Ьхё: %s\n"
 
 #: lib/rpmts.c:205
 #, fuzzy, c-format
 msgid "missing '(' in package label: %s\n"
-msgstr "Отсутствует '(' в %s %s\n"
+msgstr "%s %s©║ '(' ╟║ ╬Ь╫ю╢о╢ы\n"
 
 #: lib/rpmts.c:213
 #, fuzzy, c-format
 msgid "missing ')' in package label: %s\n"
-msgstr "неверный номер пакета: %s\n"
+msgstr "╨нюШгугя фпе╟аЖ ╧Ьхё: %s\n"
 
 #: lib/rpmts.c:424
-#, c-format
+#, fuzzy, c-format
 msgid "cannot open Solve database in %s\n"
-msgstr "невозможно открыть базу данных разрешения зависимостей в %s\n"
+msgstr "%sюг rpm ╣╔юлем╨ёюл╫╨╦╕ ©╜ ╪Ж ╬Ь╫ю╢о╢ы\n"
 
 #: lib/rpmts.c:543
 #, fuzzy, c-format
 msgid "incorrect solve path format: %s\n"
-msgstr "ошибка в формате: %s\n"
+msgstr "©ц╧ы╦ёаЖ ╦Ьгя гЭ╫д: %s\n"
 
 #: lib/rpmts.c:573
-#, c-format
+#, fuzzy, c-format
 msgid "Adding: %s\n"
-msgstr "Добавляется: %s\n"
+msgstr "гЮ: %s\n"
 
 #: lib/rpmts.c:584
-#, c-format
+#, fuzzy, c-format
 msgid "Suggesting: %s\n"
-msgstr "Предлагается: %s\n"
+msgstr "%s(ю╩)╦╕ ╨╧╠╦гу╢о╢ы\n"
 
 #: lib/rpmts.c:1149
-#, fuzzy
 msgid "mounted filesystems:\n"
-msgstr "строится список смонтированных файловых систем\n"
+msgstr ""
 
 #: lib/rpmts.c:1151
 msgid "    i        dev    bsize       bavail       iavail mount point\n"
@@ -3479,17 +3501,17 @@ msgstr ""
 #: lib/rpmts.c:1232
 #, fuzzy, c-format
 msgid "%5d 0x%08x %8u %12ld %12ld %s %s\n"
-msgstr "Файл%5d: %07o %s.%s\t %s\n"
+msgstr "фдюо%5d: %07o %s.%s\t %s\n"
 
 #: lib/signature.c:139
 #, fuzzy, c-format
 msgid "Expected size: %12lu = lead(%d)+sigs(%d)+pad(%d)+data(%lu)\n"
-msgstr "Ожидаемый размер: %12d = lead(%d)+sigs(%d)+pad(%d)+data(%d)\n"
+msgstr "©╧╩С(Expected) ©К╥╝: %12d = lead(%d)+sigs(%d)+pad(%d)+data(%d)\n"
 
 #: lib/signature.c:144
 #, fuzzy, c-format
 msgid "  Actual size: %12lu\n"
-msgstr "Фактический размер: %12d\n"
+msgstr " ╫га╕ ©К╥╝: %12d\n"
 
 #: lib/signature.c:187
 #, c-format
@@ -3539,134 +3561,136 @@ msgstr ""
 #: lib/signature.c:371
 #, c-format
 msgid "Signature: size(%d)+pad(%d)\n"
-msgstr "Подпись: размер(%d)+заполнение(%d)\n"
+msgstr "╪╜╦М: size(%d)+pad(%d)\n"
 
 #: lib/signature.c:468 lib/signature.c:595 lib/signature.c:904
 #: lib/signature.c:943
 #, c-format
 msgid "Could not exec %s: %s\n"
-msgstr "Невозможно выполнить %s: %s\n"
+msgstr "%s(ю╩)╦╕ ╫ггЮгр ╪Ж ╬Ью╫: %s\n"
 
 #: lib/signature.c:484
 msgid "pgp failed\n"
-msgstr "ошибка pgp\n"
+msgstr "pgp╟║ ╫гфпгт\n"
 
 #: lib/signature.c:491
 msgid "pgp failed to write signature\n"
-msgstr "ошибка pgp при записи подписи\n"
+msgstr "pgp ╪╜╦Мю╩ юш╪╨го╢б╣╔ ╫гфпгъ╫ю╢о╢ы\n"
 
 #: lib/signature.c:497
 #, c-format
 msgid "PGP sig size: %d\n"
-msgstr "Размер подписи PGP: %d\n"
+msgstr "PGP ╪╜╦М ©К╥╝: %d\n"
 
 #: lib/signature.c:515 lib/signature.c:643
 msgid "unable to read the signature\n"
-msgstr "невозможно прочесть подпись\n"
+msgstr "╪╜╦Мю╩ юпю╩ ╪Ж ╬Ь╫ю╢о╢ы\n"
 
 #: lib/signature.c:520
 #, c-format
 msgid "Got %d bytes of PGP sig\n"
-msgstr "Получено %d байт подписи PGP\n"
+msgstr "%d ╧ыюлф╝юг PGP ╪╜╦Мю╩ ╬Р╬З╫ю╢о╢ы\n"
 
 #: lib/signature.c:612
 #, fuzzy, c-format
 msgid "gpg exec failed (%d)\n"
-msgstr "запуск не удался\n"
+msgstr "╫ггЮ©║ ╫гфпгъ╫ю╢о╢ы\n"
 
 #: lib/signature.c:619
 msgid "gpg failed to write signature\n"
-msgstr "ошибка gpg при записи подписи\n"
+msgstr "gpg ╪╜╦Мю╩ юш╪╨го╢б╣╔ ╫гфпгъ╫ю╢о╢ы\n"
 
 #: lib/signature.c:625
 #, c-format
 msgid "GPG sig size: %d\n"
-msgstr "Размер подписи GPG: %d\n"
+msgstr "GPG ╪╜╦М ©К╥╝: %d\n"
 
 #: lib/signature.c:648
 #, c-format
 msgid "Got %d bytes of GPG sig\n"
-msgstr "Получено %d байт подписи GPG\n"
+msgstr "%d ╧ыюлф╝юг GPG ╪╜╦Мю╩ ╬Р╬З╫ю╢о╢ы\n"
 
 #: lib/signature.c:948 lib/signature.c:1001
 #, c-format
 msgid "Invalid %%_signature spec in macro file\n"
-msgstr "Неверная спецификация %%_signature в макрофайле\n"
+msgstr "╦ее╘╥н фдюо ╬х©║ ╨нюШгугя %%_signature Ё╩©К(spec)юл юж╫ю╢о╢ы\n"
 
 #: lib/signature.c:981
 #, c-format
 msgid "You must set \"%%_gpg_name\" in your macro file\n"
-msgstr "Вы должны установить \"%%_gpg_name\" в вашем макрофайле\n"
+msgstr "╦ее╘╥н фдюо ╬х©║ ╧щ╣Е╫ц \"%%_gpg_name\"ю╩ ╪Ёа╓гь╬ъ гу╢о╢ы\n"
 
 #: lib/signature.c:995
 #, c-format
 msgid "You must set \"%%_pgp_name\" in your macro file\n"
-msgstr "Вы должны установить \"%%_pgp_name\" в вашем макрофайле\n"
+msgstr "╦ее╘╥н фдюо ╬х©║ ╧щ╣Е╫ц \"%%_pgp_name\"ю╩ ╪Ёа╓гь╬ъ гу╢о╢ы\n"
 
 #: lib/signature.c:1041
+#, fuzzy
 msgid "Header+Payload size: "
-msgstr "размер Заголовка и Содержимого:"
+msgstr "гЛ╢Уюг е╘╠Б╟║ Ёй╧╚ е╝╢о╢ы"
 
 #: lib/signature.c:1082
 msgid "MD5 digest: "
-msgstr "дайджест MD5:"
+msgstr ""
 
 #: lib/signature.c:1142
+#, fuzzy
 msgid "Header SHA1 digest: "
-msgstr "дайджест SHA1 заголовка:"
+msgstr "SHA1 цЮ╬Ю(digest) гЛ╢У╦╕ ╟к╩ГгоаЖ ╬й╫ю╢о╢ы"
 
 #: lib/signature.c:1223 lib/signature.c:1413
 msgid "Header "
-msgstr "Заголовок "
+msgstr ""
 
 #: lib/signature.c:1292
 #, fuzzy
 msgid " signature: "
-msgstr "подпись DSA V3: "
+msgstr "╪╜╦Мюл ╬Ь╫ю╢о╢ы\n"
 
 #: lib/signature.c:1419
 #, fuzzy
 msgid " DSA signature: "
-msgstr "подпись DSA V3: "
+msgstr "╪╜╦Мюл ╬Ь╫ю╢о╢ы\n"
 
 #: lib/signature.c:1501
 #, c-format
 msgid "Verify signature: BAD PARAMETERS\n"
-msgstr "Проверка подписи: НЕПРАВИЛЬНЫЕ ПАРАМЕТРЫ\n"
+msgstr ""
 
 #: lib/signature.c:1532
 #, c-format
 msgid "Broken MD5 digest: UNSUPPORTED\n"
-msgstr "Контр. сумма MD5 повреждена: НЕ ПОДДЕРЖИВАЕТСЯ\n"
+msgstr "╪у╩С╣х MD5 цЮ╬Ю(digest): аЖ©ЬгоаЖ ╬йю╫\n"
 
 #: lib/signature.c:1536
-#, c-format
+#, fuzzy, c-format
 msgid "Signature: UNKNOWN (%d)\n"
-msgstr "Подпись: НЕИЗВЕСТНО (%d)\n"
+msgstr "╪╜╦М: size(%d)+pad(%d)\n"
 
 #: lib/transaction.c:890
 #, c-format
 msgid "excluding directory %s\n"
-msgstr "исключается каталог %s\n"
+msgstr "%s ╣П╥╨еД╦╝╦╕ а╕©э╫це╣╢о╢ы\n"
 
 #: lib/transaction.c:1013
 #, fuzzy, c-format
 msgid "rpmdb erase failed. NEVRA: %s\n"
-msgstr "%s ошибка удаления каталога %s: %s\n"
+msgstr "%s %s ╣П╥╨еД╦╝ ╩Ха╕©║ ╫гфпгт: %s\n"
 
 #: lib/transaction.c:1031
-#, fuzzy, c-format
+#, c-format
 msgid "Rollback to %-24.24s (0x%08x)\n"
-msgstr "Откат пакетов (+%d/-%d) на %-24.24s (0x%08x):\n"
+msgstr ""
 
 #: lib/transaction.c:1178
 msgid "Invalid number of transaction elements.\n"
 msgstr ""
 
 #: lib/transaction.c:1251
-#, fuzzy, c-format
+#, c-format
 msgid "sanity checking %d elements\n"
-msgstr "провeряется %d элементов\n"
+msgstr ""
 
 #: lib/transaction.c:1324
 msgid "running pre-transaction scripts\n"
@@ -3675,11 +3699,11 @@ msgstr ""
 #: lib/transaction.c:1399
 #, c-format
 msgid "computing %d file fingerprints\n"
-msgstr "подсчитывается отпечаток(ки) %d файла(ов)\n"
+msgstr ""
 
 #: lib/transaction.c:1488
 msgid "computing file dispositions\n"
-msgstr "подсчитывается диспозиция файлов\n"
+msgstr ""
 
 #: lib/transaction.c:1890
 msgid "running post-transaction scripts\n"
@@ -3688,47 +3712,47 @@ msgstr ""
 #: lib/verify.c:305
 #, fuzzy, c-format
 msgid "missing   %c %s"
-msgstr "отсутствует   %c %s"
+msgstr "╢ыю╫ю╩ цёю╩ ╪Ж ╬Ью╫    %s"
 
 #: lib/verify.c:424
 #, fuzzy, c-format
 msgid "Unsatisfied dependencies for %s:\n"
-msgstr "Неудовлетворенные зависимости для %s: "
+msgstr "%s-%s-%s©║ юга╦╪╨ ╧╝а╕ ╧ъ╩Щ: "
 
 #: rpmdb/db3.c:162
 #, c-format
 msgid "db%d error(%d) from %s: %s\n"
-msgstr "ошибка(%d) db%d из %s: %s\n"
+msgstr "%3$sюг db%1$d ©ю╥Ы(%2$d): %4$s\n"
 
 #: rpmdb/db3.c:165
 #, c-format
 msgid "db%d error(%d): %s\n"
-msgstr "ошибка(%d) db%d: %s\n"
+msgstr "db%d ©ю╥Ы(%d): %s\n"
 
 #: rpmdb/db3.c:191
 #, c-format
 msgid "closed   db environment %s/%s\n"
-msgstr "закрыто окружение базы данных %s/%s\n"
+msgstr "╢щхЫ    db х╞╟Ф        %s/%s\n"
 
 #: rpmdb/db3.c:210
 #, c-format
 msgid "removed  db environment %s/%s\n"
-msgstr "удалено окружение базы данных %s/%s\n"
+msgstr "╩Ха╕╣х  db х╞╟Ф        %s/%s\n"
 
 #: rpmdb/db3.c:331
 #, c-format
 msgid "opening  db environment %s/%s %s\n"
-msgstr "открывается окружение базы данных %s/%s %s\n"
+msgstr "©╘╢баъ  db х╞╟Ф        %s/%s %s\n"
 
 #: rpmdb/db3.c:954
 #, c-format
 msgid "closed   db index       %s/%s\n"
-msgstr "закрыт индекс базы данных %s/%s\n"
+msgstr "╢щхЫ    db юн╣╕╫╨      %s/%s\n"
 
 #: rpmdb/db3.c:1024
 #, c-format
 msgid "verified db index       %s/%s\n"
-msgstr "проверен индекс базы данных %s/%s\n"
+msgstr "╟каУ╣х  db юн╣╕╫╨      %s/%s\n"
 
 #: rpmdb/db3.c:1168
 #, c-format
@@ -3742,102 +3766,101 @@ msgstr ""
 #: rpmdb/db3.c:1338
 #, c-format
 msgid "opening  db index       %s/%s %s mode=0x%x\n"
-msgstr "открывается индекс базы данных %s/%s %s mode=0x%x\n"
+msgstr "©╘╢баъ  db юн╣╕╫╨      %s/%s %s ╦П╣Е=0x%x\n"
 
 #: rpmdb/db3.c:1579
 #, c-format
 msgid "cannot get %s lock on %s/%s\n"
-msgstr "невозможно получить блокировку %s на %s/%s\n"
+msgstr "%2$s/%3$sюг юА╠щ╣х(lock) %1$s(ю╩)╦╕ ╬Рю╩ ╪Ж ╬Ь╫ю╢о╢ы\n"
 
 #: rpmdb/db3.c:1581
 msgid "exclusive"
-msgstr "исключительный"
+msgstr "фС╪БюШ(exclusive)"
 
 #: rpmdb/db3.c:1581
 msgid "shared"
-msgstr "разделяемый"
+msgstr "╟Ью╞╣й"
 
 #: rpmdb/db3.c:1585
 #, c-format
 msgid "locked   db index       %s/%s\n"
-msgstr "заблокирован индекс базы данных %s/%s\n"
+msgstr "юА╠щ╣х  db юн╣╕╫╨      %s/%s\n"
 
 #: rpmdb/dbconfig.c:575
 #, c-format
 msgid "unrecognized db option: \"%s\" ignored.\n"
-msgstr "неопознанный параметр базы данных: \"%s\" проигнорирован\n"
+msgstr "юнаУ╣гаЖ ╬йю╨ db ©и╪г: \"%s\"(ю╩)╦╕ ╧╚╫цгу╢о╢ы.\n"
 
 #: rpmdb/dbconfig.c:615
 #, c-format
 msgid "%s has invalid numeric value, skipped\n"
-msgstr "неверное числовое значение %s, пропущено\n"
+msgstr "%s(ю╨)╢б ╨нюШгугя ╪Жд║ ╟╙ют╢о╢ы, ╩Щ╥╚гу╢о╢ы\n"
 
 #: rpmdb/dbconfig.c:624
 #, c-format
 msgid "%s has too large or too small long value, skipped\n"
-msgstr "%s имеет слишком малую или слишком большую величину long, пропущено\n"
+msgstr "%s(ю╨)╢б Ёй╧╚ е╘╟еЁ╙ Ёй╧╚ юШю╨ а╓╪Ж(long) ╟╙ют╢о╢ы, ╩Щ╥╚гу╢о╢ы\n"
 
 #: rpmdb/dbconfig.c:633
 #, c-format
 msgid "%s has too large or too small integer value, skipped\n"
-msgstr ""
-"%s имеет слишком малую или слишком большую величину integer, пропущено\n"
+msgstr "%s(ю╨)╢б Ёй╧╚ е╘╟еЁ╙ Ёй╧╚ юШю╨ а╓╪Ж(int) ╟╙ют╢о╢ы, ╩Щ╥╚гу╢о╢ы\n"
 
 #: rpmdb/header.c:2833
 msgid "missing { after %"
-msgstr "отсутствует \"{\" после \"%\""
+msgstr "'%' ╣з©║ '{' ╟║ ╬Ь╫ю╢о╢ы"
 
 #: rpmdb/header.c:2863
 msgid "missing } after %{"
-msgstr "отсутствует \"}\" после \"%{\""
+msgstr "'%{' ╣з©║ '}' ╟║ ╬Ь╫ю╢о╢ы"
 
 #: rpmdb/header.c:2879
 msgid "empty tag format"
-msgstr "пустой формат тэга"
+msgstr "еб╠в гЭ╫дюл ╨Я╬Нюж╫ю╢о╢ы"
 
 #: rpmdb/header.c:2891
 msgid "empty tag name"
-msgstr "пустое имя тэга"
+msgstr "еб╠в юл╦╖юл ╨Я╬Нюж╫ю╢о╢ы"
 
 #: rpmdb/header.c:2900
 msgid "unknown tag"
-msgstr "неизвестный тэг"
+msgstr "╬к ╪Ж ╬Ь╢б еб╠в ют╢о╢ы"
 
 #: rpmdb/header.c:2927
 msgid "] expected at end of array"
-msgstr "в конце массива ожидалась \"]\""
+msgstr "╧Х©╜юг Ё║╨н╨п©║ ']' ╟║ ©м╬ъгу╢о╢ы"
 
 #: rpmdb/header.c:2940
 msgid "unexpected ]"
-msgstr "неожиданная \"]\""
+msgstr "╨ргй©Дгя ']' ╟║ юж╫ю╢о╢ы"
 
 #: rpmdb/header.c:2953
 msgid "unexpected }"
-msgstr "неожиданная \"}\""
+msgstr "╨ргй©Дгя '}' ╟║ юж╫ю╢о╢ы"
 
 #: rpmdb/header.c:3017
 msgid "? expected in expression"
-msgstr "в выражении ожидалось \"?\""
+msgstr "г╔гЖ╫д©║ '?' ╟║ ©м╬ъгу╢о╢ы"
 
 #: rpmdb/header.c:3024
 msgid "{ expected after ? in expression"
-msgstr "в выражении после \"?\" ожидалось \"{\""
+msgstr "г╔гЖ╫дюг '?' ╣з©║ '{' ╟║ ©м╬ъгу╢о╢ы"
 
 #: rpmdb/header.c:3036 rpmdb/header.c:3076
 msgid "} expected in expression"
-msgstr "в выражении ожидалось \"}\""
+msgstr "г╔гЖ╫д©║ '}' ╟║ ©м╬ъгу╢о╢ы"
 
 #: rpmdb/header.c:3044
 msgid ": expected following ? subexpression"
-msgstr "в выражении после \"?\" ожидалось \":\""
+msgstr "'?' го╨нг╔гЖ╫д(subexpression) ╣з©║ ':' юл ©м╬ъгу╢о╢ы"
 
 #: rpmdb/header.c:3062
 msgid "{ expected after : in expression"
-msgstr "в выражении после \":\" ожидалось \"{\""
+msgstr "г╔гЖ╫дюг ':' ╣з©║ '{' ╟║ ©м╬ъгу╢о╢ы"
 
 #: rpmdb/header.c:3084
 msgid "| expected at end of expression"
-msgstr "в конце выражения ожидался \"|\""
+msgstr "г╔гЖ╫дюг Ё║╨н╨п©║ '|' ╟║ ©м╬ъгу╢о╢ы"
 
 #: rpmdb/header.c:3187
 msgid "(index out of range)"
@@ -3849,7 +3872,7 @@ msgstr ""
 
 #: rpmdb/header.c:3770 rpmdb/header.c:3807 rpmdb/header.c:3830
 msgid "(not a number)"
-msgstr "(не число)"
+msgstr "(╪Щюз╟║ ╬ф╢у╢о╢ы)"
 
 #: rpmdb/header.c:3869
 #, c-format
@@ -3863,204 +3886,207 @@ msgstr ""
 #: rpmdb/header_internal.c:164
 #, c-format
 msgid "Data type %d not supported\n"
-msgstr "Тип данных %d не поддерживается\n"
+msgstr "%d ╣╔юлем ю╞гЭю╨ ╩Г©Кгр ╪Ж ╬Ь╫ю╢о╢ы\n"
 
 #: rpmdb/poptDB.c:18
 msgid "initialize database"
-msgstr "инициализировать базу данных"
+msgstr "╣╔юлем╨ёюл╫╨╦╕ цй╠Бх╜ гу╢о╢ы"
 
 #: rpmdb/poptDB.c:20
 msgid "rebuild database inverted lists from installed package headers"
 msgstr ""
-"переиндексировать базу инвертированных списков из установленных заголовков "
-"пакетов"
+"╪Ёд║╣х фпе╟аЖ гЛ╢У©║╪╜ ╩С╧щ╣х ╦Я╥о(inverted lists)юг ╣╔юлем╨ёюл╫╨╦╕ юГ╠╦цЮ гу"
+"╢о╢ы"
 
 #: rpmdb/poptDB.c:23
 msgid "verify database files"
-msgstr "проверить файлы базы данных"
+msgstr "╣╔юлем╨ёюл╫╨ фдюою╩ ╟к╩Ггу╢о╢ы"
 
 #: rpmdb/rpmdb.c:208
 #, c-format
 msgid "dbiTagsInit: unrecognized tag name: \"%s\" ignored\n"
-msgstr "dbiTagsInit: имя ключа \"%s\" не известно, игнорируется\n"
+msgstr ""
+"DB еб╠в цй╠Бх╜[dbiTagsInit]: юнаУ╣гаЖ ╬йю╨ еб╠в юл╦╖: \"%s\"(ю╨)╢б ╧╚╫ц╣к╢о"
+"╢ы\n"
 
 #: rpmdb/rpmdb.c:319
 #, c-format
 msgid "cannot open %s index using db%d - %s (%d)\n"
-msgstr "невозможно открыть индекс %s используя db%d - %s (%d)\n"
+msgstr "db%2$d(ю╩)╦╕ юл©Кго©╘ %1$s юн╣╕╫╨╦╕ ©╜ ╪Ж ╬Ь╫ю╢о╢ы - %3$s (%4$d)\n"
 
 #: rpmdb/rpmdb.c:339
 #, c-format
 msgid "cannot open %s index\n"
-msgstr "невозможно открыть индекс %s\n"
+msgstr "%s юн╣╕╫╨╦╕ ©╜ ╪Ж ╬Ь╫ю╢о╢ы\n"
 
 #: rpmdb/rpmdb.c:809
 #, fuzzy, c-format
 msgid "incorrect format: \"%s\": %s\n"
-msgstr "ошибка в формате: %s\n"
+msgstr "©ц╧ы╦ёаЖ ╦Ьгя гЭ╫д: %s\n"
 
 #: rpmdb/rpmdb.c:1130
 msgid "no dbpath has been set\n"
-msgstr "параметер dbpath не установлен\n"
+msgstr "db╟Ф╥н╟║ ╪Ёа╓╣г╬Н южаЖ ╬й╫ю╢о╢ы\n"
 
 #: rpmdb/rpmdb.c:1444 rpmdb/rpmdb.c:1582 rpmdb/rpmdb.c:1638 rpmdb/rpmdb.c:2542
 #: rpmdb/rpmdb.c:2696 rpmdb/rpmdb.c:3477
 #, c-format
 msgid "error(%d) getting \"%s\" records from %s index\n"
-msgstr "ошибка(%d) получения записей \"%s\" из индекса %s\n"
+msgstr ""
+"%3$s юн╣╕╫╨©║╪╜ \"%2$s\" ╥╧дз╣Е╦╕ ╬Р╢б ╣╣аъ ©ю╥Ы(%1$d)╟║ ╧ъ╩Щгъ╫ю╢о╢ы\n"
 
 #: rpmdb/rpmdb.c:1850
-#, fuzzy
 msgid "miFreeHeader: skipping"
-msgstr "rpmdb: пропускается"
+msgstr ""
 
 #: rpmdb/rpmdb.c:1860
-#, c-format
+#, fuzzy, c-format
 msgid "error(%d) storing record #%d into %s\n"
-msgstr "ошибка (%d) сохранения записи #%d в %s\n"
+msgstr "%3$s(ю╦)╥н %2$s ╥╧дз╣Е╦╕ юЗюЕго╢б ╣╣аъ ©ю╥Ы(%1$d)╟║ ╧ъ╩Щгъ╫ю╢о╢ы\n"
 
 #: rpmdb/rpmdb.c:2420
-#, fuzzy
 msgid "rpmdbNextIterator: skipping"
-msgstr "rpmdb: пропускается"
+msgstr ""
 
 #: rpmdb/rpmdb.c:2452
-#, c-format
+#, fuzzy, c-format
 msgid "rpmdb: damaged header #%u retrieved -- skipping.\n"
-msgstr "rpmdb: получен поврежденный заголовок #%u -- пропускается.\n"
+msgstr "rpmdb: ╪у╩С╣х гЛ╢У #%u(юл)╟║ ╨╧╠╦(retrieved)╣г╬З╫ю╢о╢ы, ╩Щ╥╚гу╢о╢ы.\n"
 
 #: rpmdb/rpmdb.c:2800
 #, c-format
 msgid "%s: cannot read header at 0x%x\n"
-msgstr "%s: невозможно прочесть заголовок в 0x%x\n"
+msgstr "%s: 0x%xюг гЛ╢У╦╕ юпю╩ ╪Ж ╬Ь╫ю╢о╢ы\n"
 
 #: rpmdb/rpmdb.c:2869
-#, c-format
+#, fuzzy, c-format
 msgid "error(%d) setting header #%d record for %s removal\n"
-msgstr "ошибка(%d) подготовки записи заголовка  #%d для удаления %s\n"
+msgstr ""
+"%3$s юн╣╕╫╨©║╪╜ \"%2$s\" ╥╧дз╣Е╦╕ ╬Р╢б ╣╣аъ ©ю╥Ы(%1$d)╟║ ╧ъ╩Щгъ╫ю╢о╢ы\n"
 
 #: rpmdb/rpmdb.c:2980
 #, c-format
 msgid "removing \"%s\" from %s index.\n"
-msgstr "удаляется \"%s\" из индекса %s.\n"
+msgstr "%2$s юн╣╕╫╨©║╪╜ \"%1$s\"(ю╩)╦╕ ╩Ха╕гу╢о╢ы.\n"
 
 #: rpmdb/rpmdb.c:2984
 #, c-format
 msgid "removing %d entries from %s index.\n"
-msgstr "удаляется %d записей из индекса %s.\n"
+msgstr "%2$s юн╣╕╫╨©║╪╜ %1$d гв╦Я╣И(entries)ю╩ ╩Ха╕гу╢о╢ы.\n"
 
 #: rpmdb/rpmdb.c:3012
-#, c-format
+#, fuzzy, c-format
 msgid "error(%d) setting \"%s\" records from %s index\n"
-msgstr "ошибка(%d) получения \"%s\" записей из индекса %s\n"
+msgstr ""
+"%3$s юн╣╕╫╨©║╪╜ \"%2$s\" ╥╧дз╣Е╦╕ ╬Р╢б ╣╣аъ ©ю╥Ы(%1$d)╟║ ╧ъ╩Щгъ╫ю╢о╢ы\n"
 
 #: rpmdb/rpmdb.c:3033
-#, c-format
+#, fuzzy, c-format
 msgid "error(%d) storing record \"%s\" into %s\n"
-msgstr "ошибка(%d) сохранения записи \"%s\" в %s\n"
+msgstr "%3$s(ю╦)╥н %2$s ╥╧дз╣Е╦╕ юЗюЕго╢б ╣╣аъ ©ю╥Ы(%1$d)╟║ ╧ъ╩Щгъ╫ю╢о╢ы\n"
 
 #: rpmdb/rpmdb.c:3043
-#, c-format
+#, fuzzy, c-format
 msgid "error(%d) removing record \"%s\" from %s\n"
-msgstr "ошибка(%d) удаления записи %s из %s\n"
+msgstr "%3$s©║╪╜ %2$s ╥╧дз╣Е╦╕ ╩Ха╕го╢б ╣╣аъ ©ю╥Ы(%1$d)╟║ ╧ъ╩Щгъ╫ю╢о╢ы\n"
 
 #: rpmdb/rpmdb.c:3214
 #, c-format
 msgid "error(%d) allocating new package instance\n"
-msgstr "ошибка(%d) резервирования памяти для образа нового пакета\n"
+msgstr "╩У╥н©Н фпе╟аЖ╦╕ ╧Хд║го╢б ╣╣аъ ©ю╥Ы(%d)╟║ ╧ъ╩Щгъ╫ю╢о╢ы\n"
 
 #: rpmdb/rpmdb.c:3280
 #, fuzzy
 msgid "rpmdbAdd: skipping"
-msgstr "rpmdb: пропускается"
+msgstr "rpmdb: ╪у╩С╣х гЛ╢У #%u(юл)╟║ ╨╧╠╦(retrieved)╣г╬З╫ю╢о╢ы, ╩Щ╥╚гу╢о╢ы.\n"
 
 #: rpmdb/rpmdb.c:3452
 #, c-format
 msgid "adding \"%s\" to %s index.\n"
-msgstr "добавляется \"%s\" в индекс %s.\n"
+msgstr "%2$s юн╣╕╫╨©║ \"%1$s\"(ю╩)╦╕ цъ╟║гу╢о╢ы.\n"
 
 #: rpmdb/rpmdb.c:3456
 #, c-format
 msgid "adding %d entries to %s index.\n"
-msgstr "добавляется %d записей в индекс %s\n"
+msgstr "%2$s юн╣╕╫╨©║ %1$d гв╦Я╣И(entries)ю╩ цъ╟║гу╢о╢ы.\n"
 
 #: rpmdb/rpmdb.c:3496
 #, c-format
 msgid "error(%d) storing record %s into %s\n"
-msgstr "ошибка(%d) записи записи %s в %s\n"
+msgstr "%3$s(ю╦)╥н %2$s ╥╧дз╣Е╦╕ юЗюЕго╢б ╣╣аъ ©ю╥Ы(%1$d)╟║ ╧ъ╩Щгъ╫ю╢о╢ы\n"
 
 #: rpmdb/rpmdb.c:3875
 #, c-format
 msgid "removing %s after successful db3 rebuild.\n"
-msgstr "удаляется %s после успешного завершения переиндекации базы в db3.\n"
+msgstr "db3╦╕ юГ╠╦цЮгя хд©║ %s(ю╩)╦╕ ╩Ха╕гу╢о╢ы.\n"
 
 #: rpmdb/rpmdb.c:3919
 msgid "no dbpath has been set"
-msgstr "параметер dbpath не установлен"
+msgstr "db╟Ф╥н╟║ ╪Ёа╓╣г╬Н южаЖ ╬й╫ю╢о╢ы"
 
 #: rpmdb/rpmdb.c:3951
 #, c-format
 msgid "rebuilding database %s into %s\n"
-msgstr "перестраивается база данных %s в %s\n"
+msgstr "%2$s©║ %1$s ╣╔юлем╨ёюл╫╨╦╕ юГ╠╦цЮ гу╢о╢ы\n"
 
 #: rpmdb/rpmdb.c:3955
 #, c-format
 msgid "temporary database %s already exists\n"
-msgstr "временная база данных %s уже существует\n"
+msgstr "юс╫ц ╣╔юлем╨ёюл╫╨ %s(юл)╟║ юл╧л а╦юГгу╢о╢ы\n"
 
 #: rpmdb/rpmdb.c:3961
 #, c-format
 msgid "creating directory %s\n"
-msgstr "создаётся каталог %s\n"
+msgstr "%s ╣П╥╨еД╦╝╦╕ ╩Щ╪╨гу╢о╢ы\n"
 
 #: rpmdb/rpmdb.c:3963
 #, c-format
 msgid "creating directory %s: %s\n"
-msgstr "создаётся каталог %s: %s\n"
+msgstr "%s ╣П╥╨еД╦╝╦╕ ╩Щ╪╨гт: %s\n"
 
 #: rpmdb/rpmdb.c:3972
 #, c-format
 msgid "opening old database with dbapi %d\n"
-msgstr "открывается старая база данных через dbapi %d\n"
+msgstr "dbapi %d╥н юлюЭ ╣╔юлем╨ёюл╫╨╦╕ ©╠╢о╢ы\n"
 
 #: rpmdb/rpmdb.c:3983
 #, c-format
 msgid "opening new database with dbapi %d\n"
-msgstr "открывается новая база данных через dbapi %d\n"
+msgstr "dbapi %d╥н ╩У╥н©Н ╣╔юлем╨ёюл╫╨╦╕ ©╠╢о╢ы\n"
 
 #: rpmdb/rpmdb.c:4014
-#, c-format
+#, fuzzy, c-format
 msgid "header #%u in the database is bad -- skipping.\n"
-msgstr "заголовок номер %u в базе данных неверный -- пропускается.\n"
+msgstr "╣╔юлем╨ёюл╫╨юг ╥╧дз╣Е ╧Ьхё %u(юл)╟║ юъ╦Ь╣г╬З╫ю╢о╢ы -- ╩Щ╥╚гу╢о╢ы.\n"
 
 #: rpmdb/rpmdb.c:4054
 #, c-format
 msgid "cannot add record originally at %u\n"
-msgstr "невозможно добавить запись (первоначально в %u)\n"
+msgstr "%u©║ цЁю╫╨нем ╥╧дз╣Е╦╕ цъ╟║гр ╪Ж ╬Ь╫ю╢о╢ы\n"
 
 #: rpmdb/rpmdb.c:4068
 msgid "failed to rebuild database: original database remains in place\n"
 msgstr ""
-"перестроение базы данных не удалось, старая база данных остается на месте\n"
+"╣╔юлем╨ёюл╫╨╦╕ юГ╠╦цЮго╢б╣╔ ╫гфпгт: ©Ь╨╩ ╣╔юлем╨ёюл╫╨╢б ╠в╢К╥н ю╞аЖ╣к╢о╢ы\n"
 
 #: rpmdb/rpmdb.c:4080
 msgid "failed to replace old database with new database!\n"
-msgstr "невозможно заменить старую базу данных на новую!\n"
+msgstr "юлюЭ ╣╔юлем╨ёюл╫╨╦╕ ╩У╥н©Н ╣╔юлем╨ёюл╫╨╥н ╠Ёц╪го╢б╣╔ ╫гфпгъ╫ю╢о╢ы!\n"
 
 #: rpmdb/rpmdb.c:4082
 #, c-format
 msgid "replace files in %s with files from %s to recover"
-msgstr "файлы в %s заменяются файлами из %s для восстановления"
+msgstr "╨╧╠╦го╠Б ю╖гь %2$sюг фдюою╩ %1$sюг фдюо╥н ╠Ёц╪гу╢о╢ы"
 
 #: rpmdb/rpmdb.c:4092
 #, c-format
 msgid "removing directory %s\n"
-msgstr "удаляется каталог %s\n"
+msgstr "%s ╣П╥╨еД╦╝╦╕ ╩Ха╕гу╢о╢ы\n"
 
 #: rpmdb/rpmdb.c:4094
 #, c-format
 msgid "failed to remove directory %s: %s\n"
-msgstr "ошибка удаления каталога %s: %s\n"
+msgstr "%s ╣П╥╨еД╦╝╦╕ ╩Ха╕го╢б╣╔ ╫гфпгт: %s\n"
 
 #: rpmdb/sqlite.c:666
 #, c-format
@@ -4070,87 +4096,87 @@ msgstr ""
 #: rpmdb/sqlite.c:826
 #, fuzzy, c-format
 msgid "closed   sql db         %s\n"
-msgstr "закрыт индекс базы данных %s/%s\n"
+msgstr "╢щхЫ   db фдюо        %s\n"
 
 #: rpmdb/sqlite.c:927
 #, fuzzy, c-format
 msgid "opening  sql db         %s (%s) mode=0x%x\n"
-msgstr "открывается индекс базы данных %s/%s %s mode=0x%x\n"
+msgstr "©╘╢баъ  db юн╣╕╫╨      %s/%s %s ╦П╣Е=0x%x\n"
 
 #: rpmio/macro.c:240
 #, c-format
 msgid "======================== active %d empty %d\n"
-msgstr "====================== активных %d пустых %d\n"
+msgstr "======================== %d х╟╪╨ %d ╨Я╬Нюжю╫\n"
 
 #: rpmio/macro.c:395
 #, c-format
 msgid "%3d>%*s(empty)"
-msgstr "%3d>%*s(пусто)"
+msgstr "%3d>%*s(╨Я╬Нюжю╫)"
 
 #: rpmio/macro.c:438
 #, c-format
 msgid "%3d<%*s(empty)\n"
-msgstr "%3d<%*s(пусто)\n"
+msgstr "%3d<%*s(╨Я╬Нюжю╫)\n"
 
 #: rpmio/macro.c:672 rpmio/macro.c:713
 #, c-format
 msgid "Macro %%%s has unterminated body\n"
-msgstr "Незакрытый макрос %%%s\n"
+msgstr "╦ее╘╥н %%%s©║ а╬╥А╣гаЖ ╬йю╨ Ё╩©К(body)юл юж╫ю╢о╢ы\n"
 
 #: rpmio/macro.c:735
 #, c-format
 msgid "Macro %%%s has illegal name (%%define)\n"
-msgstr "Недопустимое имя (%%define) макроса %%%s\n"
+msgstr "╦ее╘╥н %%%s©║ ╨нюШгугя юл╦╖юл юж╫ю╢о╢ы (%%define)\n"
 
 #: rpmio/macro.c:741
 #, c-format
 msgid "Macro %%%s has unterminated opts\n"
-msgstr "Незакрытые параметры в макросе %%%s\n"
+msgstr "╦ее╘╥н %%%s©║ а╬╥А╣гаЖ ╬йю╨ ©и╪гюл юж╫ю╢о╢ы\n"
 
 #: rpmio/macro.c:746
 #, c-format
 msgid "Macro %%%s has empty body\n"
-msgstr "Макрос %%%s пуст\n"
+msgstr "╦ее╘╥н %%%s©║ ╨Я╬Нюж╢б Ё╩©К(body)юл юж╫ю╢о╢ы\n"
 
 #: rpmio/macro.c:752
 #, c-format
 msgid "Macro %%%s failed to expand\n"
-msgstr "Невозможно раскрыть макрос %%%s\n"
+msgstr "╦ее╘╥н %%%s(ю╩)╦╕ х╝юЕ(expand)го╢б╣╔ ╫гфпгъ╫ю╢о╢ы\n"
 
 #: rpmio/macro.c:791
 #, c-format
 msgid "Macro %%%s has illegal name (%%undefine)\n"
-msgstr "Недопустимое имя (%%undefine) макроса %%%s\n"
+msgstr "╦ее╘╥н %%%s©║ ╨нюШгугя юл╦╖юл юж╫ю╢о╢ы (%%undefine)\n"
 
 #: rpmio/macro.c:915
 #, c-format
 msgid "Macro %%%s (%s) was not used below level %d\n"
-msgstr "Макрос %%%s (%s) не был использован ниже уровня %d\n"
+msgstr "╦ее╘╥н %%%s (%s)╢б ╥╧╨╖ %d юлго©║╪╜╢б ╩Г©Кгр ╪Ж ╬Ь╫ю╢о╢ы\n"
 
 #: rpmio/macro.c:1042
 #, c-format
 msgid "Unknown option %c in %s(%s)\n"
-msgstr "Неизвестный параметр %c в %s(%s)\n"
+msgstr "%2$s(%3$s)©║ ╬к ╪Ж ╬Ь╢б ©и╪г %1$c(юл)╟║ юж╫ю╢о╢ы\n"
 
 #: rpmio/macro.c:1245
 #, c-format
 msgid "Recursion depth(%d) greater than max(%d)\n"
-msgstr "Глубина рекурсии(%d) больше допустимой(%d)\n"
+msgstr "╧щ╨╧ х╫╪Ж(%d)╟║ цж╢Кд║(%d) ╨╦╢ы е╝╢о╢ы\n"
 
 #: rpmio/macro.c:1318 rpmio/macro.c:1335
 #, c-format
 msgid "Unterminated %c: %s\n"
-msgstr "Незакрытая %c: %s\n"
+msgstr "%c(юл)╟║ а╬╥А╣гаЖ ╬йю╫: %s\n"
 
 #: rpmio/macro.c:1376
 #, c-format
 msgid "A %% is followed by an unparseable macro\n"
-msgstr "непонятный макрос после %%\n"
+msgstr "'%%' ╢ыю╫©║ цЁ╦╝гр ╪Ж ╬Ь╢б(unparseable) ╦ее╘╥н╟║ юж╫ю╢о╢ы\n"
 
 #: rpmio/macro.c:1543
 #, c-format
 msgid "Macro %%%.*s not found, skipping\n"
-msgstr "Макрос %%%.*s не найден, пропускаю\n"
+msgstr "╦ее╘╥н %%%.*s╦╕ цёю╩ ╪Ж ╬Ь╫ю╢о╢ы, ╩Щ╥╚гу╢о╢ы\n"
 
 #: rpmio/macro.c:1880
 msgid "Macro expansion too big for target buffer\n"
@@ -4164,12 +4190,12 @@ msgstr ""
 #: rpmio/macro.c:2113 rpmio/macro.c:2119
 #, c-format
 msgid "File %s: %s\n"
-msgstr "Файл %s: %s\n"
+msgstr "%s фдюо: %s\n"
 
 #: rpmio/macro.c:2122
 #, c-format
 msgid "File %s is smaller than %u bytes\n"
-msgstr "Длина файла %s меньше чем %u байт\n"
+msgstr "%s фдюоюл %u ╧ыюлф╝ ╨╦╢ы юШ╫ю╢о╢ы\n"
 
 #: rpmio/rpmdav.c:662
 msgid "Authorization Required"
@@ -4182,90 +4208,91 @@ msgstr ""
 #: rpmio/rpmdav.c:666
 #, fuzzy
 msgid "Server Error"
-msgstr "Ошибка ввода/вывода сервера"
+msgstr "╪╜╧Ж ют/цБ╥б ©ю╥Ыют╢о╢ы"
 
 #: rpmio/rpmdav.c:668
 #, fuzzy
 msgid "Unknown Error"
-msgstr "(нет ошибки)"
+msgstr "(©ю╥Ы ╬Ью╫)"
 
 #: rpmio/rpmio.c:719
 msgid "Success"
-msgstr "Выполнено"
+msgstr "╪╨╟Ь"
 
 #: rpmio/rpmio.c:742
 msgid "Bad server response"
-msgstr "Неверный ответ сервера"
+msgstr "юъ╦Ь╣х ╪╜╧Ж юю╢Дют╢о╢ы"
 
 #: rpmio/rpmio.c:744
 msgid "Server I/O error"
-msgstr "Ошибка ввода/вывода сервера"
+msgstr "╪╜╧Ж ют/цБ╥б ©ю╥Ыют╢о╢ы"
 
 #: rpmio/rpmio.c:746
 msgid "Server timeout"
-msgstr "Таймаут сервера"
+msgstr "╪╜╧Ж ╢К╠Б╫ц╟ёюл цй╟З╣г╬З╫ю╢о╢ы"
 
 #: rpmio/rpmio.c:748
 msgid "Unable to lookup server host address"
-msgstr "Не могу найти адрес сервера"
+msgstr "╪╜╧Ж хё╫╨ф╝ аж╪р╦╕ ╟к╩Жгр ╪Ж ╬Ь╫ю╢о╢ы"
 
 #: rpmio/rpmio.c:750
 msgid "Unable to lookup server host name"
-msgstr "Не могу найти имя сервера"
+msgstr "╪╜╧Ж хё╫╨ф╝ юл╦╖ю╩ ╟к╩Жгр ╪Ж ╬Ь╫ю╢о╢ы"
 
 #: rpmio/rpmio.c:752
 msgid "Failed to connect to server"
-msgstr "Не могу соединиться с сервером"
+msgstr "╪╜╧Ж©║ а╒╪сго╢б╣╔ ╫гфпгъ╫ю╢о╢ы"
 
 #: rpmio/rpmio.c:754
 msgid "Failed to establish data connection to server"
-msgstr "Не могу установить соединение для данных с сервером"
+msgstr "╪╜╧Ж©║ ╣╔юлем а╒╪сю╩ ╫ц╣╣го╢б╣╔ ╫гфпгъ╫ю╢о╢ы"
 
 #: rpmio/rpmio.c:756
 msgid "I/O error to local file"
-msgstr "Файловая ошибка ввода/вывода"
+msgstr "╥ндц фдюо©║ ют/цБ╥б ©ю╥Ы╟║ ╧ъ╩Щгъ╫ю╢о╢ы"
 
 #: rpmio/rpmio.c:758
 msgid "Error setting remote server to passive mode"
-msgstr "Ошибка при переводе удаленного сервера в пассивный режим"
+msgstr ""
+"©Ь╟щ ╪╜╧Ж╦╕ ╪Ж╣© ╦П╣Е(passive mode)╥н ╪Ёа╓го╢б ╣╣аъ ©ю╥Ы╟║ ╧ъ╩Щгъ╫ю╢о╢ы"
 
 #: rpmio/rpmio.c:760
 msgid "File not found on server"
-msgstr "Файл не найден на сервере"
+msgstr "╪╜╧Ж©║╪╜ фдюою╩ цёю╩ ╪Ж ╬Ь╫ю╢о╢ы"
 
 #: rpmio/rpmio.c:762
 msgid "Abort in progress"
-msgstr "Отмена в процессе"
+msgstr "аЬгЮюл аъ╢э╣г╬З╫ю╢о╢ы"
 
 #: rpmio/rpmio.c:766
 msgid "Unknown or unexpected error"
-msgstr "Неизвестная или неожиданная ошибка"
+msgstr "╬к ╪Ж ╬Ь╢б х╓ю╨ ©╧╩Сд║ ╦Ьгя ©ю╥Ы╟║ ╧ъ╩Щгъ╫ю╢о╢ы"
 
 #: rpmio/rpmio.c:784
 #, fuzzy
 msgid "Malformed URL"
-msgstr "ошибка формата %s: %s.\n"
+msgstr "%s(юл)╟║ юъ╦Ь╣й: %s\n"
 
 #: rpmio/rpmio.c:1619
 #, c-format
 msgid "logging into %s as %s, pw %s\n"
-msgstr "регистрируюсь в %s как %s, пароль %s\n"
+msgstr "%s©║ %s(ю╦)╥н ╠Б╥о(logging)гу╢о╢ы, pw %s\n"
 
 #: rpmio/rpmlog.c:59
 msgid "(no error)"
-msgstr "(нет ошибки)"
+msgstr "(©ю╥Ы ╬Ью╫)"
 
 #: rpmio/rpmlog.c:142 rpmio/rpmlog.c:143 rpmio/rpmlog.c:144
 msgid "fatal error: "
-msgstr "фатальная ошибка: "
+msgstr "д║╦МюШ ©ю╥Ы: "
 
 #: rpmio/rpmlog.c:145
 msgid "error: "
-msgstr "ошибка: "
+msgstr "©ю╥Ы: "
 
 #: rpmio/rpmlog.c:146
 msgid "warning: "
-msgstr "предупреждение: "
+msgstr "╟Ф╟М: "
 
 #: rpmio/rpmlua.c:498
 #, c-format
@@ -4275,61 +4302,61 @@ msgstr ""
 #: rpmio/rpmlua.c:516
 #, fuzzy, c-format
 msgid "invalid syntax in lua script: %s\n"
-msgstr "- не поддерживается для строк\n"
+msgstr "'-' ╢б ╧╝юз©╜©║╪╜ ╩Г©Кгр ╪Ж ╬Ь╫ю╢о╢ы\n"
 
 #: rpmio/rpmlua.c:521 rpmio/rpmlua.c:540
 #, fuzzy, c-format
 msgid "lua script failed: %s\n"
-msgstr "%s: ошибка Fwrite: %s\n"
+msgstr "%s: Fwriteюл ╫гфпгъ╫ю╢о╢ы: %s\n"
 
 #: rpmio/rpmlua.c:535
 #, fuzzy, c-format
 msgid "invalid syntax in lua file: %s\n"
-msgstr "неверный номер пакета: %s\n"
+msgstr "╨нюШгугя фпе╟аЖ ╧Ьхё: %s\n"
 
 #: rpmio/rpmlua.c:688
 #, fuzzy, c-format
 msgid "lua hook failed: %s\n"
-msgstr "%s не удалось: %s\n"
+msgstr "%s(юл)╟║ ╫гфпгт: %s\n"
 
 #: rpmio/rpmmalloc.c:15
 #, c-format
 msgid "memory alloc (%u bytes) returned NULL.\n"
-msgstr "memory alloc (%u bytes) returned NULL.\n"
+msgstr "╦ч╦П╦╝ гр╢Г ╟╙ (%u ╧ыюлф╝)юл NULLю╩ ╧щх╞го©╢╫ю╢о╢ы.\n"
 
 #: rpmio/url.c:124
 #, c-format
 msgid "warning: u %p ctrl %p nrefs != 0 (%s %s)\n"
-msgstr "внимание: u %p ctrl %p nrefs != 0 (%s %s)\n"
+msgstr "╟Ф╟М: u %p ctrl %p nrefs != 0 (%s %s)\n"
 
 #: rpmio/url.c:144
 #, c-format
 msgid "warning: u %p data %p nrefs != 0 (%s %s)\n"
-msgstr "внимание: u %p data %p nrefs != 0 (%s %s)\n"
+msgstr "╟Ф╟М: u %p data %p nrefs != 0 (%s %s)\n"
 
 #: rpmio/url.c:174
 #, c-format
 msgid "warning: _url_cache[%d] %p nrefs(%d) != 1 (%s %s)\n"
-msgstr "предупреждение: _url_cache[%d] %p nrefs(%d) != 1 (%s %s)\n"
+msgstr "╟Ф╟М: _url_cache[%d] %p nrefs(%d) != 1 (%s %s)\n"
 
 #: rpmio/url.c:270
 #, c-format
 msgid "Password for %s@%s: "
-msgstr "Пароль для %s@%s: "
+msgstr "%s@%sюг фп╫╨©Ж╣Е: "
 
 #: rpmio/url.c:299 rpmio/url.c:325
 #, c-format
 msgid "error: %sport must be a number\n"
-msgstr "ошибка: %s порт должен быть числом\n"
+msgstr "©ю╥Ы: %s фВф╝╢б ╧щ╣Е╫ц ╪Щюзюл╬Н╬ъ гу╢о╢ы\n"
 
 #: rpmio/url.c:504
 msgid "url port must be a number\n"
-msgstr "url порт должен быть числом\n"
+msgstr "URL фВф╝╢б ╧щ╣Е╫ц ╪Щюзюл╬Н╬ъ гу╢о╢ы\n"
 
 #: rpmio/url.c:576
 #, c-format
 msgid "failed to create %s: %s\n"
-msgstr "невозможно создать %s: %s\n"
+msgstr "%s(ю╩)╦╕ ╩Щ╪╨го╢б╣╔ ╫гфпгт: %s\n"
 
 #: tools/rpmdeps.c:158
 msgid "print cpuinfo(...) dependency set"
@@ -4398,7 +4425,7 @@ msgstr ""
 #: tools/rpmdeps.c:192
 #, fuzzy
 msgid "print package(...) dependency set"
-msgstr "не проверять зависимости пакета"
+msgstr "фпе╟аЖ©м юга╦╪╨юл юж╢б фпе╟аЖ╦╕ Ё╙©╜гу╢о╢ы"
 
 #: tools/rpmdeps.c:195
 msgid "print java(...) dependency set"
@@ -4433,302 +4460,941 @@ msgid "check Requires: against Provides: for dependency closure"
 msgstr ""
 
 #, fuzzy
-#~ msgid "Rolling back successful transactions to %-24.24s (0x%08x).\n"
-#~ msgstr "Откат пакетов (+%d/-%d) на %-24.24s (0x%08x):\n"
-
-#, fuzzy
-#~ msgid "Failed transaction:  %-24.24s(0x%08x)\n"
-#~ msgstr "Откат пакетов (+%d/-%d) на %-24.24s (0x%08x):\n"
-
-#, fuzzy
 #~ msgid "Creating semaphore %s...\n"
-#~ msgstr "создаётся каталог %s\n"
-
-#, fuzzy
-#~ msgid "Rolling back successful transactions to %-24.24s (0x%08x)\n"
-#~ msgstr "Откат пакетов (+%d/-%d) на %-24.24s (0x%08x):\n"
+#~ msgstr "%s ╣П╥╨еД╦╝╦╕ ╩Щ╪╨гу╢о╢ы\n"
 
 #, fuzzy
 #~ msgid "Removing semaphore %s...\n"
-#~ msgstr "удаляется каталог %s\n"
+#~ msgstr "%s ╣П╥╨еД╦╝╦╕ ╩Ха╕гу╢о╢ы\n"
 
 #, fuzzy
 #~ msgid "\tRepackaged package not found!.\n"
-#~ msgstr "обнаружен двоичный пакет вместо ожидаемого исходного\n"
+#~ msgstr "╪р╫╨ фпе╟аЖ╟║ гй©Дго╦Г, ╧ыюлЁй╦╝╟║ ╟к╩Ж╣г╬З╫ю╢о╢ы\n"
 
 #, fuzzy
 #~ msgid "\tForce adding header to rpmdb.\n"
-#~ msgstr "ошибка чтения заголовка из пакета\n"
+#~ msgstr "фпе╟аЖюг гЛ╢У╦╕ юп╢б ╣╣аъ ©ю╥Ы╟║ ╧ъ╩Щгъ╫ю╢о╢ы\n"
 
 #, fuzzy
 #~ msgid "\tCould not add failed package header to db!\n"
-#~ msgstr "<исходный пакет>"
+#~ msgstr "<╪р╫╨ фпе╟аЖ>"
 
 #, fuzzy
 #~ msgid "\tAdded repackaged package header: %s.\n"
-#~ msgstr "<исходный пакет>"
+#~ msgstr "<╪р╫╨ фпе╟аЖ>"
 
 #, fuzzy
 #~ msgid "\tAdded repackaged package %s.\n"
-#~ msgstr "<исходный пакет>"
+#~ msgstr "<╪р╫╨ фпе╟аЖ>"
 
 #, fuzzy
 #~ msgid "Failure reading repackaged package!\n"
-#~ msgstr "ошибка чтения заголовка из пакета\n"
+#~ msgstr "фпе╟аЖюг гЛ╢У╦╕ юп╢б ╣╣аъ ©ю╥Ы╟║ ╧ъ╩Щгъ╫ю╢о╢ы\n"
 
 #, fuzzy
 #~ msgid "%s:%d \"%s\" must begin with alphanumeric, '_', '/' or '%%'.\n"
 #~ msgstr ""
-#~ "строка %d: Токены зависимостей должны начинаться с буквы, цифры, '_' или "
-#~ "'/': %s\n"
+#~ "%d ╧Ьб╟ гЮ: юга╦╪╨ еДе╚(token)ю╨ ╧щ╣Е╫ц '╧╝юз-╪Щюз а╤гу', '_' ╤г╢б '/' ╥н "
+#~ "╫цюшгь╬ъ гу╢о╢ы: %s\n"
 
 #, fuzzy
 #~ msgid ""
 #~ "\tline %d: \"%s\" must begin with alphanumeric, '_', '/' or '%%'. "
 #~ "Skipping ...\n"
 #~ msgstr ""
-#~ "строка %d: Токены зависимостей должны начинаться с буквы, цифры, '_' или "
-#~ "'/': %s\n"
+#~ "%d ╧Ьб╟ гЮ: юга╦╪╨ еДе╚(token)ю╨ ╧щ╣Е╫ц '╧╝юз-╪Щюз а╤гу', '_' ╤г╢б '/' ╥н "
+#~ "╫цюшгь╬ъ гу╢о╢ы: %s\n"
 
 #~ msgid "argument is not an RPM package\n"
-#~ msgstr "заданный аргумент не является пакетом RPM\n"
+#~ msgstr "юн╪Ж ╟╙ю╦╥н RPM фпе╟аЖ╟║ аЖа╓╣г╬Н╬ъ гу╢о╢ы\n"
 
 #~ msgid "error reading header from package\n"
-#~ msgstr "ошибка чтения заголовка из пакета\n"
+#~ msgstr "фпе╟аЖюг гЛ╢У╦╕ юп╢б ╣╣аъ ©ю╥Ы╟║ ╧ъ╩Щгъ╫ю╢о╢ы\n"
 
 #~ msgid "cannot re-open payload: %s\n"
-#~ msgstr "невозможно повторно открыть payload: %s\n"
+#~ msgstr "payload╦╕ ╢ы╫ц ©╜ ╪Ж ╬Ью╫: %s\n"
 
 #~ msgid "%s failed\n"
-#~ msgstr "%s не удалось\n"
+#~ msgstr "%s(юл)╟║ ╫гфпгъ╫ю╢о╢ы\n"
 
+#, fuzzy
 #~ msgid "package %s is intended for a %s operating system"
-#~ msgstr "пакет %s предназначен для операционной системы %s"
+#~ msgstr "%s(ю╨)╢б ╢ы╦╔ ©Н©╣ц╪а╕╦╕ ю╖гя фпе╟аЖют╢о╢ы"
 
 #~ msgid "error reading from file %s\n"
-#~ msgstr "ошибка чтения из файла %s\n"
-
-#~ msgid "list install/erase scriptlets from package(s)"
-#~ msgstr "показать сценарии установки/удаления"
-
-#~ msgid "set permissions of files in a package"
-#~ msgstr "установить права на все файлы пакета"
-
-#~ msgid "set user/group ownership of files in a package"
-#~ msgstr "установить владельца/группу для всех файлов пакета"
+#~ msgstr "%s фдюою╩ юп╢б ╣╣аъ ©ю╥Ы╟║ ╧ъ╩Щгъ╫ю╢о╢ы\n"
 
 #, fuzzy
-#~ msgid "list capabilities this package conflicts with"
-#~ msgstr "вывести список возможностей, с которыми конфликтует этот пакет"
-
-#, fuzzy
-#~ msgid "list other packages removed by installing this package"
-#~ msgstr "вывести список пакетов удаленных в результате устанвки этого пакета"
-
-#, fuzzy
-#~ msgid "list capabilities that this package provides"
-#~ msgstr "вывести возможности, предоставляемые пакетом"
-
-#~ msgid "list capabilities required by package(s)"
-#~ msgstr "вывести возможности которые требует этот пакет(ы)"
-
-#~ msgid "list descriptive information from package(s)"
-#~ msgstr "вывести описание пакета(ов)"
-
-#~ msgid "list change logs for this package"
-#~ msgstr "вывести журнал изменений пакета"
-
-#~ msgid "list trigger scriptlets from package(s)"
-#~ msgstr "вывести сценарии триггеров пакета(ов)"
-
-#~ msgid "list package(s) by install time, most recent first"
-#~ msgstr ""
-#~ "вывести пакет(ы), сортировать по времени установки, начинать с "
-#~ "установленного последним"
-
-#~ msgid "list all files from each package"
-#~ msgstr "вывести все файлы каждого пакета"
-
-#~ msgid ""
-#~ "find package name that contains a provided capability (needs rpmdb-redhat "
-#~ "package installed)"
-#~ msgstr ""
-#~ "найти пакет, предоставляющий данную возможность (пакет rpmdb-redhat "
-#~ "должен быть установлен для этой функции)"
-
-#~ msgid "set buildroot <policy> (e.g. compress man pages)"
-#~ msgstr "установить правило для buildroot (например: compress-man-pages)"
-
-#~ msgid "<policy>"
-#~ msgstr "<правило>"
-
-#~ msgid "enable configure <option> for build"
-#~ msgstr "разрешить configure параметр <параметр> для сборки"
-
-#~ msgid "<option>"
-#~ msgstr "<параметр>"
-
-#~ msgid "disable configure <option> for build"
-#~ msgstr "запретить configure параметр <параметр> для сборки"
-
-#~ msgid "use database in DIRECTORY"
-#~ msgstr "использовать базу данных в КАТАЛОГЕ"
-
-#~ msgid "DIRECTORY"
-#~ msgstr "КАТАЛОГ"
-
 #~ msgid "don't verify header+payload signature"
-#~ msgstr "не проверять подпись заголовока и содержимого"
-
-#~ msgid "don't update cache database, only print package paths"
-#~ msgstr "не обновлять кэш базы данных. только вывести пути пакета."
+#~ msgstr "фпе╟аЖюг ╪╜╦Мю╩ ╟к╩Ггу╢о╢ы"
 
 #, fuzzy
 #~ msgid "File tree walk options:"
-#~ msgstr "Параметры подписи:"
+#~ msgstr "╪╜╦М ©и╪г:"
 
-#~ msgid "%s: %%{_cache_dbpath} macro is mis-configured.\n"
-#~ msgstr "%s: макрос %%{_cache_dbpath} неправильно определён.\n"
-
+#, fuzzy
 #~ msgid "%s: cache operation failed: ec %d.\n"
-#~ msgstr "%s: ошибка работы с кэш: код ошибки %d.\n"
+#~ msgstr "%s: ©╘╢б╣╔ ╫гфпгъ╫ю╢о╢ы: %s\n"
 
 #~ msgid "%s: read manifest failed: %s\n"
-#~ msgstr "%s: ошибка чтения списка файлов: %s\n"
+#~ msgstr "%s: юп╢б╣╔ ╫гфпгъ╫ю╢о╢ы: %s\n"
 
 #~ msgid "Spec file can't use BuildRoot\n"
-#~ msgstr "Файл spec не может использовать BuildRoot\n"
+#~ msgstr "Spec фдюою╨ BuildRoot╦╕ ╩Г©Кгр ╪Ж ╬Ь╫ю╢о╢ы\n"
 
 #~ msgid "buildroot already specified, ignoring %s\n"
-#~ msgstr "buildroot уже указан, %s игнорируется\n"
+#~ msgstr "buildroot╢б юл╧л аЖа╓╣г╬Н юж╫ю╢о╢ы, %s(ю╩)╦╕ ╧╚╫цгу╢о╢ы\n"
 
 #~ msgid "override build root"
-#~ msgstr "переопределить build root"
+#~ msgstr "buildroot╦╕ ╠Ёц╪(override)гу╢о╢ы"
 
 #, fuzzy
 #~ msgid "    %s[%d]: %s\n"
 #~ msgstr "%s: %s\n"
 
 #~ msgid "Target buffer overflow\n"
-#~ msgstr "Переполнение целевого буфера\n"
+#~ msgstr "╦Яг╔╢К╩С(Target) ╧Жфш ©ю╧Жгц╥н©Л\n"
 
 #~ msgid "Building for target %s\n"
-#~ msgstr "Сборка для платформы %s\n"
+#~ msgstr "%s(ю╩)╦╕ а╕юшго╟М юж╫ю╢о╢ы\n"
 
 #~ msgid "Internal error in argument processing (%d) :-(\n"
-#~ msgstr "Внутренняя ошибка при обработке аргументов (%d) :-(\n"
+#~ msgstr "юн╪Ж цЁ╦╝╟За╓ (%d) ╣╣аъ Ё╩╨н ©ю╥Ы╟║ ╧ъ╩Щгъ╫ю╢о╢ы :-(\n"
 
 #~ msgid "Couldn't download nosource %s: %s\n"
-#~ msgstr "Не могу получить nosource %s: %s\n"
+#~ msgstr "nosource %s(ю╩)╦╕ ╢ы©Н╥н╣Егр ╪Ж ╬Ью╫: %s\n"
 
 #~ msgid "line %d: Epoch/Serial field must be a number: %s\n"
-#~ msgstr "строка %d: Поле Epoch/Serial должно быть числом: %s\n"
+#~ msgstr ""
+#~ "%d ╧Ьб╟ гЮ: Epoch/Serial гв╦Я(field)ю╨ ╧щ╣Е╫ц ╪Щюзюл╬Н╬ъ гу╢о╢ы: %s\n"
 
 #~ msgid "generate headers compatible with rpm4 packaging"
-#~ msgstr "создать заголовки, совместимые с пакетами rpm4"
+#~ msgstr "rpm4 фпе╟б║╟З хёх╞го╢б гЛ╢У╦╕ ╩Щ╪╨гу╢о╢ы"
 
 #~ msgid ""
 #~ "generate package header(s) compatible with (legacy) rpm[23] packaging"
-#~ msgstr ""
-#~ "создать заголовок(ки) пакета, совместимые с (устаревшими)  форматами rpm"
-#~ "[23]"
+#~ msgstr "(╠Ба╦юг) rpm[23] фпе╟б║╟З хёх╞го╢б фпе╟аЖ гЛ╢У╦╕ ╩Щ╪╨гу╢о╢ы"
 
 #~ msgid "generate headers compatible with (legacy) rpm[23] packaging"
-#~ msgstr "создать заголовки, совместимые с (устаревшими) пакетами rpm[23]"
+#~ msgstr "(╠Ба╦юг) rpm[23] фпе╟б║╟З хёх╞го╢б гЛ╢У╦╕ ╩Щ╪╨гу╢о╢ы"
 
 #~ msgid "don't verify MD5 digest of files"
-#~ msgstr "не проверять файлы на контрольную сумму MD5"
+#~ msgstr "фдюоюг MD5 цЮ╬Ю(digest)ю╩ ╟к╩ГгоаЖ ╬й╫ю╢о╢ы"
 
+#, fuzzy
 #~ msgid "(db package)"
-#~ msgstr "(db package)"
+#~ msgstr "фпе╟аЖ╟║ ╬Ь╫ю╢о╢ы\n"
 
 #, fuzzy
 #~ msgid "\tForce removing header from rpmdb.\n"
-#~ msgstr "ошибка чтения заголовка из пакета\n"
+#~ msgstr "фпе╟аЖюг гЛ╢У╦╕ юп╢б ╣╣аъ ©ю╥Ы╟║ ╧ъ╩Щгъ╫ю╢о╢ы\n"
 
 #, fuzzy
 #~ msgid "Could not acquire transaction score entry for %s\n"
-#~ msgstr "Невозможно открыть файл PreIn: %s\n"
+#~ msgstr "PreIn фдюою╩ ©╜ ╪Ж ╬Ью╫: %s\n"
 
 #, fuzzy
 #~ msgid "\tAllocating space for %d entries\n"
-#~ msgstr "перемещается %s в %s\n"
+#~ msgstr "%s(ю╩)╦╕ %s(ю╦)╥н юГ╧Хд║ гу╢о╢ы\n"
 
 #, fuzzy
 #~ msgid "Could not acquire transaction score!.\n"
-#~ msgstr "Невозможно открыть файл PreIn: %s\n"
+#~ msgstr "PreIn фдюою╩ ©╜ ╪Ж ╬Ью╫: %s\n"
 
 #, fuzzy
 #~ msgid "Could not acquire score entry %s!.\n"
-#~ msgstr "Невозможно открыть файл PreIn: %s\n"
+#~ msgstr "PreIn фдюою╩ ©╜ ╪Ж ╬Ью╫: %s\n"
 
 #, fuzzy
-#~ msgid "XXX Rollback packages (+%d/-%d) to %-24.24s (0x%08x):\n"
-#~ msgstr "Откат пакетов (+%d/-%d) на %-24.24s (0x%08x):\n"
-
 #~ msgid "don't verify GPG V3 DSA signature(s)"
-#~ msgstr "не проверять подпись(и) типа GPG V3 DSA"
+#~ msgstr "SHA1 цЮ╬Ю(digest) гЛ╢У╦╕ ╟к╩ГгоаЖ ╬й╫ю╢о╢ы"
 
+#, fuzzy
 #~ msgid "don't verify PGP V3 RSA/MD5 signature(s)"
-#~ msgstr "не проверять подписи типа PGP V3 RSA/MD5"
+#~ msgstr "фдюоюг MD5 цЮ╬Ю(digest)ю╩ ╟к╩ГгоаЖ ╬й╫ю╢о╢ы"
 
 #~ msgid "Unknown system: %s\n"
-#~ msgstr "Неизвестная система: %s\n"
+#~ msgstr "╬к ╪Ж ╬Ь╢б ╫ц╫╨еш: %s\n"
 
 #~ msgid "Please contact rpm-list@redhat.com\n"
-#~ msgstr "Свяжитесь с rpm-list@redhat.com\n"
+#~ msgstr "rpm-list@redhat.comю╦╥н ©╛╤Т╧ы╤Ь╢о╢ы\n"
 
 #~ msgid "gpg failed\n"
-#~ msgstr "ошибка gpg\n"
+#~ msgstr "gpg╟║ ╫гфпгт\n"
 
+#, fuzzy
 #~ msgid "V3 RSA/MD5 signature: "
-#~ msgstr "подпись RSA/MD5 V3: "
+#~ msgstr "╬Н╤╟гя MD5 ╪╜╦М╣╣ ╟к╩ГгоаЖ ╬й╫ю╢о╢ы"
 
 #, fuzzy
 #~ msgid "disable use of libneon for HTTP"
-#~ msgstr "запретить использование libio(3) API"
+#~ msgstr "libio(3) APIюг ╩Г©Кю╩ гьа╕гу╢о╢ы"
 
 #~ msgid "Common options for all rpm modes:"
-#~ msgstr "Общие параметры для всех режимов:"
+#~ msgstr "╦П╣Г rpm ╦П╣Е©║╪╜юг юо╧щюШюн ©и╪г:"
 
 #~ msgid "--replacefiles may only be specified during package installation"
-#~ msgstr "--replacefiles может быть указан только при установке пакета"
+#~ msgstr "--replacefiles ©и╪гю╨ фпе╟аЖ ╪Ёд║╫ц©║╦╦ аЖа╓гр ╪Ж юж╫ю╢о╢ы"
 
 #~ msgid "line %d: File name not permitted: %s\n"
-#~ msgstr "строка %d: Имена файлов не разрешаются: %s\n"
+#~ msgstr "%d ╧Ьб╟ гЮ: гь╢Г фдюо╦Мю╩ ╩Г©Кгр ╪Ж ╬Ь╫ю╢о╢ы: %s\n"
 
 #~ msgid "install even if the package replaces installed files"
-#~ msgstr "устанавливать, даже если пакет перепишет уже установленные файлы"
+#~ msgstr "фпе╟аЖ ╪Ёд║╫ц ╠Ба╦©║ ╪Ёд║╣г╬Н юж╢б фдюою╩ ╣╓╬Н╬╧╢о╢ы"
 
 #~ msgid "query of %s failed\n"
-#~ msgstr "ошибка запроса %s\n"
+#~ msgstr "%s(ю╩)╦╕ аЗюгго╢б╣╔ ╫гфпгъ╫ю╢о╢ы\n"
 
 #~ msgid "old format source packages cannot be queried\n"
-#~ msgstr "запросы к исходным пакетам в старом формате не поддерживаются\n"
+#~ msgstr "юлюЭ гЭ╫дюг ╪р╫╨ фпе╟аЖ╢б аЗюггр ╪Ж ╬Ь╫ю╢о╢ы\n"
 
 #~ msgid "no packages\n"
-#~ msgstr "нет пакетов\n"
+#~ msgstr "фпе╟аЖ╟║ ╬Ь╫ю╢о╢ы\n"
 
 #~ msgid "excluding multilib path %s%s\n"
-#~ msgstr "исключается многобиблиотечный путь %s%s\n"
+#~ msgstr "%s%s multilib ╟Ф╥н╦╕ а╕©э╫це╣╢о╢ы\n"
 
 #~ msgid "only one of --prefix or --relocate may be used"
-#~ msgstr ""
-#~ "может быть использован только один из вариантов --prefix или --relocate"
+#~ msgstr "--prefix ╤г╢б --relocate ©и╪г аъ гоЁ╙╦╦ ╩Г©Кгр ╪Ж юж╫ю╢о╢ы"
 
 #~ msgid "dataLength() RPM_STRING_TYPE count must be 1.\n"
-#~ msgstr "dataLength() допустим только один элемент типа RPM_STRING_TYPE\n"
+#~ msgstr "dataLength() RPM_STRING_TYPE д╚©Нф╝╢б ╧щ╣Е╫ц '1' юл╬Н╬ъ гу╢о╢ы.\n"
 
 #~ msgid "file is not regular -- skipping size check\n"
-#~ msgstr "необычный файл -- пропускаю проверку размера\n"
+#~ msgstr "фдюоюл ©ц╧ы╦ёаЖ(regular) ╬й╫ю╢о╢ы -- ©К╥╝ ╟к╩Г╦╕ ╩Щ╥╚гу╢о╢ы\n"
 
 #~ msgid "No signature\n"
-#~ msgstr "Подписи нет\n"
+#~ msgstr "╪╜╦Мюл ╬Ь╫ю╢о╢ы\n"
 
 #~ msgid "Old PGP signature\n"
-#~ msgstr "Старая подпись PGP\n"
+#~ msgstr "юлюЭ PGP ╪╜╦М\n"
 
 #~ msgid "Old (internal-only) signature!  How did you get that!?\n"
+#~ msgstr "юлюЭ (Ё╩╨н-©К) ╪╜╦М!  ╬Н╤╩╟т ╬Рю╦╪л╫ю╢о╠Н!?\n"
+
+#~ msgid ""
+#~ "execution of %s scriptlet from %s-%s-%s failed, waitpid returned %s\n"
 #~ msgstr ""
-#~ "Старая (только для внутреннего использования) подпись! Где вы ЭТО "
-#~ "взяли!?\n"
+#~ "%2$s-%3$s-%4$sюг %1$s ╫╨е╘╦Ёф╡╦╢(scriptlet) ╫ггЮ©║ ╫гфпгъ╫ю╢о╢ы, waitpid"
+#~ "╟║ %5$s(ю╩)╦╕ ╧щх╞го©╢╫ю╢о╢ы\n"
+
+#, fuzzy
+#~ msgid "%s: base64 encode failed.\n"
+#~ msgstr "%s: readLeadюл ╫гфпгъ╫ю╢о╢ы\n"
+
+#~ msgid "%s: readLead failed\n"
+#~ msgstr "%s: readLeadюл ╫гфпгъ╫ю╢о╢ы\n"
+
+#, fuzzy
+#~ msgid "rollback %d packages to %s"
+#~ msgstr "(+%d,-%d) фпе╟аЖ╦╕ %sю╦╥н ╥я╧И(rollback)гу╢о╢ы"
+
+#, fuzzy
+#~ msgid "h#%7u: %s"
+#~ msgstr "%s: %s\n"
+
+#~ msgid "unexpected arguments to --querytags "
+#~ msgstr "--querytags ©и╪г©║ ╨нюШюЩгя юн╪Ж╟║ аЖа╓╣г╬З╫ю╢о╢ы "
+
+#~ msgid "read <file:...> instead of default macro file(s)"
+#~ msgstr "╠Б╨╩ ╦ее╘╥н фдюо ╢К╫е <фдюо:..>ю╩ юп╬Н╣Иют╢о╢ы"
+
+#~ msgid "<file:...>"
+#~ msgstr "<фдюо:..>"
+
+#~ msgid "read <file:...> instead of default rpmrc file(s)"
+#~ msgstr "╠Б╨╩ rpmrc фдюо ╢К╫е <фдюо:..>ю╩ юп╬Н╣Иют╢о╢ы"
+
+#~ msgid "Usage: %s {--help}\n"
+#~ msgstr "* ╩Г©К╧Щ: %s {--help}\n"
+
+#~ msgid "The --rcfile option has been eliminated.\n"
+#~ msgstr "--rcfile ©и╪гюл а╕╟е╣г╬З╫ю╢о╢ы.\n"
+
+#~ msgid "Use \"--macros <file:...>\" instead.\n"
+#~ msgstr "╢К╫е \"--macros <фдюо:..>\" ю╩ ╩Г©Кгу╢о╢ы.\n"
+
+#~ msgid "--dbpath given for operation that does not use a database"
+#~ msgstr "--dbpath╢б ╣╔юлем╨ёюл╫╨╦╕ ╩Г©КгоаЖ ╬й╠Б ю╖гя ©и╪гют╢о╢ы"
+
+#~ msgid "query/verify a package file (i.e. a binary *.rpm file)"
+#~ msgstr "фпе╟аЖ фдюою╩ аЗюг/╟каУ гу╢о╢ы (©╧: ╧ыюлЁй╦╝ *.rpm фдюо)"
+
+#~ msgid "display a verbose file listing"
+#~ msgstr "фдюо ╦Я╥ою╩ юз╪╪хВ ╨╦©╘ащ╢о╢ы"
+
+#, fuzzy
+#~ msgid "don't verify package signature"
+#~ msgstr "фпе╟аЖюг ╪╜╦Мю╩ ╟к╩Ггу╢о╢ы"
+
+#~ msgid "define macro <name> with value <body>"
+#~ msgstr "<╨╩╧╝>юг Ё╩©К(value)ю╦╥н <юл╦╖> ╦ее╘╥н╦╕ а╓юггу╢о╢ы"
+
+#~ msgid "'<name> <body>'"
+#~ msgstr "'<юл╦╖> <╨╩╧╝>'"
+
+#~ msgid "<expr>+"
+#~ msgstr "<г╔гЖ╫д>+"
+
+#~ msgid "removing these packages would break dependencies:\n"
+#~ msgstr "юл фпе╟аЖ╣Ию╩ а╕╟егр ╟Ф©Л юга╦╪╨юл ╠ЗаЗ ╪Ж южю╫:\n"
+
+#~ msgid "package %s has unsatisfied Requires: %s\n"
+#~ msgstr "%s фпе╟аЖюг гй©Д╩Ггв(Ё╩©╙)юл ╦╦а╥гоаЖ ╬йю╫: %s\n"
+
+#~ msgid "package %s has unsatisfied Conflicts: %s\n"
+#~ msgstr "%s фпе╟аЖюг цФ╣╧╩Ггв(Ё╩©╙)юл ╦╦а╥гоаЖ ╬йю╫: %s\n"
+
+#~ msgid "rpm: %s\n"
+#~ msgstr "rpm: %s\n"
+
+#~ msgid "Usage: rpm {--help}"
+#~ msgstr "╩Г©К╧Щ: rpm {--help}"
+
+#~ msgid "       rpm {--version}"
+#~ msgstr "        rpm {--version}"
+
+#~ msgid "       rpm {--initdb}   [--dbpath <dir>]"
+#~ msgstr "        rpm {--initdb} [--dbpath <╣П╥╨еД╦╝>]"
+
+#~ msgid ""
+#~ "       rpm {--install -i} [-v] [--hash -h] [--percent] [--force] [--test]"
+#~ msgstr ""
+#~ "        rpm {--install -i} [-v] [--hash -h] [--percent] [--force] [--test]"
+
+#~ msgid ""
+#~ "                        [--replacepkgs] [--replacefiles] [--root <dir>]"
+#~ msgstr ""
+#~ "                     [--replacepkgs] [--replacefiles] [--root <╣П╥╨еД╦╝>]"
+
+#~ msgid ""
+#~ "                        [--excludedocs] [--includedocs] [--noscripts]"
+#~ msgstr "                     [--excludedocs] [--includedocs] [--noscripts]"
+
+#~ msgid ""
+#~ "                        [--rcfile <file>] [--ignorearch] [--dbpath <dir>]"
+#~ msgstr ""
+#~ "                     [--rcfile <фдюо>] [--ignorearch] [--dbpath <╣П╥╨еД╦╝"
+#~ ">]"
+
+#~ msgid ""
+#~ "                        [--prefix <dir>] [--ignoreos] [--nodeps] [--"
+#~ "allfiles]"
+#~ msgstr ""
+#~ "                     [--prefix <╣П╥╨еД╦╝>] [--ignoreos] [--nodeps] [--"
+#~ "allfiles]"
+
+#~ msgid "                        [--ftpproxy <host>] [--ftpport <port>]"
+#~ msgstr "                     [--ftpproxy <хё╫╨ф╝>] [--ftpport <фВф╝>]"
+
+#~ msgid "                        [--httpproxy <host>] [--httpport <port>]"
+#~ msgstr "                     [--httpproxy <хё╫╨ф╝>] [--httpport <фВф╝>]"
+
+#~ msgid ""
+#~ "                        [--justdb] [--noorder] [--relocate "
+#~ "oldpath=newpath]"
+#~ msgstr ""
+#~ "                     [--justdb] [--noorder] [--relocate юлюЭ╟Ф╥н=╩У╥н©Н╟Ф"
+#~ "╥н]"
+
+#~ msgid ""
+#~ "                        [--badreloc] [--notriggers] [--excludepath <path>]"
+#~ msgstr ""
+#~ "                     [--badreloc] [--notriggers] [--excludepath <╟Ф╥н>]"
+
+#~ msgid "                        [--ignoresize] file1.rpm ... fileN.rpm"
+#~ msgstr "                     [--ignoresize] фдюо1.rpm .. фдюоN.rpm"
+
+#~ msgid ""
+#~ "       rpm {--upgrade -U} [-v] [--hash -h] [--percent] [--force] [--test]"
+#~ msgstr ""
+#~ "        rpm {--upgrade -U} [-v] [--hash -h] [--percent] [--force] [--test]"
+
+#~ msgid "                        [--oldpackage] [--root <dir>] [--noscripts]"
+#~ msgstr ""
+#~ "                     [--oldpackage] [--root <╣П╥╨еД╦╝>] [--noscripts]"
+
+#~ msgid ""
+#~ "                        [--excludedocs] [--includedocs] [--rcfile <file>]"
+#~ msgstr ""
+#~ "                     [--excludedocs] [--includedocs] [--rcfile <фдюо>]"
+
+#~ msgid ""
+#~ "                        [--ignorearch]  [--dbpath <dir>] [--prefix <dir>] "
+#~ msgstr ""
+#~ "                     [--ignorearch] [--dbpath <╣П╥╨еД╦╝>] [--prefix <╣П╥╨"
+#~ "еД╦╝>]"
+
+#~ msgid "                        [--httpproxy <host>] [--httpport <port>] "
+#~ msgstr "                     [--httpproxy <хё╫╨ф╝>] [--httpport <фВф╝>]"
+
+#~ msgid ""
+#~ "                        [--ignoreos] [--nodeps] [--allfiles] [--justdb]"
+#~ msgstr ""
+#~ "                     [--ignoreos] [--nodeps] [--allfiles] [--justdb]"
+
+#~ msgid "                        [--noorder] [--relocate oldpath=newpath]"
+#~ msgstr "                     [--noorder] [--relocate юлюЭ╟Ф╥н=╩У╥н©Н╟Ф╥н]"
+
+#~ msgid ""
+#~ "                        [--badreloc] [--excludepath <path>] [--ignoresize]"
+#~ msgstr ""
+#~ "                     [--badreloc] [--excludepath <╟Ф╥н>] [--ignoresize]"
+
+#~ msgid "                        file1.rpm ... fileN.rpm"
+#~ msgstr "                     фдюо1.rpm .. фдюоN.rpm"
+
+#~ msgid "       rpm {--query -q} [-afpg] [-i] [-l] [-s] [-d] [-c] [-v] [-R]"
+#~ msgstr "        rpm {--query -q} [-afpg] [-i] [-l] [-s] [-d] [-c] [-v] [-R]"
+
+#~ msgid "                        [--scripts] [--root <dir>] [--rcfile <file>]"
+#~ msgstr ""
+#~ "                     [--scripts] [--root <╣П╥╨еД╦╝>] [--rcfile <фдюо>]"
+
+#~ msgid ""
+#~ "                        [--whatprovides] [--whatrequires] [--requires]"
+#~ msgstr "                     [--whatprovides] [--whatrequires] [--requires]"
+
+#~ msgid "                        [--triggeredby]"
+#~ msgstr "                     [--triggeredby]"
+
+#~ msgid "                        [--provides] [--triggers] [--dump]"
+#~ msgstr "                     [--provides] [--triggers] [--dump]"
+
+#~ msgid "                        [--changelog] [--dbpath <dir>] [targets]"
+#~ msgstr "                     [--changelog] [--dbpath <╣П╥╨еД╦╝>] [╦Яг╔╢К╩С]"
+
+#~ msgid "       rpm {--verify -V -y} [-afpg] [--root <dir>] [--rcfile <file>]"
+#~ msgstr ""
+#~ "        rpm {--verify -V -y} [-afpg] [--root <╣П╥╨еД╦╝>] [--rcfile <фдюо>]"
+
+#~ msgid ""
+#~ "                        [--dbpath <dir>] [--nodeps] [--nofiles] [--"
+#~ "noscripts]"
+#~ msgstr ""
+#~ "                     [--dbpath <╣П╥╨еД╦╝>] [--nodeps] [--nofiles] [--"
+#~ "noscripts]"
+
+#~ msgid "                        [--nomd5] [targets]"
+#~ msgstr "                     [--nomd5] [╦Яг╔╢К╩С]"
+
+#~ msgid "       rpm {--setperms} [-afpg] [target]"
+#~ msgstr "        rpm {--setperms} [-afpg] [╦Яг╔╢К╩С]"
+
+#~ msgid "       rpm {--setugids} [-afpg] [target]"
+#~ msgstr "        rpm {--setugids} [-afpg] [╦Яг╔╢К╩С]"
+
+#~ msgid "       rpm {--freshen -F} file1.rpm ... fileN.rpm"
+#~ msgstr "        rpm {--freshen -F} фдюо1.rpm .. фдюоN.rpm"
+
+#~ msgid ""
+#~ "       rpm {--erase -e} [--root <dir>] [--noscripts] [--rcfile <file>]"
+#~ msgstr ""
+#~ "        rpm {--erase -e} [--root <╣П╥╨еД╦╝>] [--noscripts] [--rcfile <фдюо"
+#~ ">]"
+
+#~ msgid "                        [--dbpath <dir>] [--nodeps] [--allmatches]"
+#~ msgstr ""
+#~ "                         [--dbpath <╣П╥╨еД╦╝>] [--nodeps] [--allmatches]"
+
+#~ msgid ""
+#~ "                        [--justdb] [--notriggers] package1 ... packageN"
+#~ msgstr ""
+#~ "                         [--justdb] [--notriggers] фпе╟аЖ1 .. фпе╟аЖN"
+
+#~ msgid ""
+#~ "       rpm {--resign} [--rcfile <file>] package1 package2 ... packageN"
+#~ msgstr ""
+#~ "        rpm {--resign}   [--rcfile <фдюо>] фпе╟аЖ1 фпе╟аЖ2 .. фпе╟аЖN"
+
+#~ msgid ""
+#~ "       rpm {--addsign} [--rcfile <file>] package1 package2 ... packageN"
+#~ msgstr ""
+#~ "        rpm {--addsign}  [--rcfile <фдюо>] фпе╟аЖ1 фпе╟аЖ2 .. фпе╟аЖN"
+
+#~ msgid ""
+#~ "       rpm {--checksig -K} [--nopgp] [--nogpg] [--nomd5] [--rcfile <file>]"
+#~ msgstr ""
+#~ "        rpm {--checksig -K} [--nopgp] [--nogpg] [--nomd5] [--rcfile <фдюо"
+#~ ">]"
+
+#~ msgid "                           package1 ... packageN"
+#~ msgstr "                            фпе╟аЖ1 .. фпе╟аЖN"
+
+#~ msgid "       rpm {--rebuilddb} [--rcfile <file>] [--dbpath <dir>]"
+#~ msgstr "        rpm {--rebuilddb} [--rcfile <фдюо>] [--dbpath <╣П╥╨еД╦╝>]"
+
+#~ msgid "       rpm {--verifydb} [--rcfile <file>] [--dbpath <dir>]"
+#~ msgstr "        rpm {--verifydb}  [--rcfile <фдюо>] [--dbpath <╣П╥╨еД╦╝>]"
+
+#~ msgid "       rpm {--querytags}"
+#~ msgstr "        rpm {--querytags}"
+
+#~ msgid "Usage:"
+#~ msgstr " * ╩Г©К╧Щ:"
+
+#~ msgid "print this message"
+#~ msgstr "юл ╦ч╪╪аЖ╦╕ цБ╥бгу╢о╢ы"
+
+#~ msgid "   All modes support the following arguments:"
+#~ msgstr "  * ╦П╣Г ╦П╣Е©║╪╜ ╢ыю╫юг юн╪Ж╦╕ ╩Г©Кгр ╪Ж юж╫ю╢о╢ы:"
+
+#~ msgid "    --define '<name> <body>'"
+#~ msgstr "    --define '<юл╦╖> <╨╩╧╝>'"
+
+#~ msgid "    --eval '<name>+'      "
+#~ msgstr "    --eval '<юл╦╖>+'      "
+
+#~ msgid "print the expansion of macro <name> to stdout"
+#~ msgstr "<юл╦╖> ╦ее╘╥нюг х╝юЕю╩ г╔аьцБ╥бю╦╥н цБ╥бгу╢о╢ы"
+
+#~ msgid "    --pipe <cmd>          "
+#~ msgstr "    --pipe <╦М╥и>         "
+
+#~ msgid "    --rcfile <file>       "
+#~ msgstr "    --rcfile <фдюо>       "
+
+#~ msgid "use <file> instead of /etc/rpmrc and $HOME/.rpmrc"
+#~ msgstr "/etc/rpmrc ©м $HOME/.rpmrc фдюо ╢К╫е аЖа╓гя <фдюо>ю╩ ╩Г©Кгу╢о╢ы"
+
+#~ msgid "be a little more verbose"
+#~ msgstr "х╜╦И©║ цБ╥б╣г╢б ╦ч╪╪аЖюг Ё╩©Кю╩ юз╪╪хВ ╨╦©╘ащ╢о╢ы"
+
+#~ msgid "be incredibly verbose (for debugging)"
+#~ msgstr "х╜╦И©║ цБ╥б╣г╢б ╦ч╪╪аЖюг Ё╩©Кю╩ ╬фаж ╩С╪╪хВ ╨╦©╘ащ╢о╢ы (╣П╧Ж╠К ©К)"
+
+#~ msgid ""
+#~ "   Install, upgrade and query (with -p) allow URL's to be used in place"
+#~ msgstr ""
+#~ "    * ╪Ёд║, ╬В╠в╥╧юл╣Е ╧в аЗюг╫ц (-p ©и╪г╟З гт╡╡ ╩Г©К╫ц) фдюо╦Мю╩ юШ╢б ╟В"
+#~ "©║"
+
+#~ msgid "   of file names as well as the following options:"
+#~ msgstr "      фдюоюл ю╖д║гя URL╟З гт╡╡ ╢ыю╫юг ©и╪гю╩ ╩Г©Кгр ╪Ж юж╫ю╢о╢ы:"
+
+#~ msgid "      --ftpproxy <host>   "
+#~ msgstr "      --ftpproxy <хё╫╨ф╝> "
+
+#~ msgid "hostname or IP of ftp proxy"
+#~ msgstr "ftp га╥о╫цюг хё╫╨ф╝╦М ╤г╢б IP аж╪р"
+
+#~ msgid "      --ftpport <port>    "
+#~ msgstr "      --ftpport <фВф╝>    "
+
+#~ msgid "port number of ftp server (or proxy)"
+#~ msgstr "ftp ╪╜╧Ж (╤г╢б га╥о╫ц) юг фВф╝ ╧Ьхё"
+
+#~ msgid "      --httpproxy <host>  "
+#~ msgstr "      --httpproxy <хё╫╨ф╝>"
+
+#~ msgid "hostname or IP of http proxy"
+#~ msgstr "http га╥о╫цюг хё╫╨ф╝╦М ╤г╢б IP аж╪р"
+
+#~ msgid "      --httpport <port>   "
+#~ msgstr "      --httpport <фВф╝>   "
+
+#~ msgid "port number of http server (or proxy)"
+#~ msgstr "http ╪╜╧Ж (╤г╢б га╥о╫ц) юг фВф╝ ╧Ьхё"
+
+#~ msgid "query mode"
+#~ msgstr "аЗюг ╦П╣Е"
+
+#~ msgid "      --dbpath <dir>      "
+#~ msgstr "      --dbpath <╣П╥╨еД╦╝> "
+
+#~ msgid "use <dir> as the directory for the database"
+#~ msgstr "<╣П╥╨еД╦╝>╦╕ ╣╔юлем╨ёюл╫╨ ╣П╥╨еД╦╝╥н ╩Г©Кгу╢о╢ы"
+
+#~ msgid "      --queryformat <qfmt>"
+#~ msgstr "      --queryformat <аЗюггЭ╫д>"
+
+#~ msgid "use <qfmt> as the header format (implies --info)"
+#~ msgstr "<аЗюггЭ╫д>ю╩ гЛ╢У гЭ╫дю╦╥н ╩Г©Кгу╢о╢ы (--info ©и╪гюл фВгт╣г╬Н южю╫)"
+
+#~ msgid "      --root <dir>        "
+#~ msgstr "      --root <╣П╥╨еД╦╝>   "
+
+#~ msgid "      Package specification options:"
+#~ msgstr "      * фпе╟аЖ ╪╪╨н╩Ггв ╦М╫ц ©и╪г:"
+
+#~ msgid "query all packages"
+#~ msgstr "╦П╣Г фпе╟аЖ©║ ╢Кгь аЗюггу╢о╢ы"
+
+#~ msgid "        -f <file>+        "
+#~ msgstr "        -f <фдюо>+        "
+
+#~ msgid "query package owning <file>"
+#~ msgstr "<фдюо>юл фВгт╣г╬Н юж╢б фпе╟аЖ©║ ╢Кгь аЗюггу╢о╢ы"
+
+#~ msgid "        -p <packagefile>+ "
+#~ msgstr "        -p <фпе╟аЖфдюо>+  "
+
+#~ msgid "query (uninstalled) package <packagefile>"
+#~ msgstr "(╪Ёд║╣г╬Н южаЖ ╬йю╨) <фпе╟аЖфдюо>©║ ╢Кгь аЗюггу╢о╢ы"
+
+#~ msgid "        --triggeredby <pkg>"
+#~ msgstr "        --triggeredby <фпе╟аЖ>"
+
+#~ msgid "query packages triggered by <pkg>"
+#~ msgstr "<фпе╟аЖ>╥н юнго©╘ ╩Щ╪╨╣г╢б(triggered) фпе╟аЖ©║ ╢Кгь аЗюггу╢о╢ы"
+
+#~ msgid "        --whatprovides <cap>"
+#~ msgstr "        --whatprovides <╠Б╢и>"
+
+#~ msgid "query packages which provide <cap> capability"
+#~ msgstr "<╠Б╢и>ю╩ а╕╟Ьго╢б фпе╟аЖ©║ ╢Кгь аЗюггу╢о╢ы"
+
+#~ msgid "        --whatrequires <cap>"
+#~ msgstr "        --whatrequires <╠Б╢и>"
+
+#~ msgid "query packages which require <cap> capability"
+#~ msgstr "<╠Б╢и>ю╩ гй©Д╥н го╢б фпе╟аЖ©║ ╢Кгь аЗюггу╢о╢ы"
+
+#~ msgid "      Information selection options:"
+#~ msgstr "      * а╓╨╦ ╪╠ец ©и╪г:"
+
+#~ msgid "display package information"
+#~ msgstr "фпе╟аЖ©║ ╢Кгя а╓╨╦╦╕ ╨╦©╘ащ╢о╢ы"
+
+#~ msgid "display the package's change log"
+#~ msgstr "фпе╟аЖюг ╨╞╟Ф╣х ╩Ггв(change log)ю╩ ╨╦©╘ащ╢о╢ы"
+
+#~ msgid "display package file list"
+#~ msgstr "фпе╟аЖ©║ фВгт╣х фдюоюг ╦Я╥ою╩ ╨╦©╘ащ╢о╢ы"
+
+#~ msgid "show file states (implies -l)"
+#~ msgstr "фпе╟аЖ©║ фВгт╣х фдюоюг ╩Себ╦╕ ╨╦©╘ащ╢о╢ы (-l ©и╪гюл фВгт╣г╬Н южю╫)"
+
+#~ msgid "list only documentation files (implies -l)"
+#~ msgstr ""
+#~ "фпе╟аЖ©║ фВгт╣х фдюо аъ ╧╝╪╜ фдюо╦╦ ╨╦©╘ащ╢о╢ы (-l ©и╪гюл фВгт╣г╬Н южю╫)"
+
+#~ msgid "list only configuration files (implies -l)"
+#~ msgstr ""
+#~ "фпе╟аЖ©║ фВгт╣х фдюо аъ ╪Ёа╓ фдюо╦╦ ╨╦©╘ащ╢о╢ы (-l ©и╪гюл фВгт╣г╬Н южю╫)"
+
+#~ msgid ""
+#~ "show all verifiable information for each file (must be used with -l, -c, "
+#~ "or -d)"
+#~ msgstr ""
+#~ "фпе╟аЖ©║ фВгт╣х ╟╒ фдюо©║ ╢Кгь ╟каУгр ╪Ж юж╢б а╓╨╦╢б ╦П╣н ╨╦©╘ащ╢о╢ы (-l, "
+#~ "-c, ╤г╢б -d ©и╪г╟З гт╡╡ ╩Г©Кгь╬ъ гу╢о╢ы)"
+
+#~ msgid "list capabilities package provides"
+#~ msgstr "фпе╟аЖ╟║ а╕╟Ьго╢б ╠Б╢ию╩ Ё╙©╜гу╢о╢ы"
+
+#~ msgid "print the various [un]install scripts"
+#~ msgstr "[а╕╟е]╪Ёд║╫ц©║ ╩Г©К╣г╢б ╫╨е╘╦Ёф╝╦╕ цБ╥бгу╢о╢ы"
+
+#~ msgid "show the trigger scripts contained in the package"
+#~ msgstr "фпе╟аЖ©║ фВгт╣х ф╝╦╝╟е ╫╨е╘╦Ёф╝╦╕ ╨╦©╘ащ╢о╢ы"
+
+#~ msgid ""
+#~ "verify a package installation using the same same package specification "
+#~ "options as -q"
+#~ msgstr ""
+#~ "-q ©и╪г╟З ╟╟ю╨ фпе╟аЖ аЖа╓ ©и╪гю╩ ╩Г©Кго©╘ ╪Ёд║╣г╬Н юж╢б фпе╟аЖ╦╕ ╟к╩Ггу╢о"
+#~ "╢ы"
+
+#~ msgid "do not verify file md5 checksums"
+#~ msgstr "фдюоюг md5 гу╟Х╟к╩Г(checksum)╦╕ х╝юнгоаЖ ╬й╫ю╢о╢ы"
+
+#~ msgid "do not verify file attributes"
+#~ msgstr "фдюоюг ╪с╪╨ю╩ ╟к╩ГгоаЖ ╬й╫ю╢о╢ы"
+
+#~ msgid "list the tags that can be used in a query format"
+#~ msgstr "аЗюг гЭ╫д©║╪╜ ╩Г©К╣и ╪Ж юж╢б еб╠в╦╕ Ё╙©╜гу╢о╢ы"
+
+#~ msgid "    --install <packagefile>"
+#~ msgstr "    --install <фпе╟аЖфдюо>"
+
+#~ msgid "    -i <packagefile>      "
+#~ msgstr "    -i <фпе╟аЖфдюо>       "
+
+#~ msgid "      --excludepath <path>"
+#~ msgstr "      --excludepath <╟Ф╥н>"
+
+#~ msgid "skip files in path <path>"
+#~ msgstr "<╟Ф╥н> ╬хюг фдюою╨ ╪Ёд║гоаЖ ╬й╫ю╢о╢ы"
+
+#~ msgid "relocate files from <oldpath> to <newpath>"
+#~ msgstr "<юлюЭ╟Ф╥н>©║╪╜ <╩У╥н©Н╟Ф╥н>╥н фдюою╩ юГ╧Хд║го©╘ ╪Ёд║гу╢о╢ы"
+
+#~ msgid "      --prefix <dir>      "
+#~ msgstr "      --prefix <╣П╥╨еД╦╝> "
+
+#~ msgid "don't execute any installation scripts"
+#~ msgstr "фпе╟аЖ ╪Ёд║╫ц ╬Н╤╟гя ╪Ёд║╟Э╥ц ╫╨е╘╦Ёф╝╣╣ ╫ггЮгоаЖ ╬й╫ю╢о╢ы"
+
+#~ msgid "don't execute any scripts triggered by this package"
+#~ msgstr ""
+#~ "юл фпе╟аЖ╥н юнгь ╩Щ╪╨╣г╢б(triggered) ╬Н╤╟гя ╫╨е╘╦Ёф╝╣╣ ╫ггЮгоаЖ ╬й╫ю╢о╢ы"
+
+#~ msgid "    --upgrade <packagefile>"
+#~ msgstr "    --upgrade <фпе╟аЖфдюо>"
+
+#~ msgid "    -U <packagefile>      "
+#~ msgstr "    -U <фпе╟аЖфдюо>       "
+
+#~ msgid "upgrade package (same options as --install, plus)"
+#~ msgstr "фпе╟аЖ╦╕ ╬В╠в╥╧юл╣Е гу╢о╢ы (--install ©и╪г©║ ╦Н╟║аЖ ©и╪гюл цъ╟║╣й)"
+
+#~ msgid "    --erase <package>"
+#~ msgstr "    --erase <фпе╟аЖ>"
+
+#~ msgid "    -e <package>          "
+#~ msgstr "    -e <фпе╟аЖ>           "
+
+#~ msgid "    -b<stage> <spec>      "
+#~ msgstr "    -b<╢э╟Х> <specфдюо>   "
+
+#~ msgid "    -t<stage> <tarball>   "
+#~ msgstr "    -t<╢э╟Х> <tarфдюо>    "
+
+#~ msgid "build package, where <stage> is one of:"
+#~ msgstr "фпе╟аЖ╦╕ а╕юшго╦Г, <╢э╟Х>©║╪╜ ╩Г©Кго╢б ©и╪гю╨ ╢ыю╫╟З ╟╟╫ю╢о╢ы:"
+
+#~ msgid "prep (unpack sources and apply patches)"
+#~ msgstr "аь╨Я ╟За╓ (╪р╫╨ фдюою╩ г╝╟М фпд║╦╕ юШ©Кгу╢о╢ы)"
+
+#~ msgid "list check (do some cursory checks on %files)"
+#~ msgstr "фдюо ╦Я╥о х╝юн (%files гв╦Я©║ ╢Кгь ╟ё╢эгя ╟к╩Г╦╕ гу╢о╢ы)"
+
+#~ msgid "compile (prep and compile)"
+#~ msgstr "ддфдюо (аь╨Я ╟За╓╟З ддфдюою╩ гу╢о╢ы)"
+
+#~ msgid "install (prep, compile, install)"
+#~ msgstr "╪Ёд║ (аь╨Я ╟За╓, ддфдюо, ╪Ёд║╦╕ гу╢о╢ы)"
+
+#~ msgid "binary package (prep, compile, install, package)"
+#~ msgstr ""
+#~ "╧ыюлЁй╦╝ фпе╟аЖ а╕юш (аь╨Я ╟За╓, ддфдюо, ╪Ёд║, ╧ыюлЁй╦╝ фпе╟аЖ╦╕ а╕юшгу╢о"
+#~ "╢ы)"
+
+#~ msgid "bin/src package (prep, compile, install, package)"
+#~ msgstr ""
+#~ "╧ыюлЁй╦╝©м ╪р╫╨ фпе╟аЖ а╕юш (аь╨Я ╟За╓, ддфдюо, ╪Ёд║, ╧ыюлЁй╦╝©м ╪р╫╨ фпе╟"
+#~ "аЖ╦╕ а╕юшгу╢о╢ы)"
+
+#~ msgid "remove spec file when done"
+#~ msgstr "фпе╟аЖ а╕юш хд©║ spec фдюою╩ ╩Ха╕гу╢о╢ы"
+
+#~ msgid "      --buildroot <dir>   "
+#~ msgstr "      --buildroot <╣П╥╨еД╦╝>"
+
+#~ msgid "use <dir> as the build root"
+#~ msgstr "<╣П╥╨еД╦╝>╦╕ фпе╟аЖ а╕юшю╩ ю╖гя ╥Гф╝ ╣П╥╨еД╦╝╥н ╩Г©Кгу╢о╢ы"
+
+#~ msgid "      --target=<platform>+"
+#~ msgstr "      --target=<гц╥╖фШ>+  "
+
+#~ msgid "build the packages for the build targets platform1...platformN."
+#~ msgstr "аЖа╓гя ╦Яг╔╢К╩Сюг гц╥╖фШ1...гц╥╖фШN фпе╟аЖ╦╕ а╕юшгу╢о╢ы."
+
+#~ msgid "do not execute any stages"
+#~ msgstr "фпе╟аЖ а╕юш╫ц ╬Н╤╟гя ╢э╟Х╣╣ ╫ггЮгоаЖ ╬й╫ю╢о╢ы"
+
+#~ msgid "    --rebuild <src_pkg>   "
+#~ msgstr "    --rebuild <╪р╫╨_фпе╟аЖ>"
+
+#~ msgid ""
+#~ "install source package, build binary package and remove spec file, "
+#~ "sources, patches, and icons."
+#~ msgstr ""
+#~ "<╪р╫╨_фпе╟аЖ>╥н ╧ыюлЁй╦╝ фпе╟аЖ╦╕ а╕юшго╦Г, фпе╟аЖ а╕юш хд©║╢б spec, ╪р"
+#~ "╫╨, фпд║, ╬фюлдэ фдюою╩ ╩Ха╕гу╢о╢ы"
+
+#~ msgid "    --recompile <src_pkg> "
+#~ msgstr "    --recompile <╪р╫╨_фпе╟аЖ>"
+
+#~ msgid "like --rebuild, but don't build any package"
+#~ msgstr "--rebuild ©и╪г╟З ╟╟ю╦Ё╙, ╬Н╤╟гя фпе╟аЖ╣╣ а╕юшгоаЖ ╬й╫ю╢о╢ы"
+
+#~ msgid "    --resign <pkg>+       "
+#~ msgstr "    --resign <фпе╟аЖ>+    "
+
+#~ msgid "    --addsign <pkg>+      "
+#~ msgstr "    --addsign <фпе╟аЖ>+   "
+
+#~ msgid "add a signature to a package"
+#~ msgstr "фпе╟аЖ©║ ╪╜╦Мю╩ цъ╟║гу╢о╢ы"
+
+#~ msgid "    --checksig <pkg>+"
+#~ msgstr "    --checksig <фпе╟аЖ>+"
+
+#~ msgid "    -K <pkg>+             "
+#~ msgstr "    -K <фпе╟аЖ>+          "
+
+#~ msgid "skip any GPG signatures"
+#~ msgstr "╬Н╤╟гя GPG ╪╜╦М╣╣ ╟к╩ГгоаЖ ╬й╫ю╢о╢ы"
+
+#~ msgid "make sure a valid database exists"
+#~ msgstr "ю╞х©гя ╣╔юлем╨ёюл╫╨╟║ а╦юГго╢баЖ х╝юнгу╢о╢ы"
+
+#~ msgid "rebuild database from existing database"
+#~ msgstr "╠Ба╦юг ╣╔юлем╨ёюл╫╨╦╕ юГ╠╦цЮгу╢о╢ы"
+
+#~ msgid ""
+#~ "set the file permissions to those in the package database using the same "
+#~ "package specification options as -q"
+#~ msgstr ""
+#~ "-q ©и╪г╟З ╟╟ю╨ фпе╟аЖ аЖа╓ ©и╪гю╩ ╩Г©Кго©╘ фпе╟аЖ ╣╔юлем╨ёюл╫╨©║ юж╢б фдюо"
+#~ "юг гЦ╟║╠г(permission)ю╩ ╪Ёа╓гу╢о╢ы"
+
+#~ msgid ""
+#~ "set the file owner and group to those in the package database using the "
+#~ "same package specification options as -q"
+#~ msgstr ""
+#~ "-q ©и╪г╟З ╟╟ю╨ фпе╟аЖ аЖа╓ ©и╪гю╩ ╩Г©Кго©╘ фпе╟аЖ ╣╔юлем╨ёюл╫╨©║ юж╢б фдюо"
+#~ "юг ╪рю╞юз©м ╠в╥Лю╩ ╪Ёа╓гу╢о╢ы"
+
+#~ msgid "-u and --uninstall are deprecated and no longer work.\n"
+#~ msgstr "-u ©м --uninstall ©и╪гю╨ юла╕ ╢Уюл╩С ╩Г©К╣гаЖ ╬й╫ю╢о╢ы.\n"
+
+#~ msgid "Use -e or --erase instead.\n"
+#~ msgstr "╢К╫е -e ╤г╢б --erase ©и╪гю╩ ╩Г©Кго╫й╫ц©Д.\n"
+
+#~ msgid "Use --macros with a colon separated list of macro files to read.\n"
+#~ msgstr ""
+#~ "--macros ©и╪г©║╢б юп╬Н©ц ╦ее╘╥н ╦Я╥о фдюою╩ дщ╥п(:)ю╦╥н ╠╦╨пго©╘ ╩Г©Кго╫й"
+#~ "╫ц©Д.\n"
+
+#~ msgid ""
+#~ "script disabling options may only be specified during package "
+#~ "installation, erasure, and verification"
+#~ msgstr ""
+#~ "╫╨е╘╦Ёф╝ гьа╕ ©и╪гю╨ фпе╟аЖ ╪Ёд║, ╩Ха╕, ╟каУ╫ц©║╦╦ аЖа╓гр ╪Ж юж╫ю╢о╢ы"
+
+#~ msgid "--apply may only be specified during package installation"
+#~ msgstr "--apply ©и╪гю╨ фпе╟аЖ ╪Ёд║╫ц©║╦╦ аЖа╓гр ╪Ж юж╫ю╢о╢ы"
+
+#~ msgid "--oldpackage may only be used during upgrades"
+#~ msgstr "--oldpackage ©и╪гю╨ ╬В╠в╥╧юл╣Е╫ц©║╦╦ ╩Г©Кгр ╪Ж юж╫ю╢о╢ы"
+
+#~ msgid "--nopgp may only be used during signature checking"
+#~ msgstr "--nopgp ©и╪гю╨ ╪╜╦М ╟к╩Г╫ц©║╦╦ ╩Г©Кгр ╪Ж юж╫ю╢о╢ы"
+
+#~ msgid "--nogpg may only be used during signature checking"
+#~ msgstr "--nogpg ©и╪гю╨ ╪╜╦М ╟к╩Г╫ц©║╦╦ ╩Г©Кгр ╪Ж юж╫ю╢о╢ы"
+
+#~ msgid ""
+#~ "--nomd5 may only be used during signature checking and package "
+#~ "verification"
+#~ msgstr "--nomd5 ©и╪гю╨ ╪╜╦М ╟к╩Г©м фпе╟аЖ ╟каУ╫ц©║╦╦ ╩Г©Кгр ╪Ж юж╫ю╢о╢ы"
+
+#~ msgid "no packages given for signature check"
+#~ msgstr "╪╜╦М ╟к╩Ггр фпе╟аЖ╟║ аЖа╓╣гаЖ ╬й╬р╫ю╢о╢ы"
+
+#~ msgid "no packages given for signing"
+#~ msgstr "╪╜╦Мгр фпе╟аЖ╟║ аЖа╓╣гаЖ ╬й╬р╫ю╢о╢ы"
+
+#~ msgid "no packages given for uninstall"
+#~ msgstr "а╕╟е(uninstall)гр фпе╟аЖ╟║ аЖа╓╣гаЖ ╬й╬р╫ю╢о╢ы"
+
+#~ msgid "extra arguments given for query of all packages"
+#~ msgstr "╦П╣Г фпе╟аЖ╦╕ аЗюгго╢б╣╔ гй©Д юл╩Сюг юн╪Ж╟║ аЖа╓╣г╬З╫ю╢о╢ы"
+
+#~ msgid "extra arguments given for verify of all packages"
+#~ msgstr "╦П╣Г фпе╟аЖ╦╕ ╟каУго╢б╣╔ гй©Д юл╩Сюг юн╪Ж╟║ аЖа╓╣г╬З╫ю╢о╢ы"
+
+#~ msgid "%s: %-45s YES (added files)\n"
+#~ msgstr "%s: %-45s ©╧ (фдюоюл цъ╟║╣й)\n"
+
+#~ msgid "%s: %-45s %-s (cached)\n"
+#~ msgstr "%s: %-45s %-s (дЁ╫ц╣й)\n"
+
+#~ msgid "%s: %-45s YES (db files)\n"
+#~ msgstr "%s: %-45s ©╧ (db фдюо)\n"
+
+#~ msgid "%s: %-45s YES (db package)\n"
+#~ msgstr "%s: %-45s ©╧ (db фпе╟аЖ)\n"
+
+#~ msgid "%s: %-45s NO\n"
+#~ msgstr "%s: %-45s ╬ф╢о©ю\n"
+
+#~ msgid "%s: (%s, %s) added to Depends cache.\n"
+#~ msgstr "%s: (%s, %s) (юл)╟║ юга╦(Depends) дЁ╫ц©║ цъ╟║╣г╬З╫ю╢о╢ы.\n"
+
+#~ msgid "package %s-%s-%s require not satisfied: %s\n"
+#~ msgstr "%s-%s-%s фпе╟аЖюг гй©Д╩Ггвюл ╦╦а╥╣гаЖ ╬йю╫: %s\n"
+
+#~ msgid "package %s conflicts: %s\n"
+#~ msgstr "%s фпе╟аЖ╟║ цФ╣╧гт: %s\n"
+
+#~ msgid "use chainsaw dependency tree decimation when ordering"
+#~ msgstr ""
+#~ "╦М╥и╫ц©║ ©╛╟Х╣х юга╦╪╨ ф╝╦╝ а╕╟е(chainsaw dependency tree decimation)╦╕ ╩Г"
+#~ "©Кгу╢о╢ы"
+
+#~ msgid "rpm verify mode (legacy)"
+#~ msgstr "rpm ╟каУ ╦П╣Е (legacy)"
+
+#~ msgid "cannot open %s/packages.rpm\n"
+#~ msgstr "%s/packages.rpmю╩ ©╜ ╪Ж ╬Ь╫ю╢о╢ы\n"
+
+#~ msgid "Generating signature using PGP.\n"
+#~ msgstr "PGP╦╕ ╩Г©Кго©╘ ╪╜╦Мю╩ ╩Щ╪╨гу╢о╢ы.\n"
+
+#~ msgid "Generating signature using GPG.\n"
+#~ msgstr "GPG╦╕ ╩Г©Кго©╘ ╪╜╦Мю╩ ╩Щ╪╨гу╢о╢ы.\n"
+
+#~ msgid ""
+#~ "package lacks both user name and id lists (this should never happen)\n"
+#~ msgstr ""
+#~ "фпе╟аЖ©║ ╩Г©Кюз юл╦╖╟З id ╦Я╥оюл ╬Ь╫ю╢о╢ы (юЩ╢К юл╥╦╟т ╣г╬Н╪╜╢б ╬х╣к╢о"
+#~ "╢ы)\n"
+
+#~ msgid ""
+#~ "package lacks both group name and id lists (this should never happen)\n"
+#~ msgstr ""
+#~ "фпе╟аЖ©║ ╠в╥Л юл╦╖╟З id ╦Я╥оюл ╬Ь╫ю╢о╢ы (юЩ╢К юл╥╦╟т ╣г╬Н╪╜╢б ╬х╣к╢о╢ы)\n"
+
+#~ msgid "%s-%s-%s: immutable header region digest check failed\n"
+#~ msgstr ""
+#~ "%s-%s-%s: ╟Ма╓ гЛ╢У ©╣©╙ цЮ╬Ю(immutable header region digest) ╟к╩Г©║ ╫гфп"
+#~ "гт\n"
+
+#~ msgid ""
+#~ "Broken package chain at offset %d(0x%08x), attempting to reconnect ...\n"
+#~ msgstr ""
+#~ "©юга╪б %d(0x%08x)юг фпе╟аЖ ©╛╟А╨н╨п(chain)юл ╪у╩С╣г╬З╫ю╢о╢ы, а╒╠ыю╩ юГ╫ц"
+#~ "╣╣ гу╢о╢ы ...\n"
+
+#~ msgid "Reconnecting broken chain at offset %d(0x%08x).\n"
+#~ msgstr "╪у╩С╣х ©юга╪б %d(0x%08x)юг ©╛╟А╨н╨п(chain)©║ юГа╒╠ы гу╢о╢ы.\n"
+
+#~ msgid "removed db file        %s\n"
+#~ msgstr "╩Ха╕╣х db фдюо        %s\n"
+
+#~ msgid "opening db file        %s mode 0x%x\n"
+#~ msgstr "©╘╢баъ db фдюо        %s ╦П╣Е 0x%x\n"
+
+#~ msgid "cannot get %s lock on database\n"
+#~ msgstr "╣╔юлем╨ёюл╫╨юг юА╠щ╣х(lock) %s(ю╩)╦╕ ╬Рю╩ ╪Ж ╬Ь╫ю╢о╢ы\n"
+
+#~ msgid ""
+#~ "free list corrupt (%u)- please run\n"
+#~ "\t\"rpm --rebuilddb\"\n"
+#~ "More information is available from http://www.rpm.org or the rpm-"
+#~ "list@redhat.com mailing list\n"
+#~ "if \"rpm --rebuilddb\" fails to correct the problem.\n"
+#~ msgstr ""
+#~ "╨С(free) ╦Я╥оюг ╪у╩С (%u)- ╢ыю╫юг ╦М╥ию╩ ╫ггЮго╫й╫ц©Д\n"
+#~ "\t\"rpm --rebuilddb\"\n"
+#~ "╦╦юо, \"rpm --rebuilddb\" ╦М╥июл ╫гфпгр ╟Ф©Л©║╢б http://www.rpm.org юл"
+#~ "Ё╙ \n"
+#~ "rpm-list@redhat.com ╦чюо╦╣ ╦╝╫╨ф╝╦╕ еКгь юз╪╪гя а╓╨╦╦╕ ╬Рю╦╫ц╠Б ╧ы╤Ь╢о"
+#~ "╢ы.\n"
+
+#~ msgid ""
+#~ "old format database is present; use --rebuilddb to generate a new format "
+#~ "database\n"
+#~ msgstr ""
+#~ "юлюЭ гЭ╫дюг ╣╔юлем╨ёюл╫╨╟║ а╦юГгу╢о╢ы; ╩У╥н©Н гЭ╫дюг ╣╔юлем╨ёюл╫╨╦╕ ╩Щ╪╨го"
+#~ "╠Б ю╖гь╪╜╢б --rebuilddb ©и╪гю╩ юл©Кго╫й╫ц©Д\n"
+
+#~ msgid "error(%d) counting packages\n"
+#~ msgstr "фпе╟аЖюг ╪Ж╦╕ ╪╪╢б ╣╣аъ ©ю╥Ы(%d)╟║ ╧ъ╩Щгъ╫ю╢о╢ы\n"
+
+#~ msgid "(unknown type)"
+#~ msgstr "(╬к ╪Ж ╬Ь╢б ю╞гЭ)"
