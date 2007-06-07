@@ -1,19 +1,6 @@
-/* system-dependent definitions for fileutils programs.
-   Copyright (C) 89, 91, 92, 93, 94, 1996 Free Software Foundation, Inc.
-
-   This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2, or (at your option)
-   any later version.
-
-   This program is distributed in the hope that it will be useful,
-   but WITHOUT ANY WARRANTY; without even the implied warranty of
-   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
-
-   You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software Foundation,
-   Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+/**
+ * \file system.h
+ */
 
 #ifndef	H_SYSTEM
 #define	H_SYSTEM
@@ -22,9 +9,29 @@
 #include "config.h"
 #endif
 
-#include <stdio.h>
 #include <sys/types.h>
+
+#if defined(__LCLINT__)
+/*@-redef@*/
+typedef unsigned int u_int32_t;
+typedef unsigned short u_int16_t;
+typedef unsigned char u_int8_t;
+/*@-incondefs@*/        /* LCLint 3.0.0.15 */
+typedef int int32_t;
+/*@=incondefs@*/
+/* XXX from /usr/include/bits/sigset.h */
+/*@-sizeoftype@*/
+# define _SIGSET_NWORDS (1024 / (8 * sizeof (unsigned long int)))
+typedef struct
+  {
+    unsigned long int __val[_SIGSET_NWORDS];
+  } __sigset_t;
+/*@=sizeoftype@*/
+/*@=redef@*/
+#endif
+
 #include <sys/stat.h>
+#include <stdio.h>
 
 #ifdef HAVE_SYS_PARAM_H
 #include <sys/param.h>
@@ -33,9 +40,22 @@
 /* <unistd.h> should be included before any preprocessor test
    of _POSIX_VERSION.  */
 #ifdef HAVE_UNISTD_H
-/*@-skipposixheaders@*/
 #include <unistd.h>
-/*@=skipposixheaders@*/
+#if defined(__LCLINT__)
+/*@-superuser -declundef -incondefs @*/	/* LCL: modifies clause missing */
+extern int chroot (const char *__path)
+	/*@globals errno, systemState @*/
+	/*@modifies errno, systemState @*/;
+/*@=superuser =declundef =incondefs @*/
+#endif
+#if !defined(__GLIBC__) && !defined(__LCLINT__)
+#ifdef __APPLE__
+#include <crt_externs.h>
+#define environ (*_NSGetEnviron())
+#else
+extern char ** environ;
+#endif /* __APPLE__ */
+#endif
 #endif
 
 #if TIME_WITH_SYS_TIME
@@ -52,7 +72,6 @@
 #if NEED_TIMEZONE
 extern time_t timezone;
 #endif
-
 
 /* Since major is a function on SVR4, we can't use `ifndef major'.  */
 #if MAJOR_IN_MKDEV
@@ -78,17 +97,6 @@ extern time_t timezone;
 #include <utime.h>
 #endif
 
-#ifndef __P
-#if defined (__GNUC__) || (defined (__STDC__) && __STDC__)
-#define __P(args) args
-#else
-#define __P(args) ()
-#endif  /* GCC.  */
-#endif  /* Not __P.  */
-
-/* Don't use bcopy!  Use memmove if source and destination may overlap,
-   memcpy otherwise.  */
-
 #ifdef HAVE_STRING_H
 # if !STDC_HEADERS && HAVE_MEMORY_H
 #  include <memory.h>
@@ -99,20 +107,66 @@ extern time_t timezone;
 char *memchr ();
 #endif
 
+#if !defined(HAVE_STPCPY)
+char * stpcpy(/*@out@*/ char * dest, const char * src);
+#endif
+
+#if !defined(HAVE_STPNCPY)
+char * stpncpy(/*@out@*/ char * dest, const char * src, size_t n);
+#endif
+
 #include <errno.h>
 #ifndef errno
+/*@-declundef @*/
 extern int errno;
+/*@=declundef @*/
+#endif
+
+#if defined(__LCLINT__)
+/*@-declundef @*/
+/*@exits@*/
+extern void error(int status, int errnum, const char *format, ...)
+	__attribute__ ((__format__ (__printf__, 3, 4)))
+	/*@globals fileSystem @*/
+	/*@modifies fileSystem @*/;
+/*@=declundef @*/
+#else
+#if HAVE_ERROR && HAVE_ERROR_H
+#include <error.h>
+#endif
+#endif
+
+#if HAVE___SECURE_GETENV && !defined(__LCLINT__)
+#define	getenv(_s)	__secure_getenv(_s)
 #endif
 
 #ifdef STDC_HEADERS
+/*@-macrounrecog -incondefs -globuse -mustmod @*/ /* FIX: shrug */
 #define getopt system_getopt
+/*@=macrounrecog =incondefs =globuse =mustmod @*/
 /*@-skipansiheaders@*/
 #include <stdlib.h>
 /*@=skipansiheaders@*/
 #undef getopt
+#if defined(__LCLINT__)
+/*@-declundef -incondefs @*/	/* LCL: modifies clause missing */
+extern char * realpath (const char * file_name, /*@out@*/ char * resolved_name)
+	/*@globals errno, fileSystem @*/
+	/*@requires maxSet(resolved_name) >=  (PATH_MAX - 1); @*/
+	/*@modifies *resolved_name, errno, fileSystem @*/;
+/*@=declundef =incondefs @*/
+#endif
 #else /* not STDC_HEADERS */
-char *getenv __P((const char *name));
+char *getenv (const char *name);
+#if ! HAVE_REALPATH
+char *realpath(const char *path, char resolved_path []);
+#endif
 #endif /* STDC_HEADERS */
+
+/* XXX solaris2.5.1 has not */
+#if !defined(EXIT_FAILURE)
+#define	EXIT_FAILURE	1
+#endif
 
 #ifdef HAVE_FCNTL_H
 #include <fcntl.h>
@@ -120,16 +174,20 @@ char *getenv __P((const char *name));
 #include <sys/file.h>
 #endif
 
-#ifndef SEEK_SET
+#if !defined(SEEK_SET) && !defined(__LCLINT__)
 #define SEEK_SET 0
 #define SEEK_CUR 1
 #define SEEK_END 2
 #endif
-#ifndef F_OK
+#if !defined(F_OK) && !defined(__LCLINT__)
 #define F_OK 0
 #define X_OK 1
 #define W_OK 2
 #define R_OK 4
+#endif
+
+#ifdef HAVE_SIGNAL_H
+# include <signal.h>
 #endif
 
 #ifdef HAVE_DIRENT_H
@@ -149,6 +207,14 @@ char *getenv __P((const char *name));
 # endif /* HAVE_NDIR_H */
 #endif /* HAVE_DIRENT_H */
 
+#if defined(__LCLINT__)
+/*@-declundef -incondefs @*/ /* LCL: missing annotation */
+/*@only@*/ /*@out@*/ void * alloca (size_t __size)
+	/*@ensures maxSet(result) == (__size - 1) @*/
+	/*@*/;
+/*@=declundef =incondefs @*/
+#endif
+
 #ifdef __GNUC__
 # undef alloca
 # define alloca __builtin_alloca
@@ -163,9 +229,34 @@ char *alloca ();
 # endif
 #endif
 
+#if defined (__GLIBC__) && defined(__LCLINT__)
+/*@-declundef@*/
+/*@unchecked@*/
+extern __const __int32_t *__ctype_tolower;
+/*@unchecked@*/
+extern __const __int32_t *__ctype_toupper;
+/*@=declundef@*/
+#endif
+
 #include <ctype.h>
 
-#if HAVE_SYS_MMAN_H
+#if defined (__GLIBC__) && defined(__LCLINT__)
+/*@-exportlocal@*/
+extern int isalnum(int) __THROW	/*@*/;
+extern int iscntrl(int) __THROW	/*@*/;
+extern int isgraph(int) __THROW	/*@*/;
+extern int islower(int) __THROW	/*@*/;
+extern int ispunct(int) __THROW	/*@*/;
+extern int isxdigit(int) __THROW	/*@*/;
+extern int isascii(int) __THROW	/*@*/;
+extern int toascii(int) __THROW	/*@*/;
+extern int _toupper(int) __THROW	/*@*/;
+extern int _tolower(int) __THROW	/*@*/;
+/*@=exportlocal@*/
+
+#endif
+
+#if HAVE_SYS_MMAN_H && !defined(__LCLINT__)
 #include <sys/mman.h>
 #endif
 
@@ -183,7 +274,9 @@ char *alloca ();
 #endif
 
 #if HAVE_GETOPT_H
+/*@-noparams@*/
 #include <getopt.h>
+/*@=noparams@*/
 #endif
 
 #if HAVE_GRP_H
@@ -194,9 +287,181 @@ char *alloca ();
 #include <limits.h>
 #endif
 
-#if HAVE_MALLOC_H
+#if HAVE_ERR_H
+#include <err.h>
+#endif
+
+#if HAVE_MALLOC_H && !defined(__LCLINT__)
 #include <malloc.h>
 #endif
+
+#if HAVE_LIBGEN_H
+#include <libgen.h>
+#endif
+
+#if WITH_SELINUX
+#include <selinux/selinux.h>
+#else
+typedef	char * security_context_t;
+
+#define	freecon(_c)
+
+#define	getfilecon(_fn, _c)	(-1)
+#define	lgetfilecon(_fn, _c)	(-1)
+#define	fgetfilecon(_fd, _c)	(-1)
+
+#define	setfilecon(_fn, _c)	(-1)
+#define	lsetfilecon(_fn, _c)	(-1)
+#define	fsetfilecon(_fd, _c)	(-1)
+
+#define	security_check_context(_c)	(0)
+
+#define	is_selinux_enabled()	(-1)
+
+#define rpm_execcon(_v, _fn, _av, _envp)	(0)
+#endif
+
+#if defined(WITH_SELINUX) && defined(__LCLINT__)
+/*@-incondefs@*/
+extern void freecon(/*@only@*/ security_context_t con)
+	/*@modifies con @*/;
+
+extern int getfilecon(const char *path, /*@out@*/ security_context_t *con)
+	/*@modifies *con @*/;
+extern int lgetfilecon(const char *path, /*@out@*/ security_context_t *con)
+	/*@modifies *con @*/;
+extern int fgetfilecon(int fd, /*@out@*/ security_context_t *con)
+	/*@modifies *con @*/;
+
+extern int setfilecon(const char *path, security_context_t con)
+	/*@globals fileSystem @*/
+	/*@modifies fileSystem @*/;
+extern int lsetfilecon(const char *path, security_context_t con)
+	/*@globals fileSystem @*/
+	/*@modifies fileSystem @*/;
+extern int fsetfilecon(int fd, security_context_t con)
+	/*@globals fileSystem @*/
+	/*@modifies fileSystem @*/;
+
+extern int getcon(/*@out@*/ security_context_t *con)
+	/*@modifies *con @*/;
+extern int getexeccon(/*@out@*/ security_context_t *con)
+	/*@modifies *con @*/;
+extern int setexeccon(security_context_t con)
+	/*@globals fileSystem @*/
+	/*@modifies fileSystem @*/;
+
+extern int security_check_context(security_context_t con)
+	/*@globals fileSystem @*/
+	/*@modifies fileSystem @*/;
+extern int security_getenforce(void)
+	/*@globals fileSystem @*/
+	/*@modifies fileSystem @*/;
+
+extern int is_selinux_enabled(void)
+	/*@globals fileSystem @*/
+	/*@modifies fileSystem @*/;
+/*@=incondefs@*/
+#endif
+
+/*@-declundef -incondefs @*/ /* FIX: these are macros */
+/**
+ */
+/*@mayexit@*/ /*@only@*/ /*@out@*/ void * xmalloc (size_t size)
+	/*@globals errno @*/
+	/*@ensures maxSet(result) == (size - 1) @*/
+	/*@modifies errno @*/;
+
+/**
+ */
+/*@mayexit@*/ /*@only@*/ void * xcalloc (size_t nmemb, size_t size)
+	/*@ensures maxSet(result) == (nmemb - 1) @*/
+	/*@*/;
+
+/**
+ * @todo Annotate ptr with returned/out.
+ */
+/*@mayexit@*/ /*@only@*/ void * xrealloc (/*@null@*/ /*@only@*/ void * ptr,
+					size_t size)
+	/*@ensures maxSet(result) == (size - 1) @*/
+	/*@modifies *ptr @*/;
+
+/**
+ */
+/*@mayexit@*/ /*@only@*/ char * xstrdup (const char *str)
+	/*@*/;
+/*@=declundef =incondefs @*/
+
+/**
+ */
+/*@unused@*/ /*@exits@*/ /*@only@*/ void * vmefail(size_t size)
+	/*@*/;
+
+#if HAVE_MCHECK_H
+#include <mcheck.h>
+#if defined(__LCLINT__)
+/*@-declundef -incondefs @*/ /* LCL: missing annotations */
+#if 0
+enum mcheck_status
+  {
+    MCHECK_DISABLED = -1,       /* Consistency checking is not turned on.  */
+    MCHECK_OK,                  /* Block is fine.  */
+    MCHECK_FREE,                /* Block freed twice.  */
+    MCHECK_HEAD,                /* Memory before the block was clobbered.  */
+    MCHECK_TAIL                 /* Memory after the block was clobbered.  */
+  };
+#endif
+
+extern int mcheck (void (*__abortfunc) (enum mcheck_status))
+	/*@globals internalState@*/
+	/*@modifies internalState @*/;
+extern int mcheck_pedantic (void (*__abortfunc) (enum mcheck_status))
+	/*@globals internalState@*/
+	/*@modifies internalState @*/;
+extern void mcheck_check_all (void)
+	/*@globals internalState@*/
+	/*@modifies internalState @*/;
+extern enum mcheck_status mprobe (void *__ptr)
+	/*@globals internalState@*/
+	/*@modifies internalState @*/;
+extern void mtrace (void)
+	/*@globals internalState@*/
+	/*@modifies internalState @*/;
+extern void muntrace (void)
+	/*@globals internalState@*/
+	/*@modifies internalState @*/;
+/*@=declundef =incondefs @*/
+#endif /* defined(__LCLINT__) */
+
+/* Memory allocation via macro defs to get meaningful locations from mtrace() */
+#if defined(__GNUC__)
+#define	xmalloc(_size) 		(malloc(_size) ? : vmefail(_size))
+#define	xcalloc(_nmemb, _size)	(calloc((_nmemb), (_size)) ? : vmefail(_size))
+#define	xrealloc(_ptr, _size)	(realloc((_ptr), (_size)) ? : vmefail(_size))
+#define	xstrdup(_str)	(strcpy((malloc(strlen(_str)+1) ? : vmefail(strlen(_str)+1)), (_str)))
+#endif	/* defined(__GNUC__) */
+#endif	/* HAVE_MCHECK_H */
+
+/* Retrofit glibc __progname */
+#if defined __GLIBC__ && __GLIBC__ >= 2
+#if __GLIBC_MINOR__ >= 1
+#define	__progname	__assert_program_name
+#endif
+#define	setprogname(pn)
+#else
+#define	__progname	program_name
+#define	setprogname(pn)	\
+  { if ((__progname = strrchr(pn, '/')) != NULL) __progname++; \
+    else __progname = pn;		\
+  }
+#endif
+/*@unchecked@*/
+extern const char *__progname;
+
+/* Variables used to allow RPM to relocate */
+extern const char *__usrlibrpm;
+extern const char *__etcrpm;
+extern const char *__localedir;
 
 #if HAVE_NETDB_H
 #include <netdb.h>
@@ -217,49 +482,157 @@ char *alloca ();
 
 #if ENABLE_NLS && !defined(__LCLINT__)
 # include <libintl.h>
-# define _(Text) gettext (Text)
+# define _(Text) dgettext (PACKAGE, Text)
 #else
 # undef bindtextdomain
 # define bindtextdomain(Domain, Directory) /* empty */
 # undef textdomain
 # define textdomain(Domain) /* empty */
 # define _(Text) Text
+# undef dgettext
+# define dgettext(DomainName, Text) Text
 #endif
 
 #define N_(Text) Text
 
 /* ============== from misc/miscfn.h */
 
+#if !defined(USE_GNU_GLOB) || defined(__LCLINT__)
 #if HAVE_FNMATCH_H
+/*@-noparams@*/
 #include <fnmatch.h>
-#else
-#include "misc/fnmatch.h"
+/*@=noparams@*/
 #endif
 
-#if HAVE_GLOB_H
+#if HAVE_GLOB_H || defined(__LCLINT__)
+/*@-noparams@*/
 #include <glob.h>
+/*@=noparams@*/
+#endif
 #else
+/*@-noparams@*/
 #include "misc/glob.h"
+#include "misc/fnmatch.h"
+/*@=noparams@*/
+#endif
+
+#if defined(__LCLINT__)
+/*@-declundef -incondefs @*/ /* LCL: missing annotation */
+#if 0
+typedef /*@concrete@*/ struct
+  {
+    size_t gl_pathc;
+    char **gl_pathv;
+    size_t gl_offs;
+    int gl_flags;
+
+    void (*gl_closedir) (void *);
+#ifdef _GNU_SOURCE
+    struct dirent *(*gl_readdir) (void *);
+#else
+    void *(*gl_readdir) (void *);
+#endif
+    ptr_t (*gl_opendir) (const char *);
+#ifdef _GNU_SOURCE
+    int (*gl_lstat) (const char *restrict, struct stat *restrict);
+    int (*gl_stat) (const char *restrict, struct stat *restrict);
+#else
+    int (*gl_lstat) (const char *restrict, void *restrict);
+    int (*gl_stat) (const char *restrict, void *restrict);
+#endif
+  } glob_t;
+#endif
+
+#if 0
+/*@-constuse@*/
+/*@constant int GLOB_ERR@*/
+/*@constant int GLOB_MARK@*/
+/*@constant int GLOB_NOSORT@*/
+/*@constant int GLOB_DOOFFS@*/
+/*@constant int GLOB_NOCHECK@*/
+/*@constant int GLOB_APPEND@*/
+/*@constant int GLOB_NOESCAPE@*/
+/*@constant int GLOB_PERIOD@*/
+
+#ifdef _GNU_SOURCE
+/*@constant int GLOB_MAGCHAR@*/
+/*@constant int GLOB_ALTDIRFUNC@*/
+/*@constant int GLOB_BRACE@*/
+/*@constant int GLOB_NOMAGIC@*/
+/*@constant int GLOB_TILDE@*/
+/*@constant int GLOB_ONLYDIR@*/
+/*@constant int GLOB_TILDE_CHECK@*/
+#endif
+
+/*@constant int GLOB_FLAGS@*/
+
+/*@constant int GLOB_NOSPACE@*/
+/*@constant int GLOB_ABORTED@*/
+/*@constant int GLOB_NOMATCH@*/
+/*@constant int GLOB_NOSYS@*/
+#ifdef _GNU_SOURCE
+/*@constant int GLOB_ABEND@*/
+#endif
+/*@=constuse@*/
+#endif
+
+/*@-protoparammatch -redecl@*/
+/*@-type@*/	/* XXX glob64_t */
+extern int glob (const char *__pattern, int __flags,
+                      int (*__errfunc) (const char *, int),
+                      /*@out@*/ glob_t *__pglob)
+	/*@globals errno, fileSystem @*/
+	/*@modifies *__pglob, errno, fileSystem @*/;
+	/* XXX only annotation is a white lie */
+extern void globfree (/*@only@*/ glob_t *__pglob)
+	/*@modifies *__pglob @*/;
+/*@=type@*/
+#ifdef _GNU_SOURCE
+extern int glob_pattern_p (const char *__pattern, int __quote)
+	/*@*/;
+#endif
+/*@=protoparammatch =redecl@*/
+
+#if 0
+/*@-constuse@*/
+/*@constant int FNM_PATHNAME@*/
+/*@constant int FNM_NOESCAPE@*/
+/*@constant int FNM_PERIOD@*/
+
+#ifdef _GNU_SOURCE
+/*@constant int FNM_FILE_NAME@*/	/* GNU extension */
+/*@constant int FNM_LEADING_DIR@*/	/* GNU extension */
+/*@constant int FNM_CASEFOLD@*/		/* GNU extension */
+/*@constant int FNM_EXTMATCH@*/		/* GNU extension */
+#endif
+
+/*@constant int FNM_NOMATCH@*/
+
+#ifdef _XOPEN_SOURCE
+/*@constant int FNM_NOSYS@*/		/* X/Open */
+#endif
+/*@=constuse@*/
+#endif
+
+extern int fnmatch (const char *__pattern, const char *__name, int __flags)
+	/*@*/;
+/*@=declundef =incondefs @*/
 #endif
 
 #if ! HAVE_S_IFSOCK
-#define S_IFSOCK (0xC000)
+#define S_IFSOCK (0xc000)
 #endif
 
 #if ! HAVE_S_ISLNK
-#define S_ISLNK(mode) ((mode & 0xF000) == S_IFLNK)
+#define S_ISLNK(mode) ((mode & 0xf000) == S_IFLNK)
 #endif
 
 #if ! HAVE_S_ISSOCK
-#define S_ISSOCK(mode) ((mode & 0xF000) == S_IFSOCK)
+#define S_ISSOCK(mode) ((mode & 0xf000) == S_IFSOCK)
 #endif
 
 #if NEED_STRINGS_H
 #include <strings.h>
-#endif
-
-#if ! HAVE_REALPATH
-char *realpath(const char *path, char resolved_path []);
 #endif
 
 #if NEED_MYREALLOC
@@ -267,20 +640,34 @@ char *realpath(const char *path, char resolved_path []);
 extern void *myrealloc(void *, size_t);
 #endif
 
+#if ! HAVE_SETENV
+extern int setenv(const char *name, const char *value, int replace);
+extern void unsetenv(const char *name);
+#endif
+
 #if HAVE_SYS_SOCKET_H
 #include <sys/types.h>
 #include <sys/socket.h>
 #endif
 
-#if HAVE_SYS_SELECT_H
+#if HAVE_POLL_H
+#include <poll.h>
+#else
+#if HAVE_SYS_SELECT_H && !defined(__LCLINT__)
 #include <sys/select.h>
+#endif
+#endif
+
+/* Solaris <= 2.6 limits getpass return to only 8 chars */
+#if HAVE_GETPASSPHRASE
+#define	getpass	getpassphrase
 #endif
 
 #if ! HAVE_LCHOWN
 #define lchown chown
 #endif
 
-#if HAVE_GETMNTINFO_R || HAVE_MNTCTL
+#if HAVE_GETMNTINFO || HAVE_GETMNTINFO_R || HAVE_MNTCTL
 # define GETMNTENT_ONE 0
 # define GETMNTENT_TWO 0
 # if HAVE_SYS_MNTCTL_H
@@ -330,4 +717,14 @@ extern void *myrealloc(void *, size_t);
 #ifndef MOUNTED
 #define MOUNTED "/etc/mnttab"
 #endif
+
+#if defined(__LCLINT__)
+#define FILE_RCSID(id)
+#else
+#define FILE_RCSID(id) \
+static inline const char *rcsid(const char *p) { \
+        return rcsid(p = id); \
+}
+#endif
+
 #endif	/* H_SYSTEM */
