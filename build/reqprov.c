@@ -1,93 +1,124 @@
-/* reqprov.c -- require/provide handling */
+/** \ingroup rpmbuild
+ * \file build/reqprov.c
+ *  Add dependency tags to package header(s).
+ */
 
 #include "system.h"
 
+#define	_RPMEVR_INTERNAL
 #include "rpmbuild.h"
+#include "debug.h"
 
-int addReqProv(Spec spec, Package pkg,
-	       int flag, const char *name, const char *version, int index)
+int addReqProv(/*@unused@*/ Spec spec, Header h, /*@unused@*/ rpmTag tagN,
+		const char * N, const char * EVR, rpmsenseFlags Flags,
+		int index)
 {
-    const char **names;
-    const char **versions = NULL;
-    int *flags = NULL;
-    int *indexes = NULL;
-    int nametag = 0;
-    int versiontag = 0;
-    int flagtag = 0;
-    int indextag = 0;
+    HGE_t hge = (HGE_t)headerGetEntryMinMemory;
+    HFD_t hfd = headerFreeData;
+    const char ** names;
+    rpmTagType dnt;
+    rpmTag nametag = 0;
+    rpmTag versiontag = 0;
+    rpmTag flagtag = 0;
+    rpmTag indextag = 0;
     int len;
-    int extra = 0;
+    rpmsenseFlags extra = RPMSENSE_ANY;
+    int xx;
     
-    if (flag & RPMSENSE_PROVIDES) {
-	nametag = RPMTAG_PROVIDES;
-    } else if (flag & RPMSENSE_OBSOLETES) {
-	nametag = RPMTAG_OBSOLETES;
-    } else if (flag & RPMSENSE_CONFLICTS) {
+    if (Flags & RPMSENSE_PROVIDES) {
+	nametag = RPMTAG_PROVIDENAME;
+	versiontag = RPMTAG_PROVIDEVERSION;
+	flagtag = RPMTAG_PROVIDEFLAGS;
+	extra = Flags & RPMSENSE_FIND_PROVIDES;
+    } else if (Flags & RPMSENSE_OBSOLETES) {
+	nametag = RPMTAG_OBSOLETENAME;
+	versiontag = RPMTAG_OBSOLETEVERSION;
+	flagtag = RPMTAG_OBSOLETEFLAGS;
+    } else if (Flags & RPMSENSE_CONFLICTS) {
 	nametag = RPMTAG_CONFLICTNAME;
 	versiontag = RPMTAG_CONFLICTVERSION;
 	flagtag = RPMTAG_CONFLICTFLAGS;
-    } else if (flag & RPMSENSE_PREREQ) {
-	nametag = RPMTAG_REQUIRENAME;
-	versiontag = RPMTAG_REQUIREVERSION;
-	flagtag = RPMTAG_REQUIREFLAGS;
-	extra = RPMSENSE_PREREQ;
-    } else if (flag & RPMSENSE_TRIGGER) {
+    } else if (Flags & RPMSENSE_TRIGGER) {
 	nametag = RPMTAG_TRIGGERNAME;
 	versiontag = RPMTAG_TRIGGERVERSION;
 	flagtag = RPMTAG_TRIGGERFLAGS;
 	indextag = RPMTAG_TRIGGERINDEX;
-	extra = flag & RPMSENSE_TRIGGER;
+	extra = Flags & RPMSENSE_TRIGGER;
     } else {
 	nametag = RPMTAG_REQUIRENAME;
 	versiontag = RPMTAG_REQUIREVERSION;
 	flagtag = RPMTAG_REQUIREFLAGS;
+	extra = Flags & _ALL_REQUIRES_MASK;
     }
 
-    flag = (flag & RPMSENSE_SENSEMASK) | extra;
-    if (!version) {
-	version = "";
-    }
+    Flags = (Flags & RPMSENSE_SENSEMASK) | extra;
+
+    /*@-branchstate@*/
+    if (EVR == NULL)
+	EVR = "";
+    /*@=branchstate@*/
     
-    if (headerGetEntry(pkg->header, nametag, NULL, (void *) &names, &len)) {
+    /* Check for duplicate dependencies. */
+    if (hge(h, nametag, &dnt, &names, &len)) {
+	const char ** versions = NULL;
+	rpmTagType dvt = RPM_STRING_ARRAY_TYPE;
+	int *flags = NULL;
+	int *indexes = NULL;
+	int duplicate = 0;
+
 	if (flagtag) {
-	    headerGetEntry(pkg->header, versiontag, NULL,
-			   (void *) &versions, NULL);
-	    headerGetEntry(pkg->header, flagtag, NULL, (void *) &flags, NULL);
+	    xx = hge(h, versiontag, &dvt, &versions, NULL);
+	    xx = hge(h, flagtag, NULL, &flags, NULL);
 	}
-	if (indextag) {
-	    headerGetEntry(pkg->header, indextag, NULL,
-			   (void *) &indexes, NULL);
-	}
-	while (len) {
+	if (indextag)
+	    xx = hge(h, indextag, NULL, &indexes, NULL);
+
+/*@-boundsread@*/
+	while (len > 0) {
 	    len--;
-	    if (!strcmp(names[len], name)) {
-		if (!flagtag ||
-		    (!strcmp(versions[len], version) && flags[len] == flag)) {
-		    if (!indextag || (index == indexes[len])) {
-			/* The same */
-			FREE(names);
-			FREE(versions);
-			return 0;
-		    }
-		}
-	    }
+	    if (strcmp(names[len], N))
+		continue;
+	    if (flagtag && versions != NULL &&
+		(strcmp(versions[len], EVR) || flags[len] != Flags))
+		continue;
+	    if (indextag && indexes != NULL && indexes[len] != index)
+		continue;
+
+	    /* This is a duplicate dependency. */
+	    duplicate = 1;
+
+	    break;
 	}
-	FREE(names);
-	FREE(versions);
+/*@=boundsread@*/
+	names = hfd(names, dnt);
+	versions = hfd(versions, dvt);
+	if (duplicate)
+	    return 0;
     }
 
-    headerAddOrAppendEntry(pkg->header, nametag,
-			   RPM_STRING_ARRAY_TYPE, &name, 1);
+    /* Add this dependency. */
+    xx = headerAddOrAppendEntry(h, nametag, RPM_STRING_ARRAY_TYPE, &N, 1);
     if (flagtag) {
-	headerAddOrAppendEntry(pkg->header, versiontag,
-			       RPM_STRING_ARRAY_TYPE, &version, 1);
-	headerAddOrAppendEntry(pkg->header, flagtag,
-			       RPM_INT32_TYPE, &flag, 1);
+	xx = headerAddOrAppendEntry(h, versiontag,
+			       RPM_STRING_ARRAY_TYPE, &EVR, 1);
+	xx = headerAddOrAppendEntry(h, flagtag,
+			       RPM_INT32_TYPE, &Flags, 1);
     }
-    if (indextag) {
-	headerAddOrAppendEntry(pkg->header, indextag,
-			       RPM_INT32_TYPE, &index, 1);
-    }
+    if (indextag)
+	xx = headerAddOrAppendEntry(h, indextag, RPM_INT32_TYPE, &index, 1);
 
     return 0;
 }
+
+/*@-boundswrite@*/
+int rpmlibNeedsFeature(Header h, const char * feature, const char * featureEVR)
+{
+    char * reqname = alloca(sizeof("rpmlib()") + strlen(feature));
+
+    (void) stpcpy( stpcpy( stpcpy(reqname, "rpmlib("), feature), ")");
+
+    /* XXX 1st arg is unused */
+   return addReqProv(NULL, h, RPMTAG_REQUIRENAME, reqname, featureEVR,
+	RPMSENSE_RPMLIB|(RPMSENSE_LESS|RPMSENSE_EQUAL), 0);
+}
+/*@=boundswrite@*/
