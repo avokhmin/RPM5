@@ -1,100 +1,123 @@
+/** \ingroup rpmbuild
+ * \file build/spec.c
+ * Handle spec data structure.
+ */
+
 #include "system.h"
 
-#include "rpmbuild.h"
 #include "buildio.h"
+#include "rpmds.h"
+#include "rpmfi.h"
+#include "rpmts.h"
 
-#ifdef	DYING
-static void freeTriggerFiles(struct TriggerFileEntry *p);
-#endif
-    
-static inline void freeTriggerFiles(/*@only@*/ struct TriggerFileEntry *p)
+#include "debug.h"
+
+/*@-redecl@*/
+extern int specedit;
+/*@=redecl@*/
+
+#define SKIPWHITE(_x)	{while(*(_x) && (xisspace(*_x) || *(_x) == ',')) (_x)++;}
+#define SKIPNONWHITE(_x){while(*(_x) &&!(xisspace(*_x) || *(_x) == ',')) (_x)++;}
+
+/*@access Header @*/	/* compared with NULL */
+/*@access rpmfi @*/	/* compared with NULL */
+
+/**
+ * @param p		trigger entry chain
+ * @return		NULL always
+ */
+static inline
+/*@null@*/ struct TriggerFileEntry * freeTriggerFiles(/*@only@*/ /*@null@*/ struct TriggerFileEntry * p)
+	/*@modifies p @*/
 {
     struct TriggerFileEntry *o, *q = p;
     
     while (q != NULL) {
 	o = q;
 	q = q->next;
-	FREE(o->fileName);
-	FREE(o->script);
-	FREE(o->prog);
-	free(o);
+	o->fileName = _free(o->fileName);
+	o->script = _free(o->script);
+	o->prog = _free(o->prog);
+	o = _free(o);
     }
+    return NULL;
 }
 
-static inline void freeCpioList(/*@only@*/ struct cpioFileMapping *cpioList, int cpioCount)
-{
-    struct cpioFileMapping *p = cpioList;
-
-    while (cpioCount--) {
-	rpmMessage(RPMMESS_DEBUG, _("archive = %s, fs = %s\n"),
-		   p->archivePath, p->fsPath);
-	FREE(p->archivePath);
-	FREE(p->fsPath);
-	p++;
-    }
-    FREE(cpioList);
-}
-
-static inline void freeSources(/*@only@*/ struct Source *s)
+/**
+ * Destroy source component chain.
+ * @param s		source component chain
+ * @return		NULL always
+ */
+static inline
+/*@null@*/ struct Source * freeSources(/*@only@*/ /*@null@*/ struct Source * s)
+	/*@modifies s @*/
 {
     struct Source *r, *t = s;
 
     while (t != NULL) {
 	r = t;
 	t = t->next;
-	FREE(r->fullSource);
-	free(r);
+	r->fullSource = _free(r->fullSource);
+	r = _free(r);
     }
+    return NULL;
 }
 
+/*@-boundswrite@*/
 int lookupPackage(Spec spec, const char *name, int flag, /*@out@*/Package *pkg)
 {
-    char buf[BUFSIZ];
-    char *n;
+    const char *pname;
     const char *fullName;
     Package p;
     
     /* "main" package */
-    if (! name) {
-	if (pkg) {
+    if (name == NULL) {
+	if (pkg)
 	    *pkg = spec->packages;
-	}
 	return 0;
     }
 
     /* Construct package name */
+  { char *n;
     if (flag == PART_SUBNAME) {
-	headerGetEntry(spec->packages->header, RPMTAG_NAME,
-		       NULL, (void *) &n, NULL);
-	sprintf(buf, "%s-%s", n, name);
-	fullName = buf;
+	(void) headerNVR(spec->packages->header, &pname, NULL, NULL);
+	fullName = n = alloca(strlen(pname) + 1 + strlen(name) + 1);
+	while (*pname != '\0') *n++ = *pname++;
+	*n++ = '-';
     } else {
-	fullName = name;
+	fullName = n = alloca(strlen(name)+1);
     }
+    /*@-mayaliasunique@*/
+    strcpy(n, name);
+    /*@=mayaliasunique@*/
+  }
 
+    /* Locate package with fullName */
     for (p = spec->packages; p != NULL; p = p->next) {
-	headerGetEntry(p->header, RPMTAG_NAME, NULL, (void *) &n, NULL);
-	if (n && (! strcmp(fullName, n))) {
+	(void) headerNVR(p->header, &pname, NULL, NULL);
+	if (pname && (! strcmp(fullName, pname))) {
 	    break;
 	}
     }
 
-    if (pkg) {
-	*pkg = p;
-    }
+    if (pkg)
+	/*@-dependenttrans@*/ *pkg = p; /*@=dependenttrans@*/
     return ((p == NULL) ? 1 : 0);
 }
+/*@=boundswrite@*/
 
 Package newPackage(Spec spec)
 {
     Package p;
     Package pp;
 
-    p = malloc(sizeof(*p));
+    p = xcalloc(1, sizeof(*p));
 
     p->header = headerNew();
-    p->icon = NULL;
-    p->autoReqProv = 1;
+    p->ds = NULL;
+
+    p->autoProv = 1;
+    p->autoReq = 1;
     
 #if 0    
     p->reqProv = NULL;
@@ -108,7 +131,6 @@ Package newPackage(Spec spec)
     p->fileList = NULL;
 
     p->cpioList = NULL;
-    p->cpioCount = 0;
 
     p->preInFile = NULL;
     p->postInFile = NULL;
@@ -123,7 +145,7 @@ Package newPackage(Spec spec)
     } else {
 	/* Always add package to end of list */
 	for (pp = spec->packages; pp->next != NULL; pp = pp->next)
-	    ;
+	    {};
 	pp->next = p;
     }
     p->next = NULL;
@@ -131,225 +153,292 @@ Package newPackage(Spec spec)
     return p;
 }
 
-void freePackage(/*@only@*/ Package p)
+Package freePackage(Package pkg)
 {
-    if (p == NULL)
-	return;
+    if (pkg == NULL) return NULL;
     
-    FREE(p->preInFile);
-    FREE(p->postInFile);
-    FREE(p->preUnFile);
-    FREE(p->postUnFile);
-    FREE(p->verifyFile);
+    pkg->preInFile = _free(pkg->preInFile);
+    pkg->postInFile = _free(pkg->postInFile);
+    pkg->preUnFile = _free(pkg->preUnFile);
+    pkg->postUnFile = _free(pkg->postUnFile);
+    pkg->verifyFile = _free(pkg->verifyFile);
 
-    headerFree(p->header);
-    freeStringBuf(p->fileList);
-    FREE(p->fileFile);
-    freeCpioList(p->cpioList, p->cpioCount);
+    pkg->header = headerFree(pkg->header);
+    pkg->ds = rpmdsFree(pkg->ds);
+    pkg->fileList = freeStringBuf(pkg->fileList);
+    pkg->fileFile = _free(pkg->fileFile);
+    if (pkg->cpioList) {
+	rpmfi fi = pkg->cpioList;
+	pkg->cpioList = NULL;
+	fi = rpmfiFree(fi);
+    }
 
-    freeStringBuf(p->specialDoc);
+    pkg->specialDoc = freeStringBuf(pkg->specialDoc);
+    pkg->triggerFiles = freeTriggerFiles(pkg->triggerFiles);
 
-    freeSources(p->icon);
-
-    freeTriggerFiles(p->triggerFiles);
-
-    free(p);
+    pkg = _free(pkg);
+    return NULL;
 }
 
-void freePackages(Spec spec)
+Package freePackages(Package packages)
 {
     Package p;
 
-    while (spec->packages) {
-	p = spec->packages;
-	spec->packages = spec->packages->next;
+    while ((p = packages) != NULL) {
+	packages = p->next;
 	p->next = NULL;
-	freePackage(p);
+	p = freePackage(p);
     }
+    return NULL;
 }
 
-#ifdef	DYING
-static char *getSourceAux(Spec spec, int num, int flag, int full);
-static struct Source *findSource(Spec spec, int num, int flag);
-#endif
-
+/**
+ */
 static inline /*@owned@*/ struct Source *findSource(Spec spec, int num, int flag)
+	/*@*/
 {
     struct Source *p;
 
-    for (p = spec->sources; p != NULL; p = p->next) {
-	if ((num == p->num) && (p->flags & flag)) {
-	    return p;
-	}
-    }
+    for (p = spec->sources; p != NULL; p = p->next)
+	if ((num == p->num) && (p->flags & flag)) return p;
 
     return NULL;
 }
 
-#ifdef	UNUSED
-static char *getSourceAux(Spec spec, int num, int flag, int full)
+/*@-boundsread@*/
+int parseNoSource(Spec spec, const char * field, int tag)
 {
-    struct Source *p = spec->sources;
-
-    p = findSource(spec, num, flag);
-
-    return (p) ? (full ? p->fullSource : p->source) : NULL;
-}
-
-static char *getSource(Spec spec, int num, int flag)
-{
-    return getSourceAux(spec, num, flag, 0);
-}
-
-static char *getFullSource(Spec spec, int num, int flag)
-{
-    return getSourceAux(spec, num, flag, 1);
-}
-#endif	/* UNUSED */
-
-int parseNoSource(Spec spec, char *field, int tag)
-{
-    char buf[BUFSIZ];
-    char *s, *name;
+    const char *f, *fe;
+    const char *name;
     int num, flag;
 
     if (tag == RPMTAG_NOSOURCE) {
-	flag = RPMBUILD_ISSOURCE;
+	flag = RPMFILE_SOURCE;
 	name = "source";
     } else {
-	flag = RPMBUILD_ISPATCH;
+	flag = RPMFILE_PATCH;
 	name = "patch";
     }
     
-    strcpy(buf, field);
-    for (field = buf; (s = strtok(field, ", \t")); field = NULL) {
-        struct Source *p;
-	if (parseNum(s, &num)) {
-	    rpmError(RPMERR_BADSPEC, _("line %d: Bad number: %s"),
-		     spec->lineNum, spec->line);
+    fe = field;
+    for (f = fe; *f != '\0'; f = fe) {
+	struct Source *p;
+
+	SKIPWHITE(f);
+	if (*f == '\0')
+	    break;
+	fe = f;
+	SKIPNONWHITE(fe);
+	if (*fe != '\0') fe++;
+
+	if (parseNum(f, &num)) {
+	    rpmError(RPMERR_BADSPEC, _("line %d: Bad number: %s\n"),
+		     spec->lineNum, f);
 	    return RPMERR_BADSPEC;
 	}
 
 	if (! (p = findSource(spec, num, flag))) {
-	    rpmError(RPMERR_BADSPEC, _("line %d: Bad no%s number: %d"),
+	    rpmError(RPMERR_BADSPEC, _("line %d: Bad no%s number: %d\n"),
 		     spec->lineNum, name, num);
 	    return RPMERR_BADSPEC;
 	}
 
-	p->flags |= RPMBUILD_ISNO;
+	p->flags |= RPMFILE_GHOST;
 
     }
 
     return 0;
 }
+/*@=boundsread@*/
 
-int addSource(Spec spec, Package pkg, char *field, int tag)
+/*@-boundswrite@*/
+int addSource(Spec spec, Package pkg, const char *field, int tag)
 {
     struct Source *p;
     int flag = 0;
-    char *name = NULL;
-    char *nump, *fieldp = NULL;
+    const char *name = NULL;
+    const char *mdir = NULL;
+    char *nump;
+    const char *fieldp = NULL;
     char buf[BUFSIZ];
     int num = 0;
 
+    buf[0] = '\0';
+    /*@-branchstate@*/
     switch (tag) {
-      case RPMTAG_SOURCE:
-	flag = RPMBUILD_ISSOURCE;
+    case RPMTAG_SOURCE:
+	flag = RPMFILE_SOURCE;
 	name = "source";
-	fieldp = spec->line + 6;
+	mdir = "%{_sourcedir}/";
+	fieldp = spec->line + (sizeof("Source")-1);
 	break;
-      case RPMTAG_PATCH:
-	flag = RPMBUILD_ISPATCH;
+    case RPMTAG_PATCH:
+	flag = RPMFILE_PATCH;
 	name = "patch";
-	fieldp = spec->line + 5;
+	mdir = "%{_patchdir}/";
+	fieldp = spec->line + (sizeof("Patch")-1);
 	break;
-      case RPMTAG_ICON:
-	flag = RPMBUILD_ISICON;
+    case RPMTAG_ICON:
+	flag = RPMFILE_ICON;
+	name = "icon";
+	mdir = "%{_icondir}/";
+	fieldp = NULL;
 	break;
+    default:
+assert(0);
+	/*@notreached@*/ break;
     }
+    /*@=branchstate@*/
 
     /* Get the number */
-    if (tag != RPMTAG_ICON) {
+    if (fieldp != NULL) {
 	/* We already know that a ':' exists, and that there */
 	/* are no spaces before it.                          */
 	/* This also now allows for spaces and tabs between  */
 	/* the number and the ':'                            */
 
 	nump = buf;
-	while ((*fieldp != ':') && (*fieldp != ' ') && (*fieldp != '\t')) {
+	while ((*fieldp != ':') && (*fieldp != ' ') && (*fieldp != '\t'))
 	    *nump++ = *fieldp++;
-	}
 	*nump = '\0';
 
 	nump = buf;
 	SKIPSPACE(nump);
-	if (! *nump) {
+	if (nump == NULL || *nump == '\0')
 	    num = 0;
-	} else {
-	    if (parseNum(buf, &num)) {
-		rpmError(RPMERR_BADSPEC, _("line %d: Bad %s number: %s\n"),
+	else if (parseNum(buf, &num)) {
+	    rpmError(RPMERR_BADSPEC, _("line %d: Bad %s number: %s\n"),
 			 spec->lineNum, name, spec->line);
-		return RPMERR_BADSPEC;
-	    }
+	    return RPMERR_BADSPEC;
 	}
     }
 
     /* Create the entry and link it in */
-    p = malloc(sizeof(struct Source));
+    p = xmalloc(sizeof(*p));
     p->num = num;
-    p->fullSource = strdup(field);
-    p->source = strrchr(p->fullSource, '/');
+    p->fullSource = xstrdup(field);
     p->flags = flag;
-    if (p->source) {
+    p->source = strrchr(p->fullSource, '/');
+    if (p->source)
 	p->source++;
-    } else {
+    else
 	p->source = p->fullSource;
-    }
 
-    if (tag != RPMTAG_ICON) {
-	p->next = spec->sources;
-	spec->sources = p;
-    } else {
-	p->next = pkg->icon;
-	pkg->icon = p;
-    }
+    p->next = spec->sources;
+    spec->sources = p;
 
     spec->numSources++;
 
+    /* XXX FIXME: need to add ICON* macros. */
     if (tag != RPMTAG_ICON) {
-	const char *body = rpmGetPath("%{_sourcedir}/", p->source, NULL);
+	const char *body = rpmGenPath(NULL, mdir, p->source);
 
 	sprintf(buf, "%s%d",
-		(flag & RPMBUILD_ISPATCH) ? "PATCH" : "SOURCE", num);
+		(flag & RPMFILE_PATCH) ? "PATCH" : "SOURCE", num);
 	addMacro(spec->macros, buf, NULL, body, RMIL_SPEC);
 	sprintf(buf, "%sURL%d",
-		(flag & RPMBUILD_ISPATCH) ? "PATCH" : "SOURCE", num);
+		(flag & RPMFILE_PATCH) ? "PATCH" : "SOURCE", num);
 	addMacro(spec->macros, buf, NULL, p->fullSource, RMIL_SPEC);
-	xfree(body);
+	body = _free(body);
     }
     
     return 0;
 }
+/*@=boundswrite@*/
+
+/**
+ */
+static inline /*@only@*/ /*@null@*/ speclines newSl(void)
+	/*@*/
+{
+    speclines sl = NULL;
+    /*@-branchstate@*/
+    if (specedit) {
+	sl = xmalloc(sizeof(*sl));
+	sl->sl_lines = NULL;
+	sl->sl_nalloc = 0;
+	sl->sl_nlines = 0;
+    }
+    /*@=branchstate@*/
+    return sl;
+}
+
+/**
+ */
+/*@-boundswrite@*/
+static inline /*@null@*/ speclines freeSl(/*@only@*/ /*@null@*/ speclines sl)
+	/*@modifies sl @*/
+{
+    int i;
+    if (sl == NULL) return NULL;
+    for (i = 0; i < sl->sl_nlines; i++)
+	/*@-unqualifiedtrans@*/
+	sl->sl_lines[i] = _free(sl->sl_lines[i]);
+	/*@=unqualifiedtrans@*/
+    sl->sl_lines = _free(sl->sl_lines);
+    return _free(sl);
+}
+/*@=boundswrite@*/
+
+/**
+ */
+static inline /*@only@*/ /*@null@*/ spectags newSt(void)
+	/*@*/
+{
+    spectags st = NULL;
+    /*@-branchstate@*/
+    if (specedit) {
+	st = xmalloc(sizeof(*st));
+	st->st_t = NULL;
+	st->st_nalloc = 0;
+	st->st_ntags = 0;
+    }
+    /*@=branchstate@*/
+    return st;
+}
+
+/**
+ */
+static inline /*@null@*/ spectags freeSt(/*@only@*/ /*@null@*/ spectags st)
+	/*@modifies st @*/
+{
+    int i;
+    if (st == NULL) return NULL;
+    for (i = 0; i < st->st_ntags; i++) {
+	spectag t = st->st_t + i;
+	t->t_lang = _free(t->t_lang);
+	t->t_msgid = _free(t->t_msgid);
+    }
+    st->st_t = _free(st->st_t);
+    return _free(st);
+}
 
 Spec newSpec(void)
 {
-    Spec spec;
-
-    spec = (Spec)malloc(sizeof *spec);
+    Spec spec = xcalloc(1, sizeof(*spec));
     
     spec->specFile = NULL;
-    spec->sourceRpmName = NULL;
+
+    spec->sl = newSl();
+    spec->st = newSt();
 
     spec->fileStack = NULL;
-    spec->line[0] = '\0';
+/*@-boundswrite@*/
+    spec->lbuf[0] = '\0';
+/*@=boundswrite@*/
+    spec->line = spec->lbuf;
+    spec->nextline = NULL;
+    spec->nextpeekc = '\0';
     spec->lineNum = 0;
-    spec->readStack = malloc(sizeof(struct ReadLevelEntry));
+    spec->readStack = xcalloc(1, sizeof(*spec->readStack));
     spec->readStack->next = NULL;
     spec->readStack->reading = 1;
 
+    spec->rootURL = NULL;
     spec->prep = NULL;
     spec->build = NULL;
     spec->install = NULL;
+    spec->check = NULL;
     spec->clean = NULL;
 
     spec->sources = NULL;
@@ -357,13 +446,10 @@ Spec newSpec(void)
     spec->noSource = 0;
     spec->numSources = 0;
 
-    spec->sourceHeader = NULL;
-
-    spec->sourceCpioCount = 0;
+    spec->sourceRpmName = NULL;
+    spec->sourcePkgId = NULL;
+    spec->sourceHeader = headerNew();
     spec->sourceCpioList = NULL;
-    
-    spec->gotBuildRoot = 0;
-    spec->buildRoot = NULL;
     
     spec->buildSubdir = NULL;
 
@@ -371,99 +457,358 @@ Spec newSpec(void)
     spec->timeCheck = 0;
     spec->cookie = NULL;
 
-    spec->buildRestrictions = headerNew();
-    spec->buildArchitectures = NULL;
-    spec->buildArchitectureCount = 0;
-    spec->inBuildArchitectures = 0;
-    spec->buildArchitectureSpecs = NULL;
+    spec->BANames = NULL;
+    spec->BACount = 0;
+    spec->recursing = 0;
+    spec->BASpecs = NULL;
 
     spec->force = 0;
     spec->anyarch = 0;
 
-    spec->macros = &globalMacroContext;
+/*@i@*/	spec->macros = rpmGlobalMacroContext;
+
+    spec->_parseRCPOT = parseRCPOT;	/* XXX hack around backward linkage. */
     
-    spec->autoReq = 1;
-    spec->autoProv = 1;
+    return spec;
+}
+
+Spec freeSpec(Spec spec)
+{
+    struct ReadLevelEntry *rl;
+
+    if (spec == NULL) return NULL;
+
+    spec->sl = freeSl(spec->sl);
+    spec->st = freeSt(spec->st);
+
+    spec->prep = freeStringBuf(spec->prep);
+    spec->build = freeStringBuf(spec->build);
+    spec->install = freeStringBuf(spec->install);
+    spec->check = freeStringBuf(spec->check);
+    spec->clean = freeStringBuf(spec->clean);
+
+    spec->buildSubdir = _free(spec->buildSubdir);
+    spec->rootURL = _free(spec->rootURL);
+    spec->specFile = _free(spec->specFile);
+
+#ifdef	DEAD
+  { struct OpenFileInfo *ofi;
+    while (spec->fileStack) {
+	ofi = spec->fileStack;
+	spec->fileStack = ofi->next;
+	ofi->next = NULL;
+	ofi->fileName = _free(ofi->fileName);
+	ofi = _free(ofi);
+    }
+  }
+#else
+    closeSpec(spec);
+#endif
+
+    while (spec->readStack) {
+	rl = spec->readStack;
+	/*@-dependenttrans@*/
+	spec->readStack = rl->next;
+	/*@=dependenttrans@*/
+	rl->next = NULL;
+	rl = _free(rl);
+    }
+    
+    spec->sourceRpmName = _free(spec->sourceRpmName);
+    spec->sourcePkgId = _free(spec->sourcePkgId);
+    spec->sourceHeader = headerFree(spec->sourceHeader);
+
+    if (spec->sourceCpioList) {
+	rpmfi fi = spec->sourceCpioList;
+	spec->sourceCpioList = NULL;
+	fi = rpmfiFree(fi);
+    }
+    
+    if (!spec->recursing) {
+/*@-boundswrite@*/
+	if (spec->BASpecs != NULL)
+	while (spec->BACount--) {
+	    /*@-unqualifiedtrans@*/
+	    spec->BASpecs[spec->BACount] =
+			freeSpec(spec->BASpecs[spec->BACount]);
+	    /*@=unqualifiedtrans@*/
+	}
+/*@=boundswrite@*/
+	/*@-compdef@*/
+	spec->BASpecs = _free(spec->BASpecs);
+	/*@=compdef@*/
+    }
+    spec->BANames = _free(spec->BANames);
+
+    spec->passPhrase = _free(spec->passPhrase);
+    spec->cookie = _free(spec->cookie);
+
+    spec->sources = freeSources(spec->sources);
+    spec->packages = freePackages(spec->packages);
+    
+    spec = _free(spec);
 
     return spec;
 }
 
-void freeSpec(/*@only@*/ Spec spec)
-{
-    struct OpenFileInfo *ofi;
-    struct ReadLevelEntry *rl;
-
-    freeStringBuf(spec->prep);	spec->prep = NULL;
-    freeStringBuf(spec->build);	spec->build = NULL;
-    freeStringBuf(spec->install); spec->install = NULL;
-    freeStringBuf(spec->clean);	spec->clean = NULL;
-
-    FREE(spec->buildRoot);
-    FREE(spec->buildSubdir);
-    FREE(spec->specFile);
-    FREE(spec->sourceRpmName);
-
-    while (spec->fileStack) {
-	ofi = spec->fileStack;
-	spec->fileStack = spec->fileStack->next;
-	ofi->next = NULL;
-	FREE(ofi->fileName);
-	free(ofi);
-    }
-
-    while (spec->readStack) {
-	rl = spec->readStack;
-	spec->readStack = spec->readStack->next;
-	rl->next = NULL;
-	free(rl);
-    }
-    
-    if (spec->sourceHeader != NULL) {
-	headerFree(spec->sourceHeader);
-	spec->sourceHeader = NULL;
-    }
-
-    freeCpioList(spec->sourceCpioList, spec->sourceCpioCount);
-    spec->sourceCpioList = NULL;
-    
-    headerFree(spec->buildRestrictions);
-    spec->buildRestrictions = NULL;
-    FREE(spec->buildArchitectures);
-
-    if (!spec->inBuildArchitectures) {
-	while (spec->buildArchitectureCount--) {
-	    freeSpec(
-		spec->buildArchitectureSpecs[spec->buildArchitectureCount]);
-	}
-	FREE(spec->buildArchitectureSpecs);
-    }
-    FREE(spec->buildArchitectures);
-
-    FREE(spec->passPhrase);
-    FREE(spec->cookie);
-
-#ifdef	DEAD
-    freeMacros(spec->macros);
-#endif
-    
-    freeSources(spec->sources);	spec->sources = NULL;
-    freePackages(spec);
-    closeSpec(spec);
-    
-    free(spec);
-}
-
-/*@only@*/ struct OpenFileInfo * newOpenFileInfo(void)
+/*@only@*/
+struct OpenFileInfo * newOpenFileInfo(void)
 {
     struct OpenFileInfo *ofi;
 
-    ofi = malloc(sizeof(struct OpenFileInfo));
-    ofi->file = NULL;
+    ofi = xmalloc(sizeof(*ofi));
+    ofi->fd = NULL;
     ofi->fileName = NULL;
     ofi->lineNum = 0;
+/*@-boundswrite@*/
     ofi->readBuf[0] = '\0';
+/*@=boundswrite@*/
     ofi->readPtr = NULL;
     ofi->next = NULL;
 
     return ofi;
+}
+
+/**
+ * Print copy of spec file, filling in Group/Description/Summary from specspo.
+ * @param spec		spec file control structure
+ */
+static void
+printNewSpecfile(Spec spec)
+	/*@globals fileSystem @*/
+	/*@modifies spec->sl->sl_lines[], fileSystem @*/
+{
+    Header h;
+    speclines sl = spec->sl;
+    spectags st = spec->st;
+    const char * msgstr = NULL;
+    int i, j;
+
+    if (sl == NULL || st == NULL)
+	return;
+
+    /*@-branchstate@*/
+    for (i = 0; i < st->st_ntags; i++) {
+	spectag t = st->st_t + i;
+	const char * tn = tagName(t->t_tag);
+	const char * errstr;
+	char fmt[1024];
+
+	fmt[0] = '\0';
+	if (t->t_msgid == NULL)
+	    h = spec->packages->header;
+	else {
+	    Package pkg;
+	    char *fe;
+
+/*@-bounds@*/
+	    strcpy(fmt, t->t_msgid);
+	    for (fe = fmt; *fe && *fe != '('; fe++)
+		{} ;
+	    if (*fe == '(') *fe = '\0';
+/*@=bounds@*/
+	    h = NULL;
+	    for (pkg = spec->packages; pkg != NULL; pkg = pkg->next) {
+		const char *pkgname;
+		h = pkg->header;
+		(void) headerNVR(h, &pkgname, NULL, NULL);
+		if (!strcmp(pkgname, fmt))
+		    /*@innerbreak@*/ break;
+	    }
+	    if (pkg == NULL || h == NULL)
+		h = spec->packages->header;
+	}
+
+	if (h == NULL)
+	    continue;
+
+	fmt[0] = '\0';
+/*@-boundswrite@*/
+	(void) stpcpy( stpcpy( stpcpy( fmt, "%{"), tn), "}");
+/*@=boundswrite@*/
+	msgstr = _free(msgstr);
+
+	/* XXX this should use queryHeader(), but prints out tn as well. */
+	msgstr = headerSprintf(h, fmt, rpmTagTable, rpmHeaderFormats, &errstr);
+	if (msgstr == NULL) {
+	    rpmError(RPMERR_QFMT, _("can't query %s: %s\n"), tn, errstr);
+	    return;
+	}
+
+/*@-boundswrite@*/
+	switch(t->t_tag) {
+	case RPMTAG_SUMMARY:
+	case RPMTAG_GROUP:
+	    /*@-unqualifiedtrans@*/
+	    sl->sl_lines[t->t_startx] = _free(sl->sl_lines[t->t_startx]);
+	    /*@=unqualifiedtrans@*/
+	    if (t->t_lang && strcmp(t->t_lang, RPMBUILD_DEFAULT_LANG))
+		continue;
+	    {   char *buf = xmalloc(strlen(tn) + sizeof(": ") + strlen(msgstr));
+		(void) stpcpy( stpcpy( stpcpy(buf, tn), ": "), msgstr);
+		sl->sl_lines[t->t_startx] = buf;
+	    }
+	    /*@switchbreak@*/ break;
+	case RPMTAG_DESCRIPTION:
+	    for (j = 1; j < t->t_nlines; j++) {
+		if (*sl->sl_lines[t->t_startx + j] == '%')
+		    /*@innercontinue@*/ continue;
+		/*@-unqualifiedtrans@*/
+		sl->sl_lines[t->t_startx + j] =
+			_free(sl->sl_lines[t->t_startx + j]);
+		/*@=unqualifiedtrans@*/
+	    }
+	    if (t->t_lang && strcmp(t->t_lang, RPMBUILD_DEFAULT_LANG)) {
+		sl->sl_lines[t->t_startx] = _free(sl->sl_lines[t->t_startx]);
+		continue;
+	    }
+	    sl->sl_lines[t->t_startx + 1] = xstrdup(msgstr);
+	    if (t->t_nlines > 2)
+		sl->sl_lines[t->t_startx + 2] = xstrdup("\n\n");
+	    /*@switchbreak@*/ break;
+	}
+/*@=boundswrite@*/
+    }
+    /*@=branchstate@*/
+    msgstr = _free(msgstr);
+
+/*@-boundsread@*/
+    for (i = 0; i < sl->sl_nlines; i++) {
+	const char * s = sl->sl_lines[i];
+	if (s == NULL)
+	    continue;
+	printf("%s", s);
+	if (strchr(s, '\n') == NULL && s[strlen(s)-1] != '\n')
+	    printf("\n");
+    }
+/*@=boundsread@*/
+}
+
+/**
+ * Parse a spec file, and query the resultant header.
+ * @param ts		rpm transaction
+ * @param qva		query args
+ * @param specName	specfile to parse
+ * @param target	cpu-vender-os platform for query (NULL is current)
+ * @return              0 on success
+ */
+static int _specQuery(rpmts ts, QVA_t qva, const char *specName,
+		/*@null@*/ const char *target) 
+	/*@globals rpmGlobalMacroContext, h_errno, fileSystem, internalState @*/
+	/*@modifies rpmGlobalMacroContext, fileSystem, internalState @*/
+{
+    Spec spec = NULL;
+    Package pkg;
+    int res = 1;	/* assume error */
+    int anyarch = (target == NULL) ? 1 : 0;
+    char * passPhrase = "";
+    int recursing = 0;
+    char *cookie = NULL;
+    int force = 1;
+    int verify = 0;
+    int xx;
+
+/*@-branchstate@*/
+    /*@-mods@*/ /* FIX: make spec abstract */
+    if (parseSpec(ts, specName, "/", recursing, passPhrase,
+		cookie, anyarch, force, verify)
+      || (spec = rpmtsSetSpec(ts, NULL)) == NULL)
+    {
+	rpmError(RPMERR_QUERY,
+	    _("query of specfile %s failed, can't parse\n"), 
+	    specName);
+	goto exit;
+    }
+    /*@=mods@*/
+/*@=branchstate@*/
+
+    res = 0;
+    if (specedit) {
+	printNewSpecfile(spec);
+	goto exit;
+    }
+
+    switch (qva->qva_source) {
+    case RPMQV_SPECSRPM:
+	xx = initSourceHeader(spec, NULL);
+	xx = qva->qva_showPackage(qva, ts, spec->sourceHeader);
+	break;
+    default:
+    case RPMQV_SPECFILE:
+	for (pkg = spec->packages; pkg != NULL; pkg = pkg->next) {
+	    /* If no target was specified, display all packages.
+	     * Packages with empty file lists are not produced.
+	     */
+	    /* XXX DIEDIEDIE: this logic looks flawed. */
+	    if (target == NULL || pkg->fileList != NULL) 
+		xx = qva->qva_showPackage(qva, ts, pkg->header);
+	}
+	break;
+    }
+
+exit:
+    spec = freeSpec(spec);
+    return res;
+}
+
+int rpmspecQuery(rpmts ts, QVA_t qva, const char * arg)
+{
+    int res = 1;
+    const char * targets = rpmcliTargets;
+    char *target;
+    const char * t;
+    const char * te;
+    const char * rcfile = rpmcliRcfile;
+    int nqueries = 0;
+
+    if (qva->qva_showPackage == NULL)
+	goto exit;
+
+    if (targets == NULL) {
+	res = _specQuery(ts, qva, arg, NULL); 
+	nqueries++;
+	goto exit;
+    }
+
+    rpmMessage(RPMMESS_DEBUG, 
+	D_("Query specfile for platform(s): %s\n"), targets);
+    for (t = targets; *t != '\0'; t = te) {
+	/* Parse out next target platform. */ 
+	if ((te = strchr(t, ',')) == NULL)
+	    te = t + strlen(t);
+	target = alloca(te-t+1);
+	strncpy(target, t, (te-t));
+	target[te-t] = '\0';
+	if (*te != '\0')
+	    te++;
+
+	/* Query spec for this target platform. */
+	rpmMessage(RPMMESS_DEBUG, D_("    target platform: %s\n"), target);
+	/* Read in configuration for target. */
+	if (t != targets) {
+	    rpmFreeMacros(NULL);
+	    rpmFreeRpmrc();
+	    (void) rpmReadConfigFiles(rcfile, target);
+	}
+	res = _specQuery(ts, qva, arg, target); 
+	nqueries++;
+	if (res) break;	
+    }
+    
+exit:
+    /* Restore original configuration. */
+    if (nqueries > 1) {
+	t = targets;
+	if ((te = strchr(t, ',')) == NULL)
+	    te = t + strlen(t);
+	target = alloca(te-t+1);
+	strncpy(target, t, (te-t));
+	target[te-t] = '\0';
+	if (*te != '\0')
+	    te++;
+	rpmFreeMacros(NULL);
+	rpmFreeRpmrc();
+	(void) rpmReadConfigFiles(rcfile, target);
+    }
+    return res;
 }

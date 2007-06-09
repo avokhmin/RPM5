@@ -1,79 +1,179 @@
+/** \ingroup rpmcli
+ * Parse spec file and build package.
+ */
+
 #include "system.h"
 
-#include "build/rpmbuild.h"
-#include "popt/popt.h"
+#include <rpmcli.h>
+#include <rpmbuild.h>
+
+#include "rpmps.h"
+#include "rpmte.h"
+#include "rpmts.h"
+
 #include "build.h"
+#include "debug.h"
 
-#ifdef DYING
-int buildForTarget(char *arg, int buildAmount, char *passPhrase,
-	          char *buildRoot, int fromTarball, int test, char *cookie,
-		  force);
-#endif
+/*@access rpmts @*/	/* XXX compared with NULL @*/
+/*@access rpmdb @*/		/* XXX compared with NULL @*/
+/*@access FD_t @*/		/* XXX compared with NULL @*/
 
-static int buildForTarget(const char *arg, int buildAmount, const char *passPhrase,
-	          const char *buildRoot, int fromTarball, int test, char *cookie,
-		  int force)
+/**
+ */
+static int checkSpec(rpmts ts, Header h)
+	/*@globals rpmGlobalMacroContext, h_errno, fileSystem, internalState @*/
+	/*@modifies ts, h, rpmGlobalMacroContext, fileSystem, internalState @*/
 {
+    rpmps ps;
+    int rc;
 
-    FILE *f;
-    const char * specfile;
-    int res = 0;
-    struct stat statbuf;
-    char * s;
-    int count, fd;
+    if (!headerIsEntry(h, RPMTAG_REQUIRENAME)
+     && !headerIsEntry(h, RPMTAG_CONFLICTNAME))
+	return 0;
+
+    rc = rpmtsAddInstallElement(ts, h, NULL, 0, NULL);
+
+    rc = rpmtsCheck(ts);
+
+    ps = rpmtsProblems(ts);
+    if (rc == 0 && rpmpsNumProblems(ps) > 0) {
+	rpmMessage(RPMMESS_ERROR, _("Failed build dependencies:\n"));
+	rpmpsPrint(NULL, ps);
+	rc = 1;
+    }
+    ps = rpmpsFree(ps);
+
+    /* XXX nuke the added package. */
+    rpmtsClean(ts);
+
+    return rc;
+}
+
+/*
+ * Kurwa, durni ameryka?ce sobe zawsze my?l?, ?e ca?y ?wiat mówi po
+ * angielsku...
+ */
+/* XXX this is still a dumb test but at least it's i18n aware */
+/**
+ */
+static int isSpecFile(const char * specfile)
+	/*@globals h_errno, fileSystem, internalState @*/
+	/*@modifies fileSystem, internalState @*/
+{
+    char buf[256];
+    const char * s;
+    FD_t fd;
+    int count;
+    int checking;
+
+    fd = Fopen(specfile, "r");
+    if (fd == NULL || Ferror(fd)) {
+	rpmError(RPMERR_OPEN, _("Unable to open spec file %s: %s\n"),
+		specfile, Fstrerror(fd));
+	return 0;
+    }
+    count = Fread(buf, sizeof(buf[0]), sizeof(buf), fd);
+    (void) Fclose(fd);
+
+    checking = 1;
+    for (s = buf; count--; s++) {
+	switch (*s) {
+	case '\r':
+	case '\n':
+	    checking = 1;
+	    /*@switchbreak@*/ break;
+	case ':':
+	    checking = 0;
+	    /*@switchbreak@*/ break;
+/*@-boundsread@*/
+	default:
+	    if (checking && !(isprint(*s) || isspace(*s))) return 0;
+	    /*@switchbreak@*/ break;
+/*@=boundsread@*/
+	}
+    }
+    return 1;
+}
+
+/**
+ */
+/*@-boundswrite@*/
+static int buildForTarget(rpmts ts, const char * arg, BTA_t ba)
+	/*@globals rpmGlobalMacroContext, h_errno, fileSystem, internalState @*/
+	/*@modifies ts, rpmGlobalMacroContext, fileSystem, internalState @*/
+{
+    const char * passPhrase = ba->passPhrase;
+    const char * cookie = ba->cookie;
+    int buildAmount = ba->buildAmount;
+    const char * specFile;
+    const char * specURL;
+    int specut;
     char buf[BUFSIZ];
     Spec spec = NULL;
+    int verify = 1;
+    int xx;
+    int rc;
 
+#ifndef	DYING
     rpmSetTables(RPM_MACHTABLE_BUILDARCH, RPM_MACHTABLE_BUILDOS);
+#endif
 
-    if (fromTarball) {
-	const char *specDir;
-	const char * tmpSpecFile;
-	char * cmd, *s;
+    /*@-compmempass@*/ /* FIX: static zcmds heartburn */
+    if (ba->buildMode == 't') {
+	FILE *fp;
+	const char * specDir;
+	char * tmpSpecFile;
+	char * cmd, * s;
+	rpmCompressedMagic res = COMPRESSED_OTHER;
+	/*@observer@*/ static const char *zcmds[] =
+		{ "cat", "gunzip", "bunzip2", "cat" };
 
 	specDir = rpmGetPath("%{_specdir}", NULL);
 
-	{   char tfn[64];
-	    strcpy(tfn, "rpm-spec.XXXXXX");
-	    tmpSpecFile = rpmGetPath("%{_specdir}", mktemp(tfn), NULL);
-	}
+	tmpSpecFile = (char *) rpmGetPath("%{_specdir}/", "rpm-spec.XXXXXX", NULL);
+#if defined(HAVE_MKSTEMP)
+	(void) close(mkstemp(tmpSpecFile));
+#else
+	(void) mktemp(tmpSpecFile);
+#endif
+
+	(void) isCompressed(arg, &res);
 
 	cmd = alloca(strlen(arg) + 50 + strlen(tmpSpecFile));
-	sprintf(cmd, "gunzip < %s | tar xOvf - Specfile 2>&1 > %s",
-			arg, tmpSpecFile);
-	if (!(f = popen(cmd, "r"))) {
-	    fprintf(stderr, _("Failed to open tar pipe: %s\n"), 
-			strerror(errno));
-	    xfree(specDir);
-	    xfree(tmpSpecFile);
+	sprintf(cmd, "%s < %s | tar xOvf - Specfile 2>&1 > %s",
+			zcmds[res & 0x3], arg, tmpSpecFile);
+	if (!(fp = popen(cmd, "r"))) {
+	    rpmError(RPMERR_POPEN, _("Failed to open tar pipe: %m\n"));
+	    specDir = _free(specDir);
+	    tmpSpecFile = _free(tmpSpecFile);
 	    return 1;
 	}
-	if ((!fgets(buf, sizeof(buf) - 1, f)) || !strchr(buf, '/')) {
+	if ((!fgets(buf, sizeof(buf) - 1, fp)) || !strchr(buf, '/')) {
 	    /* Try again */
-	    pclose(f);
+	    (void) pclose(fp);
 
-	    sprintf(cmd, "gunzip < %s | tar xOvf - \\*.spec 2>&1 > %s", arg,
-		    tmpSpecFile);
-	    if (!(f = popen(cmd, "r"))) {
-		fprintf(stderr, _("Failed to open tar pipe: %s\n"), 
-			strerror(errno));
-		xfree(specDir);
-		xfree(tmpSpecFile);
+	    sprintf(cmd, "%s < %s | tar xOvf - \\*.spec 2>&1 > %s",
+		    zcmds[res & 0x3], arg, tmpSpecFile);
+	    if (!(fp = popen(cmd, "r"))) {
+		rpmError(RPMERR_POPEN, _("Failed to open tar pipe: %m\n"));
+		specDir = _free(specDir);
+		tmpSpecFile = _free(tmpSpecFile);
 		return 1;
 	    }
-	    if (!fgets(buf, sizeof(buf) - 1, f)) {
+	    if (!fgets(buf, sizeof(buf) - 1, fp)) {
 		/* Give up */
-		fprintf(stderr, _("Failed to read spec file from %s\n"), arg);
-		unlink(tmpSpecFile);
-		xfree(specDir);
-		xfree(tmpSpecFile);
+		rpmError(RPMERR_READ, _("Failed to read spec file from %s\n"),
+			arg);
+		(void) unlink(tmpSpecFile);
+		specDir = _free(specDir);
+		tmpSpecFile = _free(tmpSpecFile);
 	    	return 1;
 	    }
 	}
-	pclose(f);
+	(void) pclose(fp);
 
 	cmd = s = buf;
-	while (*cmd) {
+	while (*cmd != '\0') {
 	    if (*cmd == '/') s = cmd + 1;
 	    cmd++;
 	}
@@ -84,23 +184,25 @@ static int buildForTarget(const char *arg, int buildAmount, const char *passPhra
 	s = cmd + strlen(cmd) - 1;
 	*s = '\0';
 
-	s = alloca(strlen(specDir) + strlen(cmd) + 5);
+	specURL = s = alloca(strlen(specDir) + strlen(cmd) + 5);
 	sprintf(s, "%s/%s", specDir, cmd);
+	res = rename(tmpSpecFile, s);
+	specDir = _free(specDir);
 	
-	if (rename(tmpSpecFile, s)) {
-	    fprintf(stderr, _("Failed to rename %s to %s: %s\n"),
-		    tmpSpecFile, s, strerror(errno));
-	    unlink(tmpSpecFile);
-	    xfree(specDir);
-	    xfree(tmpSpecFile);
+	if (res) {
+	    rpmError(RPMERR_RENAME, _("Failed to rename %s to %s: %m\n"),
+			tmpSpecFile, s);
+	    (void) unlink(tmpSpecFile);
+	    tmpSpecFile = _free(tmpSpecFile);
 	    return 1;
 	}
+	tmpSpecFile = _free(tmpSpecFile);
 
 	/* Make the directory which contains the tarball the source 
 	   directory for this run */
 
 	if (*arg != '/') {
-	    (void)getcwd(buf, BUFSIZ);
+	    if (getcwd(buf, BUFSIZ) == NULL) strcpy(buf, ".");
 	    strcat(buf, "/");
 	    strcat(buf, arg);
 	} else 
@@ -110,171 +212,156 @@ static int buildForTarget(const char *arg, int buildAmount, const char *passPhra
 	while (*cmd != '/') cmd--;
 	*cmd = '\0';
 
-	addMacro(&globalMacroContext, "_sourcedir", NULL, buf, RMIL_TARBALL);
-	xfree(specDir);
-	xfree(tmpSpecFile);
-	specfile = s;
-    } else if (arg[0] == '/') {
-	specfile = arg;
+	addMacro(NULL, "_sourcedir", NULL, buf, RMIL_TARBALL);
     } else {
+	specURL = arg;
+    }
+    /*@=compmempass@*/
+
+    specut = urlPath(specURL, &specFile);
+    if (*specFile != '/') {
 	char *s = alloca(BUFSIZ);
-	(void)getcwd(s, BUFSIZ);
+	if (getcwd(s, BUFSIZ) == NULL) strcpy(s, ".");
 	strcat(s, "/");
 	strcat(s, arg);
-	specfile = s;
+	specURL = s;
     }
 
-    stat(specfile, &statbuf);
-    if (! S_ISREG(statbuf.st_mode)) {
-	fprintf(stderr, _("File is not a regular file: %s\n"), specfile);
-	return 1;
+    if (specut != URL_IS_DASH) {
+	struct stat st;
+	if (Stat(specURL, &st) < 0) {
+	    rpmError(RPMERR_STAT, _("failed to stat %s: %m\n"), specURL);
+	    rc = 1;
+	    goto exit;
+	}
+	if (! S_ISREG(st.st_mode)) {
+	    rpmError(RPMERR_NOTREG, _("File %s is not a regular file.\n"),
+		specURL);
+	    rc = 1;
+	    goto exit;
+	}
+
+	/* Try to verify that the file is actually a specfile */
+	if (!isSpecFile(specURL)) {
+	    rpmError(RPMERR_BADSPEC,
+		_("File %s does not appear to be a specfile.\n"), specURL);
+	    rc = 1;
+	    goto exit;
+	}
     }
     
-    if ((fd = open(specfile, O_RDONLY)) < 0) {
-	fprintf(stderr, _("Unable to open spec file: %s\n"), specfile);
-	return 1;
-    }
-    count = read(fd, buf, sizeof(buf) < 128 ? sizeof(buf) : 128);
-    close(fd);
-    s = buf;
-    while(count--) {
-	if (! (isprint(*s) || isspace(*s))) {
-	    fprintf(stderr, _("File contains non-printable characters(%c): %s\n"), *s,
-		    specfile);
-	    return 1;
-	}
-	s++;
-    }
-
+    /* Parse the spec file */
 #define	_anyarch(_f)	\
 (((_f)&(RPMBUILD_PREP|RPMBUILD_BUILD|RPMBUILD_INSTALL|RPMBUILD_PACKAGEBINARY)) == 0)
-    if (parseSpec(&spec, specfile, buildRoot, 0, passPhrase, cookie,
-	_anyarch(buildAmount), force)) {
-	    return 1;
+    if (parseSpec(ts, specURL, ba->rootdir, 0, passPhrase,
+		cookie, _anyarch(buildAmount), ba->force, verify))
+    {
+	rc = 1;
+	goto exit;
     }
 #undef	_anyarch
+    if ((spec = rpmtsSetSpec(ts, NULL)) == NULL) {
+	rc = 1;
+	goto exit;
+    }
 
-    if (buildSpec(spec, buildAmount, test)) {
-	freeSpec(spec);
-	return 1;
+    /* Assemble source header from parsed components */
+    xx = initSourceHeader(spec, NULL);
+
+    /* Check build prerequisites */
+    if (!ba->noDeps && checkSpec(ts, spec->sourceHeader)) {
+	rc = 1;
+	goto exit;
+    }
+
+    if (buildSpec(ts, spec, buildAmount, ba->noBuild)) {
+	rc = 1;
+	goto exit;
     }
     
-    if (fromTarball) unlink(specfile);
+    if (ba->buildMode == 't')
+	(void) Unlink(specURL);
+    rc = 0;
 
-    freeSpec(spec);
-    
-    return res;
+exit:
+    spec = freeSpec(spec);
+    return rc;
 }
+/*@=boundswrite@*/
 
-int build(const char *arg, int buildAmount, const char *passPhrase,
-	  const char *buildRoot, int fromTarball, int test, char *cookie,
-          const char * rcfile, char *targets, int force)
+int build(rpmts ts, const char * arg, BTA_t ba, const char * rcfile)
 {
-    char *target, *t;
-    int rc;
+    const char *t, *te;
+    int rc = 0;
+    const char * targets = rpmcliTargets;
+    char *target;
+#define	buildCleanMask	(RPMBUILD_RMSOURCE|RPMBUILD_RMSPEC)
+    int cleanFlags = ba->buildAmount & buildCleanMask;
+    rpmVSFlags vsflags, ovsflags;
+    int nbuilds = 0;
+
+    vsflags = rpmExpandNumeric("%{_vsflags_build}");
+    if (ba->qva_flags & VERIFY_DIGEST)
+	vsflags |= _RPMVSF_NODIGESTS;
+    if (ba->qva_flags & VERIFY_SIGNATURE)
+	vsflags |= _RPMVSF_NOSIGNATURES;
+    if (ba->qva_flags & VERIFY_HDRCHK)
+	vsflags |= RPMVSF_NOHDRCHK;
+    ovsflags = rpmtsSetVSFlags(ts, vsflags);
 
     if (targets == NULL) {
-	rc =  buildForTarget(arg, buildAmount, passPhrase, buildRoot,
-		fromTarball, test, cookie, force);
-	return rc;
+	rc =  buildForTarget(ts, arg, ba);
+	nbuilds++;
+	goto exit;
     }
 
     /* parse up the build operators */
 
-    printf("Building target platforms: %s\n", targets);
+    printf(_("Building target platforms: %s\n"), targets);
 
-    t = targets;
-    while((target = strtok(t, ",")) != NULL) {
-	t = NULL;
-	printf("Building for target %s\n", target);
+    ba->buildAmount &= ~buildCleanMask;
+    for (t = targets; *t != '\0'; t = te) {
+	/* Parse out next target platform. */ 
+	if ((te = strchr(t, ',')) == NULL)
+	    te = t + strlen(t);
+	target = alloca(te-t+1);
+	strncpy(target, t, (te-t));
+	target[te-t] = '\0';
+	if (*te != '\0')
+	    te++;
+	else	/* XXX Perform clean-up after last target build. */
+	    ba->buildAmount |= cleanFlags;
 
-	rpmReadConfigFiles(rcfile, target);
-	rc = buildForTarget(arg, buildAmount, passPhrase, buildRoot,
-	    fromTarball, test, cookie, force);
+	rpmMessage(RPMMESS_DEBUG, D_("    target platform: %s\n"), target);
+
+	/* Read in configuration for target. */
+	if (t != targets) {
+	    rpmFreeMacros(NULL);
+	    rpmFreeRpmrc();
+	    (void) rpmReadConfigFiles(rcfile, target);
+	}
+	rc = buildForTarget(ts, arg, ba);
+	nbuilds++;
 	if (rc)
-	    return rc;
+	    break;
     }
 
-    return 0;
-}
-
-#define	POPT_USECATALOG		1000
-#define	POPT_NOLANG		1001
-#define	POPT_RMSOURCE		1002
-#define	POPT_RMBUILD		1003
-#define	POPT_BUILDROOT		1004
-#define	POPT_BUILDARCH		1005
-#define	POPT_BUILDOS		1006
-#define	POPT_TARGETPLATFORM	1007
-#define	POPT_NOBUILD		1008
-#define	POPT_SHORTCIRCUIT	1009
-
-extern int noLang;
-static int noBuild = 0;
-static int useCatalog = 0;
-
-static void buildArgCallback(poptContext con, enum poptCallbackReason reason,
-                             const struct poptOption * opt, const char * arg,
-                             struct rpmBuildArguments * data)
-{
-    switch (opt->val) {
-    case POPT_USECATALOG: data->useCatalog = 1; break;
-    case POPT_NOBUILD: data->noBuild = 1; break;
-    case POPT_NOLANG: data->noLang = 1; break;
-    case POPT_SHORTCIRCUIT: data->shortCircuit = 1; break;
-    case POPT_RMSOURCE: data->buildAmount |= RPMBUILD_RMSOURCE; break;
-    case POPT_RMBUILD: data->buildAmount |= RPMBUILD_RMBUILD; break;
-    case POPT_BUILDROOT:
-	if (data->buildRootOverride) {
-	    fprintf(stderr, _("buildroot already specified"));
-	    exit(EXIT_FAILURE);
-	}
-	data->buildRootOverride = strdup(arg);
-	break;
-    case POPT_BUILDARCH:
-	fprintf(stderr, _("--buildarch has been obsoleted.  Use the --target option instead.\n")); 
-	exit(EXIT_FAILURE);
-	break;
-    case POPT_BUILDOS:
-	fprintf(stderr, _("--buildos has been obsoleted.  Use the --target option instead.\n")); 
-	exit(EXIT_FAILURE);
-	break;
-    case POPT_TARGETPLATFORM:
-	if (data->targets) {
-	    int len = strlen(data->targets) + strlen(arg) + 2;
-	    data->targets = realloc(data->targets, len);
-	    strcat(data->targets, ",");
-	} else {
-	    data->targets = malloc(strlen(arg) + 1);
-	    data->targets[0] = '\0';
-	}
-	strcat(data->targets, arg);
-	break;
+exit:
+    /* Restore original configuration. */
+    if (nbuilds > 1) {
+	t = targets;
+	if ((te = strchr(t, ',')) == NULL)
+	    te = t + strlen(t);
+	target = alloca(te-t+1);
+	strncpy(target, t, (te-t));
+	target[te-t] = '\0';
+	if (*te != '\0')
+	    te++;
+	rpmFreeMacros(NULL);
+	rpmFreeRpmrc();
+	(void) rpmReadConfigFiles(rcfile, target);
     }
-}
+    vsflags = rpmtsSetVSFlags(ts, ovsflags);
 
-struct poptOption rpmBuildPoptTable[] = {
-	{ NULL, '\0', POPT_ARG_CALLBACK | POPT_CBFLAG_INC_DATA,
-		buildArgCallback, 0, NULL, NULL },
-	{ "buildarch", '\0', POPT_ARG_STRING, 0,  POPT_BUILDARCH,
-		N_("override build architecture"), "ARCH" },
-	{ "buildos", '\0', POPT_ARG_STRING, 0,  POPT_BUILDOS,
-		N_("override build operating system"), "OS" },
-	{ "buildroot", '\0', POPT_ARG_STRING, 0,  POPT_BUILDROOT,
-		N_("override build root"), "DIRECTORY" },
-	{ "clean", '\0', 0, 0, POPT_RMBUILD,
-		N_("remove build tree when done"), NULL},
-	{ "nobuild", '\0', 0, &noBuild,  POPT_NOBUILD,
-		N_("do not execute any stages of the build"), NULL },
-	{ "nolang", '\0', 0, &noLang, POPT_NOLANG,
-		N_("do not accept I18N msgstr's from specfile"), NULL},
-	{ "rmsource", '\0', 0, 0, POPT_RMSOURCE,
-		N_("remove sources and specfile when done"), NULL},
-	{ "short-circuit", '\0', 0, 0,  POPT_SHORTCIRCUIT,
-		N_("skip straight to specified stage (only for c,i)"), NULL },
-	{ "target", '\0', POPT_ARG_STRING, 0,  POPT_TARGETPLATFORM,
-		N_("override target platform"), "CPU-VENDOR-OS" },
-	{ "usecatalog", '\0', 0, &useCatalog, POPT_USECATALOG,
-		N_("lookup I18N strings in specfile catalog"), NULL},
-	{ 0, 0, 0, 0, 0,	NULL, NULL }
-};
+    return rc;
+}
