@@ -1,314 +1,1084 @@
+/** \ingroup header
+ * \file lib/package.c
+ */
+
 #include "system.h"
 
 #include <netinet/in.h>
 
-#include "rpmlib.h"
+#include <rpmio_internal.h>
+#include <rpmlib.h>
 
-#include "misc.h"
-#include "oldheader.h"
+#include "rpmts.h"
+
+#include "misc.h"	/* XXX stripTrailingChar() */
 #include "rpmlead.h"
+
+#include "header_internal.h"	/* XXX headerCheck */
 #include "signature.h"
+#include "debug.h"
 
-/* 0 = success */
-/* !0 = error */
-static int readOldHeader(FD_t fd, Header * hdr, int * isSource);
+#define	alloca_strdup(_s)	strcpy(alloca(strlen(_s)+1), (_s))
 
-/* 0 = success */
-/* 1 = bad magic */
-/* 2 = error */
-static int readPackageHeaders(FD_t fd, struct rpmlead * leadPtr, 
-			      Header * sigs, Header * hdrPtr) {
-    Header hdrBlock;
-    struct rpmlead leadBlock;
-    Header * hdr;
-    struct rpmlead * lead;
-    struct oldrpmlead * oldLead;
-    int_8 arch;
-    int isSource;
-    char * defaultPrefix;
-    struct stat sb;
-    int_32 true = 1;
+/*@access pgpDig @*/
+/*@access pgpDigParams @*/
+/*@access Header @*/		/* XXX compared with NULL */
+/*@access entryInfo @*/		/* XXX headerCheck */
+/*@access indexEntry @*/	/* XXX headerCheck */
+/*@access FD_t @*/		/* XXX stealing digests */
 
-    hdr = hdrPtr ? hdrPtr : &hdrBlock;
-    lead = leadPtr ? leadPtr : &leadBlock;
+/*@unchecked@*/
+static int _print_pkts = 0;
 
-    oldLead = (struct oldrpmlead *) lead;
+/*@unchecked@*/
+static unsigned int nkeyids_max = 256;
+/*@unchecked@*/
+static unsigned int nkeyids = 0;
+/*@unchecked@*/
+static unsigned int nextkeyid  = 0;
+/*@unchecked@*/ /*@only@*/ /*@null@*/
+static unsigned int * keyids;
 
-    fstat(fdFileno(fd), &sb);
-    /* if fd points to a socket, pipe, etc, sb.st_size is *always* zero */
-    if (S_ISREG(sb.st_mode) && sb.st_size < sizeof(*lead)) return 1;
+/*@unchecked@*/
+static unsigned char header_magic[8] = {
+        0x8e, 0xad, 0xe8, 0x01, 0x00, 0x00, 0x00, 0x00
+};
 
-    if (readLead(fd, lead)) {
-	return 2;
+/**
+ * Alignment needs (and sizeof scalars types) for internal rpm data types.
+ */
+/*@observer@*/ /*@unchecked@*/
+static int typeAlign[16] =  {
+    1,	/*!< RPM_NULL_TYPE */
+    1,	/*!< RPM_CHAR_TYPE */
+    1,	/*!< RPM_INT8_TYPE */
+    2,	/*!< RPM_INT16_TYPE */
+    4,	/*!< RPM_INT32_TYPE */
+    8,	/*!< RPM_INT64_TYPE */
+    1,	/*!< RPM_STRING_TYPE */
+    1,	/*!< RPM_BIN_TYPE */
+    1,	/*!< RPM_STRING_ARRAY_TYPE */
+    1,	/*!< RPM_I18NSTRING_TYPE */
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+};
+
+/**
+ * Sanity check on no. of tags.
+ * This check imposes a limit of 65K tags, more than enough.
+ */
+#define hdrchkTags(_ntags)      ((_ntags) & 0xffff0000)
+
+/**
+ * Sanity check on type values.
+ */
+#define hdrchkType(_type) ((_type) < RPM_MIN_TYPE || (_type) > RPM_MAX_TYPE)
+
+/**
+ * Sanity check on data size and/or offset and/or count.
+ * This check imposes a limit of 16 MB, more than enough.
+ */
+#define hdrchkData(_nbytes) ((_nbytes) & 0xff000000)
+
+/**
+ * Sanity check on data alignment for data type.
+ */
+#define hdrchkAlign(_type, _off)	((_off) & (typeAlign[_type]-1))
+
+/**
+ * Sanity check on range of data offset.
+ */
+#define hdrchkRange(_dl, _off)		((_off) < 0 || (_off) > (_dl))
+
+void headerMergeLegacySigs(Header h, const Header sigh)
+{
+    HFD_t hfd = (HFD_t) headerFreeData;
+    HAE_t hae = (HAE_t) headerAddEntry;
+    HeaderIterator hi;
+    int_32 tag, type, count;
+    const void * ptr;
+    int xx;
+
+    for (hi = headerInitIterator(sigh);
+        headerNextIterator(hi, &tag, &type, &ptr, &count);
+        ptr = hfd(ptr, type))
+    {
+	switch (tag) {
+	/* XXX Translate legacy signature tag values. */
+	case RPMSIGTAG_SIZE:
+	    tag = RPMTAG_SIGSIZE;
+	    /*@switchbreak@*/ break;
+	case RPMSIGTAG_LEMD5_1:
+	    tag = RPMTAG_SIGLEMD5_1;
+	    /*@switchbreak@*/ break;
+	case RPMSIGTAG_PGP:
+	    tag = RPMTAG_SIGPGP;
+	    /*@switchbreak@*/ break;
+	case RPMSIGTAG_LEMD5_2:
+	    tag = RPMTAG_SIGLEMD5_2;
+	    /*@switchbreak@*/ break;
+	case RPMSIGTAG_MD5:
+	    tag = RPMTAG_SIGMD5;
+	    /*@switchbreak@*/ break;
+	case RPMSIGTAG_GPG:
+	    tag = RPMTAG_SIGGPG;
+	    /*@switchbreak@*/ break;
+	case RPMSIGTAG_PGP5:
+	    tag = RPMTAG_SIGPGP5;
+	    /*@switchbreak@*/ break;
+	case RPMSIGTAG_PAYLOADSIZE:
+	    tag = RPMTAG_ARCHIVESIZE;
+	    /*@switchbreak@*/ break;
+	case RPMSIGTAG_SHA1:
+	case RPMSIGTAG_DSA:
+	case RPMSIGTAG_RSA:
+	default:
+	    if (!(tag >= HEADER_SIGBASE && tag < HEADER_TAGBASE))
+		continue;
+	    /*@switchbreak@*/ break;
+	}
+	if (ptr == NULL) continue;	/* XXX can't happen */
+	if (!headerIsEntry(h, tag)) {
+	    if (hdrchkType(type))
+		continue;
+	    if (count < 0 || hdrchkData(count))
+		continue;
+	    switch(type) {
+	    case RPM_NULL_TYPE:
+		continue;
+		/*@notreached@*/ /*@switchbreak@*/ break;
+	    case RPM_CHAR_TYPE:
+	    case RPM_INT8_TYPE:
+	    case RPM_INT16_TYPE:
+	    case RPM_INT32_TYPE:
+		if (count != 1)
+		    continue;
+		/*@switchbreak@*/ break;
+	    case RPM_STRING_TYPE:
+	    case RPM_BIN_TYPE:
+		if (count >= 16*1024)
+		    continue;
+		/*@switchbreak@*/ break;
+	    case RPM_STRING_ARRAY_TYPE:
+	    case RPM_I18NSTRING_TYPE:
+		continue;
+		/*@notreached@*/ /*@switchbreak@*/ break;
+	    }
+ 	    xx = hae(h, tag, type, ptr, count);
+	}
+    }
+    hi = headerFreeIterator(hi);
+}
+
+Header headerRegenSigHeader(const Header h, int noArchiveSize)
+{
+    HFD_t hfd = (HFD_t) headerFreeData;
+    Header sigh = rpmNewSignature();
+    HeaderIterator hi;
+    int_32 tag, stag, type, count;
+    const void * ptr;
+    int xx;
+
+    for (hi = headerInitIterator(h);
+        headerNextIterator(hi, &tag, &type, &ptr, &count);
+        ptr = hfd(ptr, type))
+    {
+	switch (tag) {
+	/* XXX Translate legacy signature tag values. */
+	case RPMTAG_SIGSIZE:
+	    stag = RPMSIGTAG_SIZE;
+	    /*@switchbreak@*/ break;
+	case RPMTAG_SIGLEMD5_1:
+	    stag = RPMSIGTAG_LEMD5_1;
+	    /*@switchbreak@*/ break;
+	case RPMTAG_SIGPGP:
+	    stag = RPMSIGTAG_PGP;
+	    /*@switchbreak@*/ break;
+	case RPMTAG_SIGLEMD5_2:
+	    stag = RPMSIGTAG_LEMD5_2;
+	    /*@switchbreak@*/ break;
+	case RPMTAG_SIGMD5:
+	    stag = RPMSIGTAG_MD5;
+	    /*@switchbreak@*/ break;
+	case RPMTAG_SIGGPG:
+	    stag = RPMSIGTAG_GPG;
+	    /*@switchbreak@*/ break;
+	case RPMTAG_SIGPGP5:
+	    stag = RPMSIGTAG_PGP5;
+	    /*@switchbreak@*/ break;
+	case RPMTAG_ARCHIVESIZE:
+	    /* XXX rpm-4.1 and later has archive size in signature header. */
+	    if (noArchiveSize)
+		continue;
+	    stag = RPMSIGTAG_PAYLOADSIZE;
+	    /*@switchbreak@*/ break;
+	case RPMTAG_SHA1HEADER:
+	case RPMTAG_DSAHEADER:
+	case RPMTAG_RSAHEADER:
+	default:
+	    if (!(tag >= HEADER_SIGBASE && tag < HEADER_TAGBASE))
+		continue;
+	    stag = tag;
+	    /*@switchbreak@*/ break;
+	}
+	if (ptr == NULL) continue;	/* XXX can't happen */
+	if (!headerIsEntry(sigh, stag))
+	    xx = headerAddEntry(sigh, stag, type, ptr, count);
+    }
+    hi = headerFreeIterator(hi);
+    return sigh;
+}
+
+/**
+ * Remember current key id.
+ * @param ts		transaction set
+ * @return		0 if new keyid, otherwise 1
+ */
+static int rpmtsStashKeyid(rpmts ts)
+	/*@globals nextkeyid, nkeyids, keyids @*/
+	/*@modifies nextkeyid, nkeyids, keyids @*/
+{
+    const void * sig = rpmtsSig(ts);
+    pgpDig dig = rpmtsDig(ts);
+    pgpDigParams sigp = rpmtsSignature(ts);
+    unsigned int keyid;
+    int i;
+
+    if (sig == NULL || dig == NULL || sigp == NULL)
+	return 0;
+
+    keyid = pgpGrab(sigp->signid+4, 4);
+    if (keyid == 0)
+	return 0;
+
+    if (keyids != NULL)
+    for (i = 0; i < nkeyids; i++) {
+/*@-boundsread@*/
+	if (keyid == keyids[i])
+	    return 1;
+/*@=boundsread@*/
     }
 
-    if (lead->magic[0] != RPMLEAD_MAGIC0 || lead->magic[1] != RPMLEAD_MAGIC1 ||
-	lead->magic[2] != RPMLEAD_MAGIC2 || lead->magic[3] != RPMLEAD_MAGIC3) {
-	return 1;
+    if (nkeyids < nkeyids_max) {
+	nkeyids++;
+	keyids = xrealloc(keyids, nkeyids * sizeof(*keyids));
+    }
+/*@-boundswrite@*/
+    if (keyids)		/* XXX can't happen */
+	keyids[nextkeyid] = keyid;
+/*@=boundswrite@*/
+    nextkeyid++;
+    nextkeyid %= nkeyids_max;
+
+    return 0;
+}
+
+int headerVerifyInfo(int il, int dl, const void * pev, void * iv, int negate)
+{
+/*@-castexpose@*/
+    entryInfo pe = (entryInfo) pev;
+/*@=castexpose@*/
+    entryInfo info = iv;
+    int i;
+
+/*@-boundsread@*/
+    for (i = 0; i < il; i++) {
+	info->tag = ntohl(pe[i].tag);
+	info->type = ntohl(pe[i].type);
+	info->offset = ntohl(pe[i].offset);
+	if (negate)
+	    info->offset = -info->offset;
+	info->count = ntohl(pe[i].count);
+
+	if (hdrchkType(info->type))
+	    return i;
+	if (hdrchkAlign(info->type, info->offset))
+	    return i;
+	if (!negate && hdrchkRange(dl, info->offset))
+	    return i;
+	if (hdrchkData(info->count))
+	    return i;
+
+    }
+/*@=boundsread@*/
+    return -1;
+}
+
+/**
+ * Check header consistency, performing headerGetEntry() the hard way.
+ *
+ * Sanity checks on the header are performed while looking for a
+ * header-only digest or signature to verify the blob. If found,
+ * the digest or signature is verified.
+ *
+ * @param ts		transaction set
+ * @param uh		unloaded header blob
+ * @param uc		no. of bytes in blob (or 0 to disable)
+ * @retval *msg		signature verification msg
+ * @return		RPMRC_OK/RPMRC_NOTFOUND/RPMRC_FAIL
+ */
+rpmRC headerCheck(rpmts ts, const void * uh, size_t uc, const char ** msg)
+{
+    pgpDig dig;
+    unsigned char buf[8*BUFSIZ];
+    int_32 * ei = (int_32 *) uh;
+/*@-boundsread@*/
+    int_32 il = ntohl(ei[0]);
+    int_32 dl = ntohl(ei[1]);
+/*@-castexpose@*/
+    entryInfo pe = (entryInfo) &ei[2];
+/*@=castexpose@*/
+/*@=boundsread@*/
+    int_32 ildl[2];
+    int_32 pvlen = sizeof(ildl) + (il * sizeof(*pe)) + dl;
+    unsigned char * dataStart = (unsigned char *) (pe + il);
+    indexEntry entry = memset(alloca(sizeof(*entry)), 0, sizeof(*entry));
+    entryInfo info = memset(alloca(sizeof(*info)), 0, sizeof(*info));
+    const void * sig = NULL;
+    const char * b;
+    rpmVSFlags vsflags = rpmtsVSFlags(ts);
+    int siglen = 0;
+    int blen;
+    size_t nb;
+    int_32 ril = 0;
+    unsigned char * regionEnd = NULL;
+    rpmRC rc = RPMRC_FAIL;	/* assume failure */
+    int xx;
+    int i;
+    static int hclvl;
+
+    hclvl++;
+/*@-boundswrite@*/
+    buf[0] = '\0';
+/*@=boundswrite@*/
+
+    /* Is the blob the right size? */
+    if (uc > 0 && pvlen != uc) {
+	(void) snprintf(buf, sizeof(buf),
+		_("blob size(%d): BAD, 8 + 16 * il(%d) + dl(%d)\n"),
+		(int)uc, (int)il, (int)dl);
+	goto exit;
     }
 
-    if (lead->major == 1) {
-	rpmMessage(RPMMESS_DEBUG, _("package is a version one package!\n"));
+    /* Check (and convert) the 1st tag element. */
+    xx = headerVerifyInfo(1, dl, pe, &entry->info, 0);
+    if (xx != -1) {
+	(void) snprintf(buf, sizeof(buf),
+		_("tag[%d]: BAD, tag %d type %d offset %d count %d\n"),
+		0, entry->info.tag, entry->info.type,
+		entry->info.offset, entry->info.count);
+	goto exit;
+    }
 
-	if (lead->type == RPMLEAD_SOURCE) {
-	    rpmMessage(RPMMESS_DEBUG, _("old style source package -- "
-			"I'll do my best\n"));
-	    oldLead->archiveOffset = ntohl(oldLead->archiveOffset);
-	    rpmMessage(RPMMESS_DEBUG, _("archive offset is %d\n"), 
-			oldLead->archiveOffset);
-	    (void)fdLseek(fd, oldLead->archiveOffset, SEEK_SET);
-	    
-	    /* we can't put togeher a header for old format source packages,
-	       there just isn't enough information there. We'll return
-	       NULL <gulp> */
+    /* Is there an immutable header region tag? */
+/*@-sizeoftype@*/
+    if (!(entry->info.tag == RPMTAG_HEADERIMMUTABLE
+       && entry->info.type == RPM_BIN_TYPE
+       && entry->info.count == REGION_TAG_COUNT))
+    {
+	rc = RPMRC_NOTFOUND;
+	goto exit;
+    }
+/*@=sizeoftype@*/
 
-	    *hdr = NULL;
+    /* Is the offset within the data area? */
+    if (entry->info.offset >= dl) {
+	(void) snprintf(buf, sizeof(buf),
+		_("region offset: BAD, tag %d type %d offset %d count %d\n"),
+		entry->info.tag, entry->info.type,
+		entry->info.offset, entry->info.count);
+	goto exit;
+    }
+
+    /* Is there an immutable header region tag trailer? */
+    regionEnd = dataStart + entry->info.offset;
+/*@-sizeoftype@*/
+/*@-bounds@*/
+    (void) memcpy(info, regionEnd, REGION_TAG_COUNT);
+/*@=bounds@*/
+    regionEnd += REGION_TAG_COUNT;
+
+    xx = headerVerifyInfo(1, dl, info, &entry->info, 1);
+    if (xx != -1 ||
+	!(entry->info.tag == RPMTAG_HEADERIMMUTABLE
+       && entry->info.type == RPM_BIN_TYPE
+       && entry->info.count == REGION_TAG_COUNT))
+    {
+	(void) snprintf(buf, sizeof(buf),
+		_("region trailer: BAD, tag %d type %d offset %d count %d\n"),
+		entry->info.tag, entry->info.type,
+		entry->info.offset, entry->info.count);
+	goto exit;
+    }
+/*@=sizeoftype@*/
+/*@-boundswrite@*/
+    memset(info, 0, sizeof(*info));
+/*@=boundswrite@*/
+
+    /* Is the no. of tags in the region less than the total no. of tags? */
+    ril = entry->info.offset/sizeof(*pe);
+    if ((entry->info.offset % sizeof(*pe)) || ril > il) {
+	(void) snprintf(buf, sizeof(buf),
+		_("region size: BAD, ril(%d) > il(%d)\n"), ril, il);
+	goto exit;
+    }
+
+    /* Find a header-only digest/signature tag. */
+    for (i = ril; i < il; i++) {
+	xx = headerVerifyInfo(1, dl, pe+i, &entry->info, 0);
+	if (xx != -1) {
+	    (void) snprintf(buf, sizeof(buf),
+		_("tag[%d]: BAD, tag %d type %d offset %d count %d\n"),
+		i, entry->info.tag, entry->info.type,
+		entry->info.offset, entry->info.count);
+	    goto exit;
+	}
+
+	switch (entry->info.tag) {
+	case RPMTAG_SHA1HEADER:
+	    if (vsflags & RPMVSF_NOSHA1HEADER)
+		/*@switchbreak@*/ break;
+	    blen = 0;
+/*@-boundsread@*/
+	    for (b = dataStart + entry->info.offset; *b != '\0'; b++) {
+		if (strchr("0123456789abcdefABCDEF", *b) == NULL)
+		    /*@innerbreak@*/ break;
+		blen++;
+	    }
+	    if (entry->info.type != RPM_STRING_TYPE || *b != '\0' || blen != 40)
+	    {
+		(void) snprintf(buf, sizeof(buf), _("hdr SHA1: BAD, not hex\n"));
+		goto exit;
+	    }
+/*@=boundsread@*/
+	    if (info->tag == 0) {
+/*@-boundswrite@*/
+		*info = entry->info;	/* structure assignment */
+/*@=boundswrite@*/
+		siglen = blen + 1;
+	    }
+	    /*@switchbreak@*/ break;
+	case RPMTAG_RSAHEADER:
+	    if (vsflags & RPMVSF_NORSAHEADER)
+		/*@switchbreak@*/ break;
+	    if (entry->info.type != RPM_BIN_TYPE) {
+		(void) snprintf(buf, sizeof(buf), _("hdr RSA: BAD, not binary\n"));
+		goto exit;
+	    }
+/*@-boundswrite@*/
+	    *info = entry->info;	/* structure assignment */
+/*@=boundswrite@*/
+	    siglen = info->count;
+	    /*@switchbreak@*/ break;
+	case RPMTAG_DSAHEADER:
+	    if (vsflags & RPMVSF_NODSAHEADER)
+		/*@switchbreak@*/ break;
+	    if (entry->info.type != RPM_BIN_TYPE) {
+		(void) snprintf(buf, sizeof(buf), _("hdr DSA: BAD, not binary\n"));
+		goto exit;
+	    }
+/*@-boundswrite@*/
+	    *info = entry->info;	/* structure assignment */
+/*@=boundswrite@*/
+	    siglen = info->count;
+	    /*@switchbreak@*/ break;
+	default:
+	    /*@switchbreak@*/ break;
+	}
+    }
+    rc = RPMRC_NOTFOUND;
+
+exit:
+    /* Return determined RPMRC_OK/RPMRC_FAIL conditions. */
+    if (rc != RPMRC_NOTFOUND) {
+/*@-boundswrite@*/
+	buf[sizeof(buf)-1] = '\0';
+	if (msg) *msg = xstrdup(buf);
+/*@=boundswrite@*/
+	hclvl--;
+	return rc;
+    }
+
+    /* If no header-only digest/signature, then do simple sanity check. */
+    if (info->tag == 0) {
+verifyinfo_exit:
+	xx = headerVerifyInfo(ril-1, dl, pe+1, &entry->info, 0);
+	if (xx != -1) {
+	    (void) snprintf(buf, sizeof(buf),
+		_("tag[%d]: BAD, tag %d type %d offset %d count %d\n"),
+		xx+1, entry->info.tag, entry->info.type,
+		entry->info.offset, entry->info.count);
+	    rc = RPMRC_FAIL;
 	} else {
-	    rpmMessage(RPMMESS_DEBUG, _("old style binary package\n"));
-	    readOldHeader(fd, hdr, &isSource);
-	    arch = lead->archnum;
-	    headerAddEntry(*hdr, RPMTAG_ARCH, RPM_INT8_TYPE, &arch, 1);
-	    arch = 1;		  /* old versions of RPM only supported Linux */
-	    headerAddEntry(*hdr, RPMTAG_OS, RPM_INT8_TYPE, &arch, 1);
+	    (void) snprintf(buf, sizeof(buf), "Header sanity check: OK\n");
+	    rc = RPMRC_OK;
 	}
-    } else if (lead->major == 2 || lead->major == 3) {
-	if (rpmReadSignature(fd, sigs, lead->signature_type)) {
-	   return 2;
-	}
-	*hdr = headerRead(fd, (lead->major >= 3) ?
-			  HEADER_MAGIC_YES : HEADER_MAGIC_NO);
-	if (*hdr == NULL) {
-	    if (sigs != NULL) headerFree(*sigs);
-	    return 2;
+/*@-boundswrite@*/
+	buf[sizeof(buf)-1] = '\0';
+	if (msg) *msg = xstrdup(buf);
+/*@=boundswrite@*/
+	hclvl--;
+	return rc;
+    }
+
+    /* Verify header-only digest/signature. */
+    dig = rpmtsDig(ts);
+    if (dig == NULL)
+	goto verifyinfo_exit;
+    dig->nbytes = 0;
+
+/*@-boundsread@*/
+    sig = memcpy(xmalloc(siglen), dataStart + info->offset, siglen);
+/*@=boundsread@*/
+    (void) rpmtsSetSig(ts, info->tag, info->type, sig, info->count);
+
+    switch (info->tag) {
+    case RPMTAG_RSAHEADER:
+	/* Parse the parameters from the OpenPGP packets that will be needed. */
+	xx = pgpPrtPkts(sig, info->count, dig, (_print_pkts & rpmIsDebug()));
+	if (dig->signature.version != 3 && dig->signature.version != 4) {
+	    rpmMessage(RPMMESS_ERROR,
+		_("skipping header with unverifiable V%u signature\n"),
+		dig->signature.version);
+	    rpmtsCleanDig(ts);
+	    rc = RPMRC_FAIL;
+	    goto exit;
 	}
 
-	/* We switched the way we do relocateable packages. We fix some of
-	   it up here, though the install code still has to be a bit 
-	   careful. This fixup makes queries give the new values though,
-	   which is quite handy. */
-	if (headerGetEntry(*hdr, RPMTAG_DEFAULTPREFIX, NULL,
-			   (void **) &defaultPrefix, NULL)) {
-	    defaultPrefix = strcpy(alloca(strlen(defaultPrefix) + 1), 
-				   defaultPrefix);
-	    stripTrailingSlashes(defaultPrefix);
-	    headerAddEntry(*hdr, RPMTAG_PREFIXES, RPM_STRING_ARRAY_TYPE,
-			   &defaultPrefix, 1); 
-	}
+	ildl[0] = htonl(ril);
+	ildl[1] = (regionEnd - dataStart);
+	ildl[1] = htonl(ildl[1]);
 
-    /* XXX binary rpms always have RPMTAG_SOURCERPM, source rpms do not */
-        if (lead->type == RPMLEAD_SOURCE) {
-	    if (!headerIsEntry(*hdr, RPMTAG_SOURCEPACKAGE))
-	    	headerAddEntry(*hdr, RPMTAG_SOURCEPACKAGE, RPM_INT32_TYPE,
-				&true, 1);
-	}
-    } else {
-	rpmError(RPMERR_NEWPACKAGE, _("only packages with major numbers <= 3 "
-		"are supported by this version of RPM"));
-	return 2;
-    } 
+	(void) rpmswEnter(rpmtsOp(ts, RPMTS_OP_DIGEST), 0);
+	dig->hdrmd5ctx = rpmDigestInit(dig->signature.hash_algo, RPMDIGEST_NONE);
 
-    if (hdrPtr == NULL) headerFree(*hdr);
+	b = (unsigned char *) header_magic;
+	nb = sizeof(header_magic);
+        (void) rpmDigestUpdate(dig->hdrmd5ctx, b, nb);
+        dig->nbytes += nb;
+
+	b = (unsigned char *) ildl;
+	nb = sizeof(ildl);
+        (void) rpmDigestUpdate(dig->hdrmd5ctx, b, nb);
+        dig->nbytes += nb;
+
+	b = (unsigned char *) pe;
+	nb = (htonl(ildl[0]) * sizeof(*pe));
+        (void) rpmDigestUpdate(dig->hdrmd5ctx, b, nb);
+        dig->nbytes += nb;
+
+	b = (unsigned char *) dataStart;
+	nb = htonl(ildl[1]);
+        (void) rpmDigestUpdate(dig->hdrmd5ctx, b, nb);
+        dig->nbytes += nb;
+	(void) rpmswExit(rpmtsOp(ts, RPMTS_OP_DIGEST), dig->nbytes);
+
+	break;
+    case RPMTAG_DSAHEADER:
+	/* Parse the parameters from the OpenPGP packets that will be needed. */
+	xx = pgpPrtPkts(sig, info->count, dig, (_print_pkts & rpmIsDebug()));
+	if (dig->signature.version != 3 && dig->signature.version != 4) {
+	    rpmMessage(RPMMESS_ERROR,
+		_("skipping header with unverifiable V%u signature\n"),
+		dig->signature.version);
+	    rpmtsCleanDig(ts);
+	    rc = RPMRC_FAIL;
+	    goto exit;
+	}
+	/*@fallthrough@*/
+    case RPMTAG_SHA1HEADER:
+/*@-boundswrite@*/
+	ildl[0] = htonl(ril);
+	ildl[1] = (regionEnd - dataStart);
+	ildl[1] = htonl(ildl[1]);
+/*@=boundswrite@*/
+
+	(void) rpmswEnter(rpmtsOp(ts, RPMTS_OP_DIGEST), 0);
+	dig->hdrsha1ctx = rpmDigestInit(PGPHASHALGO_SHA1, RPMDIGEST_NONE);
+
+	b = (unsigned char *) header_magic;
+	nb = sizeof(header_magic);
+        (void) rpmDigestUpdate(dig->hdrsha1ctx, b, nb);
+        dig->nbytes += nb;
+
+	b = (unsigned char *) ildl;
+	nb = sizeof(ildl);
+        (void) rpmDigestUpdate(dig->hdrsha1ctx, b, nb);
+        dig->nbytes += nb;
+
+	b = (unsigned char *) pe;
+	nb = (htonl(ildl[0]) * sizeof(*pe));
+        (void) rpmDigestUpdate(dig->hdrsha1ctx, b, nb);
+        dig->nbytes += nb;
+
+	b = (unsigned char *) dataStart;
+	nb = htonl(ildl[1]);
+        (void) rpmDigestUpdate(dig->hdrsha1ctx, b, nb);
+        dig->nbytes += nb;
+	(void) rpmswExit(rpmtsOp(ts, RPMTS_OP_DIGEST), dig->nbytes);
+
+	break;
+    default:
+	sig = _free(sig);
+	break;
+    }
+
+/*@-boundswrite@*/
+    buf[0] = '\0';
+/*@=boundswrite@*/
+    rc = rpmVerifySignature(ts, buf);
+
+/*@-boundswrite@*/
+    buf[sizeof(buf)-1] = '\0';
+    if (msg) *msg = xstrdup(buf);
+/*@=boundswrite@*/
+
+    /* XXX headerCheck can recurse, free info only at top level. */
+    if (hclvl == 1)
+	rpmtsCleanDig(ts);
+    if (info->tag == RPMTAG_SHA1HEADER)
+	sig = _free(sig);
+    hclvl--;
+    return rc;
+}
+
+rpmRC rpmReadHeader(rpmts ts, FD_t fd, Header *hdrp, const char ** msg)
+{
+    char buf[BUFSIZ];
+    int_32 block[4];
+    int_32 il;
+    int_32 dl;
+    int_32 * ei = NULL;
+    size_t uc;
+    int_32 nb;
+    Header h = NULL;
+    const char * origin = NULL;
+    rpmRC rc = RPMRC_FAIL;		/* assume failure */
+    int xx;
+
+/*@-boundswrite@*/
+    buf[0] = '\0';
+
+    if (hdrp)
+	*hdrp = NULL;
+    if (msg)
+	*msg = NULL;
+/*@=boundswrite@*/
+
+    memset(block, 0, sizeof(block));
+    if ((xx = timedRead(fd, (char *)block, sizeof(block))) != sizeof(block)) {
+	(void) snprintf(buf, sizeof(buf),
+		_("hdr size(%d): BAD, read returned %d\n"), (int)sizeof(block), xx);
+	goto exit;
+    }
+    if (memcmp(block, header_magic, sizeof(header_magic))) {
+	(void) snprintf(buf, sizeof(buf), _("hdr magic: BAD\n"));
+	goto exit;
+    }
+/*@-boundsread@*/
+    il = ntohl(block[2]);
+/*@=boundsread@*/
+    if (hdrchkTags(il)) {
+	(void) snprintf(buf, sizeof(buf),
+		_("hdr tags: BAD, no. of tags(%d) out of range\n"), il);
+
+	goto exit;
+    }
+/*@-boundsread@*/
+    dl = ntohl(block[3]);
+/*@=boundsread@*/
+    if (hdrchkData(dl)) {
+	(void) snprintf(buf, sizeof(buf),
+		_("hdr data: BAD, no. of bytes(%d) out of range\n"), dl);
+	goto exit;
+    }
+
+/*@-sizeoftype@*/
+    nb = (il * sizeof(struct entryInfo_s)) + dl;
+/*@=sizeoftype@*/
+    uc = sizeof(il) + sizeof(dl) + nb;
+    ei = xmalloc(uc);
+/*@-bounds@*/
+    ei[0] = block[2];
+    ei[1] = block[3];
+    if ((xx = timedRead(fd, (char *)&ei[2], nb)) != nb) {
+	(void) snprintf(buf, sizeof(buf),
+		_("hdr blob(%d): BAD, read returned %d\n"), nb, xx);
+	goto exit;
+    }
+/*@=bounds@*/
+
+    /* Sanity check header tags */
+    rc = headerCheck(ts, ei, uc, msg);
+    if (rc != RPMRC_OK)
+	goto exit;
+
+    /* OK, blob looks sane, load the header. */
+    h = headerLoad(ei);
+    if (h == NULL) {
+	(void) snprintf(buf, sizeof(buf), _("hdr load: BAD\n"));
+        goto exit;
+    }
+    h->flags |= HEADERFLAG_ALLOCATED;
+    ei = NULL;	/* XXX will be freed with header */
+
+    /* Save the opened path as the header origin. */
+    origin = fdGetOPath(fd);
+    if (origin != NULL)
+	(void) headerSetOrigin(h, origin);
     
-    return 0;
+exit:
+/*@-boundswrite@*/
+    if (hdrp && h && rc == RPMRC_OK)
+	*hdrp = headerLink(h);
+/*@=boundswrite@*/
+    ei = _free(ei);
+    h = headerFree(h);
+
+/*@-boundswrite@*/
+    if (msg != NULL && *msg == NULL && buf[0] != '\0') {
+	buf[sizeof(buf)-1] = '\0';
+	*msg = xstrdup(buf);
+    }
+/*@=boundswrite@*/
+
+    return rc;
 }
 
-/* 0 = success */
-/* 1 = bad magic */
-/* 2 = error */
-int rpmReadPackageInfo(FD_t fd, Header * signatures, Header * hdr) {
-    return readPackageHeaders(fd, NULL, signatures, hdr);
-}
+/*@-bounds@*/	/* LCL: segfault */
+rpmRC rpmReadPackageFile(rpmts ts, FD_t fd, const char * fn, Header * hdrp)
+{
+    pgpDig dig;
+    byte buf[8*BUFSIZ];
+    ssize_t count;
+    struct rpmlead * l = alloca(sizeof(*l));
+    Header sigh = NULL;
+    int_32 sigtag;
+    int_32 sigtype;
+    const void * sig;
+    int_32 siglen;
+    rpmtsOpX opx;
+    size_t nb;
+    Header h = NULL;
+    const char * msg;
+    rpmVSFlags vsflags;
+    rpmRC rc = RPMRC_FAIL;	/* assume failure */
+    rpmop opsave = memset(alloca(sizeof(*opsave)), 0, sizeof(*opsave));
+    int xx;
+    int i;
 
-/* 0 = success */
-/* 1 = bad magic */
-/* 2 = error */
-int rpmReadPackageHeader(FD_t fd, Header * hdr, int * isSource, int * major,
-		  int * minor) {
-    int rc;
-    struct rpmlead lead;
+    if (hdrp) *hdrp = NULL;
 
-    rc = readPackageHeaders(fd, &lead, NULL, hdr);
-    if (rc) return rc;
-   
-    if (isSource) *isSource = lead.type == RPMLEAD_SOURCE;
-    if (major) *major = lead.major;
-    if (minor) *minor = lead.minor;
-   
-    return 0;
-}
+#ifdef	DYING
+    {	struct stat st;
+/*@-boundswrite@*/
+	memset(&st, 0, sizeof(st));
+/*@=boundswrite@*/
+	(void) fstat(Fileno(fd), &st);
+	/* if fd points to a socket, pipe, etc, st.st_size is *always* zero */
+	if (S_ISREG(st.st_mode) && st.st_size < sizeof(*l)) {
+	    rc = RPMRC_NOTFOUND;
+	    goto exit;
+	}
+    }
+#endif
 
-static int readOldHeader(FD_t fd, Header * hdr, int * isSource) {
-    struct oldrpmHeader oldheader;
-    struct oldrpmHeaderSpec spec;
-    Header dbentry;
-    int_32 installTime = 0;
-    char ** fileList;
-    char ** fileMD5List;
-    char ** fileLinktoList;
-    int_32 * fileSizeList;
-    int_32 * fileUIDList;
-    int_32 * fileGIDList;
-    int_32 * fileMtimesList;
-    int_32 * fileFlagsList;
-    int_16 * fileModesList;
-    int_16 * fileRDevsList;
-    char * fileStatesList;
-    int i, j;
-    char ** unames, ** gnames;
+    /* Snapshot current I/O counters (cached persistent I/O reuses counters) */
+    (void) rpmswAdd(opsave, fdstat_op(fd, FDSTAT_READ));
 
-    (void)fdLseek(fd, 0, SEEK_SET);
-    if (oldhdrReadFromStream(fd, &oldheader)) {
-	return 1;
+    memset(l, 0, sizeof(*l));
+    rc = readLead(fd, l);
+    if (rc != RPMRC_OK)
+	goto exit;
+
+    switch (l->major) {
+    case 1:
+	rpmError(RPMERR_NEWPACKAGE,
+	    _("packaging version 1 is not supported by this version of RPM\n"));
+	rc = RPMRC_NOTFOUND;
+	goto exit;
+	/*@notreached@*/ break;
+    case 2:
+    case 3:
+    case 4:
+	break;
+    default:
+	rpmError(RPMERR_NEWPACKAGE, _("only packaging with major numbers <= 4 "
+		"is supported by this version of RPM\n"));
+	rc = RPMRC_NOTFOUND;
+	goto exit;
+	/*@notreached@*/ break;
     }
 
-    if (oldhdrParseSpec(&oldheader, &spec)) {
-	return 1;
+    /* Read the signature header. */
+    msg = NULL;
+    rc = rpmReadSignature(fd, &sigh, l->signature_type, &msg);
+    switch (rc) {
+    default:
+	rpmError(RPMERR_SIGGEN, _("%s: rpmReadSignature failed: %s"), fn,
+		(msg && *msg ? msg : "\n"));
+	msg = _free(msg);
+	goto exit;
+	/*@notreached@*/ break;
+    case RPMRC_OK:
+	if (sigh == NULL) {
+	    rpmError(RPMERR_SIGGEN, _("%s: No signature available\n"), fn);
+	    rc = RPMRC_FAIL;
+	    goto exit;
+	}
+	break;
+    }
+    msg = _free(msg);
+
+#define	_chk(_mask)	(sigtag == 0 && !(vsflags & (_mask)))
+
+    /*
+     * Figger the most effective available signature.
+     * Prefer signatures over digests, then header-only over header+payload.
+     * DSA will be preferred over RSA if both exist because tested first.
+     * Note that NEEDPAYLOAD prevents header+payload signatures and digests.
+     */
+    sigtag = 0;
+    opx = 0;
+    vsflags = rpmtsVSFlags(ts);
+    if (_chk(RPMVSF_NODSAHEADER) && headerIsEntry(sigh, RPMSIGTAG_DSA)) {
+	sigtag = RPMSIGTAG_DSA;
+    } else
+    if (_chk(RPMVSF_NORSAHEADER) && headerIsEntry(sigh, RPMSIGTAG_RSA)) {
+	sigtag = RPMSIGTAG_RSA;
+    } else
+    if (_chk(RPMVSF_NODSA|RPMVSF_NEEDPAYLOAD) &&
+	headerIsEntry(sigh, RPMSIGTAG_GPG))
+    {
+	sigtag = RPMSIGTAG_GPG;
+	fdInitDigest(fd, PGPHASHALGO_SHA1, 0);
+	opx = RPMTS_OP_SIGNATURE;
+    } else
+    if (_chk(RPMVSF_NORSA|RPMVSF_NEEDPAYLOAD) &&
+	headerIsEntry(sigh, RPMSIGTAG_PGP))
+    {
+	sigtag = RPMSIGTAG_PGP;
+	fdInitDigest(fd, PGPHASHALGO_MD5, 0);
+	opx = RPMTS_OP_SIGNATURE;
+    } else
+    if (_chk(RPMVSF_NOSHA1HEADER) && headerIsEntry(sigh, RPMSIGTAG_SHA1)) {
+	sigtag = RPMSIGTAG_SHA1;
+    } else
+    if (_chk(RPMVSF_NOMD5|RPMVSF_NEEDPAYLOAD) &&
+	headerIsEntry(sigh, RPMSIGTAG_MD5))
+    {
+	sigtag = RPMSIGTAG_MD5;
+	fdInitDigest(fd, PGPHASHALGO_MD5, 0);
+	opx = RPMTS_OP_DIGEST;
     }
 
-    dbentry = headerNew();
-    headerAddEntry(dbentry, RPMTAG_NAME, RPM_STRING_TYPE, oldheader.name, 1);
-    headerAddEntry(dbentry, RPMTAG_VERSION, RPM_STRING_TYPE, oldheader.version, 1);
-    headerAddEntry(dbentry, RPMTAG_RELEASE, RPM_STRING_TYPE, oldheader.release, 1);
-    headerAddEntry(dbentry, RPMTAG_DESCRIPTION, RPM_STRING_TYPE, 
-	     spec.description, 1);
-    headerAddEntry(dbentry, RPMTAG_BUILDTIME, RPM_INT32_TYPE, &spec.buildTime, 1);
-    headerAddEntry(dbentry, RPMTAG_BUILDHOST, RPM_STRING_TYPE, spec.buildHost, 1);
-    headerAddEntry(dbentry, RPMTAG_INSTALLTIME, RPM_INT32_TYPE, &installTime, 1); 
-    headerAddEntry(dbentry, RPMTAG_DISTRIBUTION, RPM_STRING_TYPE, 
-	     spec.distribution, 1);
-    headerAddEntry(dbentry, RPMTAG_VENDOR, RPM_STRING_TYPE, spec.vendor, 1);
-    headerAddEntry(dbentry, RPMTAG_SIZE, RPM_INT32_TYPE, &oldheader.size, 1);
-    headerAddEntry(dbentry, RPMTAG_LICENSE, RPM_STRING_TYPE, spec.copyright, 1); 
+    /* Read the metadata, computing digest(s) on the fly. */
+    h = NULL;
+    msg = NULL;
 
-    if (oldheader.group)
-	headerAddEntry(dbentry, RPMTAG_GROUP, RPM_STRING_TYPE, oldheader.group, 1);
-    else
-	headerAddEntry(dbentry, RPMTAG_GROUP, RPM_STRING_TYPE, "Unknown", 1);
+    /* XXX stats will include header i/o and setup overhead. */
+    /* XXX repackaged packages have appended tags, legacy dig/sig check fails */
+    if (opx > 0)
+	(void) rpmswEnter(rpmtsOp(ts, opx), 0);
+/*@-type@*/	/* XXX arrow access of non-pointer (FDSTAT_t) */
+    nb = -fd->stats->ops[FDSTAT_READ].bytes;
+    rc = rpmReadHeader(ts, fd, &h, &msg);
+    nb += fd->stats->ops[FDSTAT_READ].bytes;
+/*@=type@*/
+    if (opx > 0)
+	(void) rpmswExit(rpmtsOp(ts, opx), nb);
 
-    if (spec.prein) 
-	headerAddEntry(dbentry, RPMTAG_PREIN, RPM_STRING_TYPE, spec.prein, 1);
-    if (spec.preun) 
-	headerAddEntry(dbentry, RPMTAG_PREUN, RPM_STRING_TYPE, spec.preun, 1);
-    if (spec.postin) 
-	headerAddEntry(dbentry, RPMTAG_POSTIN, RPM_STRING_TYPE, spec.postin, 1);
-    if (spec.postun) 
-	headerAddEntry(dbentry, RPMTAG_POSTUN, RPM_STRING_TYPE, spec.postun, 1);
+    if (rc != RPMRC_OK || h == NULL) {
+	rpmError(RPMERR_FREAD, _("%s: headerRead failed: %s"), fn,
+		(msg && *msg ? msg : "\n"));
+	msg = _free(msg);
+	goto exit;
+    }
+    msg = _free(msg);
 
-    *hdr = dbentry;
+    /* Any digests or signatures to check? */
+    if (sigtag == 0) {
+	rc = RPMRC_OK;
+	goto exit;
+    }
 
-    if (spec.fileCount) {
-	/* some packages have no file lists */
+    dig = rpmtsDig(ts);
+    if (dig == NULL) {
+	rc = RPMRC_FAIL;
+	goto exit;
+    }
+    dig->nbytes = 0;
 
-	fileList = malloc(sizeof(char *) * spec.fileCount);
-	fileLinktoList = malloc(sizeof(char *) * spec.fileCount);
-	fileMD5List = malloc(sizeof(char *) * spec.fileCount);
-	fileSizeList = malloc(sizeof(int_32) * spec.fileCount);
-	fileUIDList = malloc(sizeof(int_32) * spec.fileCount);
-	fileGIDList = malloc(sizeof(int_32) * spec.fileCount);
-	fileMtimesList = malloc(sizeof(int_32) * spec.fileCount);
-	fileFlagsList = malloc(sizeof(int_32) * spec.fileCount);
-	fileModesList = malloc(sizeof(int_16) * spec.fileCount);
-	fileRDevsList = malloc(sizeof(int_16) * spec.fileCount);
-	fileStatesList = malloc(sizeof(char) * spec.fileCount);
-	unames = malloc(sizeof(char *) * spec.fileCount);
-	gnames = malloc(sizeof(char *) * spec.fileCount);
+    /* Retrieve the tag parameters from the signature header. */
+    sig = NULL;
+    xx = headerGetEntry(sigh, sigtag, &sigtype, (void **) &sig, &siglen);
+    if (sig == NULL) {
+	rc = RPMRC_FAIL;
+	goto exit;
+    }
+    (void) rpmtsSetSig(ts, sigtag, sigtype, sig, siglen);
 
+    switch (sigtag) {
+    case RPMSIGTAG_RSA:
+	/* Parse the parameters from the OpenPGP packets that will be needed. */
+	xx = pgpPrtPkts(sig, siglen, dig, (_print_pkts & rpmIsDebug()));
+	if (dig->signature.version != 3 && dig->signature.version != 4) {
+	    rpmMessage(RPMMESS_ERROR,
+		_("skipping package %s with unverifiable V%u signature\n"),
+		fn, dig->signature.version);
+	    rc = RPMRC_FAIL;
+	    goto exit;
+	}
+    {	void * uh = NULL;
+	int_32 uht;
+	int_32 uhc;
 
-	/* We also need to contstruct a file owner/group list. We'll just
-	   hope the numbers all map to something, those that don't will
-	   get set as 'id%d'. Not perfect, but this should be
-	   good enough. */
+	if (!headerGetEntry(h, RPMTAG_HEADERIMMUTABLE, &uht, &uh, &uhc))
+	    break;
+	(void) rpmswEnter(rpmtsOp(ts, RPMTS_OP_DIGEST), 0);
+	dig->hdrmd5ctx = rpmDigestInit(dig->signature.hash_algo, RPMDIGEST_NONE);
+	(void) rpmDigestUpdate(dig->hdrmd5ctx, header_magic, sizeof(header_magic));
+	dig->nbytes += sizeof(header_magic);
+	(void) rpmDigestUpdate(dig->hdrmd5ctx, uh, uhc);
+	dig->nbytes += uhc;
+	(void) rpmswExit(rpmtsOp(ts, RPMTS_OP_DIGEST), dig->nbytes);
+	rpmtsOp(ts, RPMTS_OP_DIGEST)->count--;	/* XXX one too many */
+	uh = headerFreeData(uh, uht);
+    }	break;
+    case RPMSIGTAG_DSA:
+	/* Parse the parameters from the OpenPGP packets that will be needed. */
+	xx = pgpPrtPkts(sig, siglen, dig, (_print_pkts & rpmIsDebug()));
+	if (dig->signature.version != 3 && dig->signature.version != 4) {
+	    rpmMessage(RPMMESS_ERROR,
+		_("skipping package %s with unverifiable V%u signature\n"), 
+		fn, dig->signature.version);
+	    rc = RPMRC_FAIL;
+	    goto exit;
+	}
+	/*@fallthrough@*/
+    case RPMSIGTAG_SHA1:
+    {	void * uh = NULL;
+	int_32 uht;
+	int_32 uhc;
 
-	/* old packages were reverse sorted, new ones are forward sorted */
-	j = spec.fileCount - 1;
-	for (i = 0; i < spec.fileCount; i++, j--) {
-	    fileList[j] = spec.files[i].path;
-	    fileMD5List[j] = spec.files[i].md5;
-	    fileSizeList[j] = spec.files[i].size;
-	    fileUIDList[j] = spec.files[i].uid;
-	    fileGIDList[j] = spec.files[i].gid;
-	    fileMtimesList[j] = spec.files[i].mtime;
-	    fileModesList[j] = spec.files[i].mode;
-	    fileRDevsList[j] = spec.files[i].rdev;
-	    fileStatesList[j] = spec.files[i].state;
+	if (!headerGetEntry(h, RPMTAG_HEADERIMMUTABLE, &uht, &uh, &uhc))
+	    break;
+	(void) rpmswEnter(rpmtsOp(ts, RPMTS_OP_DIGEST), 0);
+	dig->hdrsha1ctx = rpmDigestInit(PGPHASHALGO_SHA1, RPMDIGEST_NONE);
+	(void) rpmDigestUpdate(dig->hdrsha1ctx, header_magic, sizeof(header_magic));
+	dig->nbytes += sizeof(header_magic);
+	(void) rpmDigestUpdate(dig->hdrsha1ctx, uh, uhc);
+	dig->nbytes += uhc;
+	(void) rpmswExit(rpmtsOp(ts, RPMTS_OP_DIGEST), dig->nbytes);
+	if (sigtag == RPMSIGTAG_SHA1)
+	    rpmtsOp(ts, RPMTS_OP_DIGEST)->count--;	/* XXX one too many */
+	uh = headerFreeData(uh, uht);
+    }	break;
+    case RPMSIGTAG_GPG:
+    case RPMSIGTAG_PGP5:	/* XXX legacy */
+    case RPMSIGTAG_PGP:
+	/* Parse the parameters from the OpenPGP packets that will be needed. */
+	xx = pgpPrtPkts(sig, siglen, dig, (_print_pkts & rpmIsDebug()));
 
-	    if (spec.files[i].linkto)
-		fileLinktoList[j] = spec.files[i].linkto;
-	    else
-		fileLinktoList[j] = "";
-	    
-	    fileFlagsList[j] = 0;
-	    if (spec.files[i].isdoc) 
-		fileFlagsList[j] |= RPMFILE_DOC;
-	    if (spec.files[i].isconf)
-		fileFlagsList[j] |= RPMFILE_CONFIG;
-
-	    unames[j] = uidToUname(fileUIDList[j]);
-	    if (unames[j])
-		unames[j] = strdup(unames[j]);
-	    else {
-		unames[j] = malloc(20);
-		sprintf(unames[j], "uid%d", fileUIDList[j]);
-	    }
-
-	    gnames[j] = gidToGname(fileGIDList[j]);
-	    if (gnames[j])
-		gnames[j] = strdup(gnames[j]);
-	    else {
-		gnames[j] = malloc(20);
-		sprintf(gnames[j], "gid%d", fileGIDList[j]);
-	    }
+	if (dig->signature.version != 3 && dig->signature.version != 4) {
+	    rpmMessage(RPMMESS_ERROR,
+		_("skipping package %s with unverifiable V%u signature\n"),
+		fn, dig->signature.version);
+	    rc = RPMRC_FAIL;
+	    goto exit;
+	}
+	/*@fallthrough@*/
+    case RPMSIGTAG_MD5:
+	/* Legacy signatures need the compressed payload in the digest too. */
+	(void) rpmswEnter(rpmtsOp(ts, RPMTS_OP_DIGEST), 0);
+	while ((count = Fread(buf, sizeof(buf[0]), sizeof(buf), fd)) > 0)
+	    dig->nbytes += count;
+	(void) rpmswExit(rpmtsOp(ts, RPMTS_OP_DIGEST), dig->nbytes);
+	rpmtsOp(ts, RPMTS_OP_DIGEST)->count--;	/* XXX one too many */
+	dig->nbytes += nb;	/* XXX include size of header blob. */
+	if (count < 0) {
+	    rpmError(RPMERR_FREAD, _("%s: Fread failed: %s\n"),
+					fn, Fstrerror(fd));
+	    rc = RPMRC_FAIL;
+	    goto exit;
 	}
 
-	headerAddEntry(dbentry, RPMTAG_FILENAMES, RPM_STRING_ARRAY_TYPE, 
-			fileList, spec.fileCount);
-	headerAddEntry(dbentry, RPMTAG_FILELINKTOS, RPM_STRING_ARRAY_TYPE, 
-		 fileLinktoList, spec.fileCount);
-	headerAddEntry(dbentry, RPMTAG_FILEMD5S, RPM_STRING_ARRAY_TYPE, 
-			fileMD5List, spec.fileCount);
-	headerAddEntry(dbentry, RPMTAG_FILESIZES, RPM_INT32_TYPE, fileSizeList, 
-		 	spec.fileCount);
-	headerAddEntry(dbentry, RPMTAG_FILEUIDS, RPM_INT32_TYPE, fileUIDList, 
-		 	spec.fileCount);
-	headerAddEntry(dbentry, RPMTAG_FILEGIDS, RPM_INT32_TYPE, fileGIDList, 
-		 	spec.fileCount);
-	headerAddEntry(dbentry, RPMTAG_FILEMTIMES, RPM_INT32_TYPE, 
-			fileMtimesList, spec.fileCount);
-	headerAddEntry(dbentry, RPMTAG_FILEFLAGS, RPM_INT32_TYPE, 
-			fileFlagsList, spec.fileCount);
-	headerAddEntry(dbentry, RPMTAG_FILEMODES, RPM_INT16_TYPE, 
-			fileModesList, spec.fileCount);
-	headerAddEntry(dbentry, RPMTAG_FILERDEVS, RPM_INT16_TYPE, 
-			fileRDevsList, spec.fileCount);
-	headerAddEntry(dbentry, RPMTAG_FILESTATES, RPM_INT8_TYPE, 
-			fileStatesList, spec.fileCount);
-	headerAddEntry(dbentry, RPMTAG_FILEUSERNAME, RPM_STRING_ARRAY_TYPE, 
-			unames, spec.fileCount);
-	headerAddEntry(dbentry, RPMTAG_FILEGROUPNAME, RPM_STRING_ARRAY_TYPE, 
-			gnames, spec.fileCount);
-
-	free(fileList);
-	free(fileLinktoList);
-	free(fileMD5List);
-	free(fileSizeList);
-	free(fileUIDList);
-	free(fileGIDList);
-	free(fileMtimesList);
-	free(fileFlagsList);
-	free(fileModesList);
-	free(fileRDevsList);
-	free(fileStatesList);
-
-	for (i = 0; i < spec.fileCount; i++) {
-	    free(unames[i]);
-	    free(gnames[i]);
+	/* XXX Steal the digest-in-progress from the file handle. */
+	for (i = fd->ndigests - 1; i >= 0; i--) {
+	    FDDIGEST_t fddig = fd->digests + i;
+	    if (fddig->hashctx != NULL)
+	    switch (fddig->hashalgo) {
+	    case PGPHASHALGO_MD5:
+		dig->md5ctx = fddig->hashctx;
+		fddig->hashctx = NULL;
+		/*@switchbreak@*/ break;
+	    case PGPHASHALGO_SHA1:
+	    case PGPHASHALGO_RIPEMD160:
+#if HAVE_BEECRYPT_API_H
+	    case PGPHASHALGO_SHA256:
+	    case PGPHASHALGO_SHA384:
+	    case PGPHASHALGO_SHA512:
+#endif
+		dig->sha1ctx = fddig->hashctx;
+		fddig->hashctx = NULL;
+		/*@switchbreak@*/ break;
+	    default:
+		/*@switchbreak@*/ break;
+	    }
 	}
-
-	free(unames);
-	free(gnames);
+	break;
     }
 
-    oldhdrFree(&oldheader);
+/** @todo Implement disable/enable/warn/error/anal policy. */
 
-    return 0;
+/*@-boundswrite@*/
+    buf[0] = '\0';
+/*@=boundswrite@*/
+    rc = rpmVerifySignature(ts, buf);
+    switch (rc) {
+    case RPMRC_OK:		/* Signature is OK. */
+	rpmMessage(RPMMESS_DEBUG, "%s: %s", fn, buf);
+	break;
+    case RPMRC_NOTTRUSTED:	/* Signature is OK, but key is not trusted. */
+    case RPMRC_NOKEY:		/* Public key is unavailable. */
+	/* XXX Print NOKEY/NOTTRUSTED warning only once. */
+    {	int lvl = (rpmtsStashKeyid(ts) ? RPMMESS_DEBUG : RPMMESS_WARNING);
+	rpmMessage(lvl, "%s: %s", fn, buf);
+    }	break;
+    case RPMRC_NOTFOUND:	/* Signature is unknown type. */
+	rpmMessage(RPMMESS_WARNING, "%s: %s", fn, buf);
+	break;
+    default:
+    case RPMRC_FAIL:		/* Signature does not verify. */
+	rpmMessage(RPMMESS_ERROR, "%s: %s", fn, buf);
+	break;
+    }
+
+exit:
+    if (rc != RPMRC_FAIL && h != NULL && hdrp != NULL) {
+
+	/* Append (and remap) signature tags to the metadata. */
+	headerMergeLegacySigs(h, sigh);
+
+	/* Bump reference count for return. */
+/*@-boundswrite@*/
+	*hdrp = headerLink(h);
+/*@=boundswrite@*/
+    }
+    h = headerFree(h);
+
+    /* Accumulate time reading package header. */
+    (void) rpmswAdd(rpmtsOp(ts, RPMTS_OP_READHDR),
+		fdstat_op(fd, FDSTAT_READ));
+    (void) rpmswSub(rpmtsOp(ts, RPMTS_OP_READHDR),
+		opsave);
+
+    rpmtsCleanDig(ts);
+    sigh = rpmFreeSignature(sigh);
+    return rc;
 }
+/*@=bounds@*/
