@@ -2,23 +2,34 @@
 
 AUTOMAKE_OPTIONS = 1.4 foreign
 
-INCLUDES = -I$(top_srcdir) -I$(top_srcdir)/build -I$(top_srcdir)/lib -I$(top_srcdir)/intl -I$(top_srcdir)/misc @INCPATH@
+INCLUDES = -I. \
+	-I$(top_srcdir) \
+	-I$(top_srcdir)/lib \
+	-I$(top_srcdir)/rpmdb \
+	-I$(top_srcdir)/rpmio \
+	@WITH_BEECRYPT_INCLUDE@ \
+	@WITH_NEON_INCLUDE@ \
+	@WITH_LIBELF_INCLUDE@ \
+	@WITH_MAGIC_INCLUDE@ \
+	@WITH_POPT_INCLUDE@ \
+	-I$(top_srcdir)/misc \
+	@INCPATH@
 
-EXTRA_DIST =	fstrcmp.c message.c str-list.c rpmchecksig.c
+EXTRA_DIST =	hashtab.h
 
-mylibs=	$(top_builddir)/build/librpmbuild.la \
-	$(top_builddir)/lib/librpm.la \
-	$(top_builddir)/popt/libpopt.la
+EXTRA_PROGRAMS = debugedit convertdb1
 
 LDADD = $(top_builddir)/lib/librpm.la
 
-noinst_PROGRAMS = rpmlead rpmheader rpmarchive rpmsignature dump dumpdb \
-	rpmgettext rpmputtext
+pkglibdir =		@USRLIBRPM@
+versionlibdir =		$(pkglibdir)/@VERSION@
+versionlib_PROGRAMS =	rpmdeps @WITH_LIBDWARF_DEBUGEDIT@
 
-rpmgettext_SOURCES =	rpmgettext.c
-rpmgettext_LDADD =	$(mylibs) @LIBMISC@
+convertdb1_SOURCES =	convertdb1.c
 
-rpmputtext_SOURCES =	rpmgettext.c
-rpmputtext_LDADD =	$(mylibs) @LIBMISC@
+debugedit_SOURCES =	debugedit.c hashtab.c
+debugedit_LDADD =	@WITH_LIBELF_LIB@ @WITH_POPT_LIB@
 
-$(PROGRAMS): $(mylibs)
+rpmdeps_SOURCES =	rpmdeps.c
+
+$(PROGRAMS): $(LDADD)
