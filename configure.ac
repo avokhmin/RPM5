@@ -9,6 +9,7 @@ dnl ##
 AC_PREREQ(2.60)
 AC_DEFUN([PACKAGE_BUGREPORT_DEFAULT], [rpm-devel@rpm5.org])
 AC_INIT(rpm, [5.0.DEVEL], [PACKAGE_BUGREPORT_DEFAULT])
+PACKAGE_TIMESTAMP="2008" dnl # YYYY[-MM[-DD[ HH[:MM]]]]
 AC_MSG_TITLE([RPM Package Manager (RPM)], [$PACKAGE_VERSION])
 
 AC_MSG_HEADER([INITIALIZATION])
@@ -19,6 +20,14 @@ AM_INIT_AUTOMAKE([foreign tar-ustar])
 AC_REQUIRE_AUX_FILE([install-sh])
 AC_REQUIRE_AUX_FILE([mkinstalldirs])
 AM_MAINTAINER_MODE
+
+dnl # allow packagers to override the officially branding name
+RPM_NAME="RPM"
+AC_ARG_WITH(name,
+    AS_HELP_STRING([--with-name=NAME], [set official name of program (default: "RPM")]), [dnl
+    RPM_NAME="$withval"
+])
+AC_DEFINE_UNQUOTED(RPM_NAME, "$RPM_NAME", [official name of program])
 
 dnl # allow packagers to override the bugreport address
 AC_ARG_WITH(bugreport,
@@ -37,8 +46,58 @@ AC_SUBST(LT_CURRENT,  5)
 AC_SUBST(LT_REVISION, 0)
 AC_SUBST(LT_AGE,      0)
 
+dnl # provide RPM exported version
+RPM_VERSION="0,0,_,0,0,_"
+case "$PACKAGE_VERSION" in
+    *.*.DEVEL )
+        RPM_VERSION=`echo "$PACKAGE_VERSION" |\
+            sed -e 's;^\([[^.]]*\)\.\([[^.]]*\).*;\1,\2,_,0,0,_;'`
+        ;;
+    *.*.SNAPSHOT.* )
+        RPM_VERSION=`echo "$PACKAGE_VERSION" |\
+            sed -e 's;^\([[^.]]*\)\.\([[^.]]*\).*;\1,\2,_,0,0,s;'`
+        ;;
+    *.*a* )
+        RPM_VERSION=`echo "$PACKAGE_VERSION" |\
+            sed -e 's;^;X;' \
+                -e 's;^X\([[^.]]*\)\.\([[^.]]*\)a\([[^.]]*\)\.\([[^.]]*\)$;\1,\2,a,\3,\4,_;' \
+                -e 's;^X\([[^.]]*\)\.\([[^.]]*\)a\([[^.]]*\)$;\1,\2,a,\3,0,_;'`
+        ;;
+    *.*b* )
+        RPM_VERSION=`echo "$PACKAGE_VERSION" |\
+            sed -e 's;^;X;' \
+                -e 's;^X\([[^.]]*\)\.\([[^.]]*\)b\([[^.]]*\)\.\([[^.]]*\)$;\1,\2,b,\3,\4,_;' \
+                -e 's;^X\([[^.]]*\)\.\([[^.]]*\)b\([[^.]]*\)$;\1,\2,b,\3,0,_;'`
+        ;;
+    *.*rc* )
+        RPM_VERSION=`echo "$PACKAGE_VERSION" |\
+            sed -e 's;^;X;' \
+                -e 's;^X\([[^.]]*\)\.\([[^.]]*\)rc\([[^.]]*\)\.\([[^.]]*\)$;\1,\2,c,\3,\4,_;' \
+                -e 's;^X\([[^.]]*\)\.\([[^.]]*\)rc\([[^.]]*\)$;\1,\2,c,\3,0,_;'`
+        ;;
+    *.*.* )
+        RPM_VERSION=`echo "$PACKAGE_VERSION" |\
+            sed -e 's;^;X;' \
+                -e 's;^X\([[^.]]*\)\.\([[^.]]*\)\.\([[^.]]*\)\.\([[^.]]*\)$;\1,\2,c,\3,\4,_;' \
+                -e 's;^X\([[^.]]*\)\.\([[^.]]*\)\.\([[^.]]*\)$;\1,\2,r,\3,0,_;'`
+        ;;
+esac
+RPM_TIMESTAMP=`echo "$PACKAGE_TIMESTAMP" |\
+    sed -e 's;^;X;' \
+        -e 's;^X\([[0-9]]*\)-\([[0-9]]*\)-\([[0-9]]*\) \([[0-9]]*\):\([[0-9]]*\)$;\1,\2,\3,\4,\5;' \
+        -e 's;^X\([[0-9]]*\)-\([[0-9]]*\)-\([[0-9]]*\) \([[0-9]]*\)$;\1,\2,\3,\4,0;' \
+        -e 's;^X\([[0-9]]*\)-\([[0-9]]*\)-\([[0-9]]*\)$;\1,\2,\3,0,0;' \
+        -e 's;^X\([[0-9]]*\)-\([[0-9]]*\)$;\1,\2,0,0,0;' \
+        -e 's;^X\([[0-9]]*\)$;\1,0,0,0,0;' \
+        -e 's;^X.*$;0,0,0,0,0;' \
+        -e 's;,0\([[0-9]]\);,\1;g'`
+RPM_VENDOR="'R','P','M','5'"
+AC_SUBST([RPM_VERSION])
+AC_SUBST([RPM_TIMESTAMP])
+AC_SUBST([RPM_VENDOR])
+
 dnl # set of available languages.
-ALL_LINGUAS="cs da de fi fr gl id is ja ko nb pl pt pt_BR ro ru sk sl sr@Latn sv tr uk"
+ALL_LINGUAS="cs da de es fi fr id is ja ko nb nl pa pl pt pt_BR ru sk sl sr@latin sv tr uk vi zh_TW"
 
 dnl ##
 dnl ## ==== TOOL-CHAIN CHECKS ====
@@ -389,7 +448,6 @@ AC_PATH_PROG(__INSTALL_INFO, install-info, /sbin/install-info, $MYPATH)
 AC_PATH_PROG(__LDCONFIG, ldconfig, /sbin/ldconfig, $MYPATH)
 AC_PATH_PROG(__LUA, lua, %{_bindir}/lua, $MYPATH)
 AC_PATH_PROG(__LZMA, lzma, %{_bindir}/lzma, $MYPATH)
-AC_PATH_PROG(__LZMASH, lzmash, %{_bindir}/lzmash, $MYPATH)
 AC_PATH_PROG(__LZOP, lzop, %{_bindir}/lzop, $MYPATH)
 AC_PATH_PROG(__MAKE, make, %{_bindir}/make, $MYPATH)
 AC_PATH_PROG(__MKDIR, mkdir, /bin/mkdir, $MYPATH)
@@ -417,8 +475,11 @@ AC_PATH_PROG(__OBJCOPY, objcopy, %{_bindir}/objcopy, $MYPATH)
 AC_PATH_PROG(__OBJDUMP, objdump, %{_bindir}/objdump, $MYPATH)
 AC_PATH_PROG(__STRIP, strip, %{_bindir}/strip, $MYPATH)
 
+AC_CHECK_PROGS(LIBTOOLIZE, libtoolize glibtoolize, libtoolize)
+AC_SUBST(LIBTOOLIZE)
+
 dnl # check for id -u
-AC_MSG_CHECKING(checking whether id supports -u)
+AC_MSG_CHECKING(whether id supports -u)
 if ${__ID} -u 2>&1 > /dev/null; then
     __ID_U="%{__id} -u"
     AC_MSG_RESULT(yes)
@@ -475,7 +536,7 @@ AC_CHECK_HEADERS([dnl
     machine/types.h mntent.h sys/mnttab.h sys/systemcfg.h dnl
     sys/param.h sys/mount.h sys/mntctl.h sys/vmount.h dnl
     libio.h err.h mcheck.h limits.h libgen.h float.h dnl
-    glob.h poll.h netinet/in.h arpa/inet.h dnl
+    glob.h poll.h netinet/in.h arpa/inet.h stdint.h inttypes.h dnl
 ])
 
 dnl # GNU gettext support
@@ -491,9 +552,14 @@ AC_CHECK_STATFS
 
 dnl # specific functions (specific)
 AC_CHECK_FUNC(setreuid,      [], [ AC_CHECK_LIB(ucb, setreuid, [if echo $LIBS | grep -- -lucb >/dev/null; then :; else LIBS="$LIBS -lc -lucb" USEUCB=y; fi]) ])
-AC_CHECK_FUNC(rand,          [], [ AC_CHECK_LIB(rand, rand, []) ])
+AC_CHECK_FUNC(rand,          [], [ AC_CHECK_LIB(rand, rand) ])
 AC_CHECK_FUNC(getdomainname, [], [ AC_CHECK_LIB(nsl, getdomainname) ])
 AC_CHECK_FUNC(socket,        [], [ AC_CHECK_LIB(socket, socket) ])
+
+dnl # specific functions (for linking against *external* Berkeley-DB under Solaris)
+AC_CHECK_FUNC(fdatasync,     [], [ AC_CHECK_LIB(rt, fdatasync) ])
+AC_CHECK_FUNC(sched_yield,   [], [ AC_CHECK_LIB(rt, sched_yield) ])
+AC_CHECK_FUNC(clock_gettime, [], [ AC_CHECK_LIB(rt, clock_gettime) ])
 
 dnl # specific functions (generic)
 AC_CHECK_FUNCS(vsnprintf snprintf)
@@ -533,7 +599,7 @@ dnl # non-standard Unix library search path order. This causes great
 dnl # problems when linking against the third-party libraries.
 dnl # Force ld(1) to stick standard Unix search path order.
 case "$host" in
-    *-*-darwin8* ) LDFLAGS="$LDFLAGS -Wl,-search_paths_first" ;;
+    *-*-darwin* ) LDFLAGS="$LDFLAGS -Wl,-search_paths_first" ;;
 esac
 
 dnl # FIXME: platform-hack: SCO and SunOS 4.x
@@ -597,7 +663,7 @@ AC_FUNC_MMAP
 
 dnl checks for library functions (generic)
 AC_CHECK_FUNCS([dnl
-    basename getaddrinfo getcwd getnameinfo getwd inet_aton dnl
+    basename getaddrinfo getcwd getnameinfo getwd inet_aton confstr dnl
     mtrace putenv realpath setenv clearenv stpcpy stpncpy strcspn strdup dnl
     strndup strerror strtol strtoul strspn strstr sighold sigrelse sigpause dnl
     sigprocmask sigemptyset sigaddset sigdelset sigsuspend madvise dnl
@@ -857,6 +923,21 @@ RPM_CHECK_LIB(
     [yes,external], [beecrypt],
     [], [ AC_MSG_ERROR([mandatory BeeCrypt library not found]) ])
 
+dnl # Mozilla NSS
+RPM_CHECK_LIB(
+    [Mozilla NSS], [nss],
+    [nss3 nss], [NSS_NoDB_Init], [nss.h],
+    [no,external], [],
+    [], [])
+
+dnl # OpenSSL
+RPM_CHECK_LIB(
+    [OpenSSL], [openssl],
+    [crypto], [ERR_load_CRYPTO_strings], [openssl/crypto.h],
+    [no,external], [],
+    [ AC_DEFINE(WITH_SSL, 1, [Define if building with OpenSSL])
+    ], [])
+
 dnl # Neon
 RPM_CHECK_LIB(
     [Neon], [neon],
@@ -973,10 +1054,31 @@ RPM_CHECK_LIB(
     [PCRE], [pcre],
     [pcre], [pcre_compile], [pcre.h],
     [no,external:none], [],
-    [ AC_CHECK_HEADERS(pcreposix.h)
+    [ dnl # make sure PCRE POSIX API can be really _USED_ by RPM
+      LIBS_SAVED="$LIBS"
+      LIBS="-lpcreposix $LIBS"
+      AC_LINK_IFELSE([
+          AC_LANG_PROGRAM([#include <pcreposix.h>], [(void)regcomp(0, 0, 0)])
+      ], [
+          AC_DEFINE(WITH_PCRE_POSIX, 1, [Define as 1 if PCRE's POSIX API is available])
+      ], [
+          LIBS="$LIBS_SAVED"
+      ])
+      dnl # enable PCRE native API support for embedded Lua
       if test ".$WITH_LUA" = .yes; then
           WITH_LUA_SUBDIR_DEF="$WITH_LUA_SUBDIR_DEF -DLUA_USE_PCRE"
       fi
+    ], [])
+
+dnl # XAR
+RPM_CHECK_LIB(
+    [XAR], [xar],
+    [xar], [xar_open], [xar.h],
+    [no,internal:external:none], [xar:include:lib],
+    [ if test ".$RPM_CHECK_LIB_LOCATION" = .internal; then
+          AC_DEFINE(HAVE_XAR_H, 1, [Have <xar.h> header])
+      fi
+      AC_MSG_WARN([XAR support is under development])
     ], [])
 
 dnl # DMalloc
@@ -1036,11 +1138,14 @@ AC_MSG_RESULT([$ROOT_GROUP])
 AC_SUBST(ROOT_GROUP)
 
 dnl # provide platform-specific "find-provides" and "find-requires" script symlinks
+target_os_gnu="%{nil}"
 if echo "$target_os" | grep '.*-gnulibc1' > /dev/null ; then
 	target_os=`echo "${target_os}" | sed 's/-gnulibc1$//'`
+	target_os_gnu="-gnulibc1"
 fi
 if echo "$target_os" | grep '.*-gnu' > /dev/null ; then
 	target_os=`echo "${target_os}" | sed 's/-gnu$//'`
+	target_os_gnu="-gnu"
 fi
 changequote(<, >)
 target_os_exact="${target_os}"
@@ -1105,7 +1210,7 @@ mint)		RPMCANONARCH=m68kmint ;;
 esac
 RPMCANONVENDOR="$target_vendor"
 case "${target_vendor}" in
-unknown|pc|ibm|redhat|pld|mandrake|conectiva|lvr|yellowdog|caos|crux)
+unknown|pc|ibm|redhat|pld|mandrake|conectiva|lvr|yellowdog|caos|crux|ark)
 	test -f /etc/redhat-release &&		RPMCANONVENDOR=redhat
 	test -f /etc/pld-release &&		RPMCANONVENDOR=pld
 	test -f /etc/mandrake-release &&	RPMCANONVENDOR=mandrake
@@ -1114,15 +1219,18 @@ unknown|pc|ibm|redhat|pld|mandrake|conectiva|lvr|yellowdog|caos|crux)
 	test -f /etc/yellowdog-release &&	RPMCANONVENDOR=yellowdog
 	test -f /etc/caos-release &&		RPMCANONVENDOR=caos
 	test -f /usr/bin/crux &&		RPMCANONVENDOR=crux
+	test -f /etc/ark-release &&		RPMCANONVENDOR=ark
 	;;
 esac
 RPMCANONOS="$target_os_noversion"
+RPMCANONGNU="$target_os_gnu"
 AC_SUBST(RPMCANONCOLOR)
 AC_SUBST(autorelocate_path)
 AC_SUBST(autorelocate_dcolor)
 AC_SUBST(RPMCANONARCH)
 AC_SUBST(RPMCANONVENDOR)
 AC_SUBST(RPMCANONOS)
+AC_SUBST(RPMCANONGNU)
 
 dnl # RPM installation user/group and uid/gid
 : ${RPMUSER=rpm}
@@ -1178,6 +1286,22 @@ AC_DEFINE_UNQUOTED(
     [Path to /usr]
 )
 AC_SUBST(usrprefix)
+
+dnl # Object file suffix (normally "o").
+objext="$ac_cv_objext"
+AC_SUBST(objext)
+
+dnl # Static library suffix (normally "a").
+libext="$acl_cv_libext"
+AC_SUBST(libext)
+
+dnl # Shared library suffix (normally "so").
+shlibext="$acl_cv_shlibext"
+AC_SUBST(shlibext)
+
+dnl # Executable file suffix (normally "").
+exeext="$ac_exeext"
+AC_SUBST(exeext)
 
 dnl # determine RPM database directory path
 AC_MSG_CHECKING([for RPM database directory])
@@ -1343,7 +1467,7 @@ AC_CONFIG_FILES([ po/Makefile.in
     scripts/macros.python tools/Makefile misc/Makefile doc/Makefile
     doc/manual/Makefile doc/fr/Makefile doc/ja/Makefile doc/ko/Makefile
     doc/pl/Makefile doc/ru/Makefile doc/sk/Makefile python/Makefile
-    python/rpm/Makefile scripts/rpm.pc
+    python/rpm/Makefile scripts/rpm.pc lib/rpmversion.h
     rpmconstant/Makefile
 ])
 
