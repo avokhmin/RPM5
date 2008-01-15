@@ -33,6 +33,11 @@
 %_usrlibrpm		@USRLIBRPM@
 %_etcrpm		@SYSCONFIGDIR@
 
+%__objext		@objext@
+%__libext		@libext@
+%__shlibext		@shlibext@
+%__exeext		@exeext@%{nil}
+
 %_rpmhome		%{_usrlibrpm}
 
 #==============================================================================
@@ -64,7 +69,6 @@
 %__lua			@__LUA@
 %__ln_s			@LN_S@
 %__lzma			@__LZMA@
-%__lzmash		@__LZMASH@
 %__lzop			@__LZOP@
 %__make			@__MAKE@
 %make			%{__make}
@@ -86,6 +90,7 @@
 %__tar			@__TAR@
 %__tclsh		@__TCLSH@
 %__unzip		@__UNZIP@
+%__vcheck		%{__perl} %{_rpmhome}/vcheck
 %__wget			@__WGET@
 %__xar			@__XAR@
 
@@ -106,7 +111,7 @@
 %__strip		@__STRIP@
 
 # XXX avoid failures if tools are not installed when rpm is built.
-%__libtoolize		libtoolize
+%__libtoolize		@LIBTOOLIZE@
 %__aclocal		aclocal
 %__autoheader		autoheader
 %__automake		automake
@@ -163,8 +168,8 @@
 %bcond_without()	%{expand:%%{!?_without_%{1}:%%global with_%{1} 1}}
 #
 #==============================================================================
-# ---- Required rpmrc macros.
-#	Macros that used to be initialized as a side effect of rpmrc parsing.
+# ---- Required macros.
+#	Macros that used to be initialized as a side effect of parsing.
 #	These are the default values that can be overridden by other
 #	(e.g. per-platform, per-system, per-packager, per-package) macros.
 #
@@ -245,8 +250,8 @@ package or when debugging this package.\
 %_topdir		@PKGSRCDIR_MACRO@
 
 #==============================================================================
-# ---- Optional rpmrc macros.
-#	Macros that are initialized as a side effect of rpmrc and/or spec
+# ---- Optional macros.
+#	Macros that are initialized as a side effect of spec
 #	file parsing.
 #
 #	Configurable build root path, same as BuildRoot: in a specfile.
@@ -349,7 +354,7 @@ package or when debugging this package.\
 #	Compression type and level for source/binary package payloads.
 #		"w9.gzdio"	gzip level 9 (default).
 #		"w9.bzdio"	bzip2 level 9.
-#		"w9.lzdio"	lzma level 9.
+#		"w7.lzdio"	lzma level 7.
 #
 #%_source_payload	w9.gzdio
 #%_binary_payload	w9.gzdio
@@ -391,11 +396,14 @@ package or when debugging this package.\
 # a file and apply using patch(1).
 #
 
-%Xpatch(b:p:P:REz:F:d:) \
-%define patch_file	%{P:%{-P:%{-P*}}%{!-P:0}} \
-%define patch_suffix	%{-b:-b --suffix %{-b*}} %{-z:--suffix %{-z*}} \
-  echo "Patch #%{-P:%{-P*}}%{!-P:0} (%{basename:%patch_file}):" \
-  %{uncompress:%patch_file} | %{__patch} -s %{-p:-p%{-p*}} %{-F:-F%{-F*}} %{-d:-d%{-d*}} %patch_suffix %{-R} %{-E}
+%patch(b:p:P:REz:F:d:) \
+%define __patch_number  %{-P:%{-P*}}%{!-P:0} \
+%define __patch_file    %{P:%{__patch_number}} \
+%define __patch_suffix  %{-b:-b --suffix %{-b*}} %{-z:--suffix %{-z*}} \
+%define __patch_options -s %{-p:-p%{-p*}} %{-F:-F%{-F*}} %{-d:-d%{-d*}} %{-R} %{-E} %{__patch_suffix} \
+echo "Patch #%{__patch_number} (%{basename:%{__patch_file}}):"\
+%{uncompress:%{__patch_file}} | %{__patch} %{__patch_options}\
+%{nil}
 
 #
 # Script gets packaged file list on input and buildroot as first parameter.
@@ -426,6 +434,10 @@ package or when debugging this package.\
 #
 # Use internal dependency generator rather than external helpers?
 %_use_internal_dependency_generator	2
+
+#
+# Disabler for adding /bin/sh scriptlet interpreter dependencies.
+%_disable_shell_interpreter_deps	0
 
 #
 # Filter GLIBC_PRIVATE Provides: and Requires:
@@ -518,6 +530,14 @@ print (t)\
 #
 # Path to magic file used for file classification.
 %_rpmfc_magic_path	%{_rpmhome}/magic
+
+#
+# Colon separated list of permitted arbitrary tag names
+%_arbitrary_tags	Class:Track:Trackprog:Foo:Bar:Baz
+
+#
+# Byte size of line buffer for .spec file parsing
+%_spec_line_buffer_size 100000
 
 #==============================================================================
 # ---- Database configuration macros.
@@ -659,8 +679,8 @@ print (t)\
 
 # database tag configuration
 %_dbi_tags                      %{expand:%%{_dbi_tags_%{_dbapi_used}}}
-%_dbi_tags_3                    Packages:Name:Basenames:Group:Requirename:Providename:Conflictname:Triggername:Dirnames:Requireversion:Provideversion:Installtid:Sigmd5:Sha1header:Filemd5s:Pubkeys:Packagecolor:Nvra:Sourcepkgid
-%_dbi_tags_4                    Packages:Name:Basenames:Group:Requirename:Providename:Conflictname:Triggername:Dirnames:Requireversion:Provideversion:Installtid:Sigmd5:Sha1header:Filemd5s:Pubkeys:Packagecolor:Nvra:Sourcepkgid
+%_dbi_tags_3                    Packages:Name:Basenames:Group:Requirename:Providename:Conflictname:Triggername:Dirnames:Requireversion:Provideversion:Installtid:Sigmd5:Sha1header:Filedigests:Pubkeys:Packagecolor:Nvra:Sourcepkgid
+%_dbi_tags_4                    Packages:Name:Basenames:Group:Requirename:Providename:Conflictname:Triggername:Dirnames:Requireversion:Provideversion:Installtid:Sigmd5:Sha1header:Filedigests:Pubkeys:Packagecolor:Nvra:Sourcepkgid
 
 # database configuration: Berkeley-DB [dbapi 3 hooks]
 %_dbi_config_3                  %{_dbi_btconfig}
@@ -683,7 +703,8 @@ print (t)\
 %_dbi_config_3_Triggername      %{_dbi_btconfig}
 %_dbi_config_3_Packages         %{_dbi_btconfig} lockdbfd
 %_dbi_config_3_Depends          %{_dbi_btconfig} temporary private
-%_dbi_config_3_Nvra		%{_dbi_btconfig} noload
+%_dbi_config_3_Nvra             %{_dbi_btconfig} noload
+%_dbi_config_3_Sourcepkgid      %{_dbi_btconfig}
 
 # database configuration: SQLite [dbapi 4 hooks]
 %_dbi_config_4                  %{_dbi_sqlconfig}
@@ -706,7 +727,8 @@ print (t)\
 %_dbi_config_4_Triggername      %{_dbi_sqlconfig}
 %_dbi_config_4_Packages         %{_dbi_sqlconfig}
 %_dbi_config_4_Depends          %{_dbi_sqlconfig} temporary private
-%_dbi_config_4_Nvra		%{_dbi_btconfig} noload
+%_dbi_config_4_Nvra             %{_dbi_sqlconfig} noload
+%_dbi_config_4_Sourcepkgid      %{_dbi_sqlconfig}
 
 # database configuration [code entry hooks]
 %_dbi_config                    %{expand:%%{_dbi_config_%{_dbapi_used}}}
@@ -729,6 +751,8 @@ print (t)\
 %_dbi_config_Triggername        %{expand:%%{_dbi_config_%{_dbapi_used}_Triggername}}
 %_dbi_config_Packages           %{expand:%%{_dbi_config_%{_dbapi_used}_Packages}}
 %_dbi_config_Depends            %{expand:%%{_dbi_config_%{_dbapi_used}_Depends}}
+%_dbi_config_Nvra               %{expand:%%{_dbi_config_%{_dbapi_used}_Nvra}}
+%_dbi_config_Sourcepkgid        %{expand:%%{_dbi_config_%{_dbapi_used}_Sourcepkgid}}
 
 # Database API configuration:
 #
@@ -857,7 +881,7 @@ print (t)\
 
 #	The "transactional rollback" directory in which erased packages will
 #	be saved when using the --repackage option.
-%_repackage_dir		%{_topdir}/TR
+%_repackage_dir		%{_var}/spool/repackage
 
 #	A path (i.e. URL) prefix that is pre-pended to %{_repackage_dir}.
 %_repackage_root	%{nil}
@@ -951,6 +975,10 @@ print (t)\
 # Path for rpm -qH (default is /usr/share/comps/%{_arch}/hdlist)
 %_query_hdlist_path	%{_datadir}/comps/%{_arch}/hdlist
 
+#
+# Permit network access? (".fdio" prohibits network access)
+%_rpmgio	.fdio
+
 #==============================================================================
 # ---- Run-time probe dependency macros.
 
@@ -1022,7 +1050,7 @@ print (t)\
 %_build_arch		@RPMCANONARCH@
 %_vendor		@RPMCANONVENDOR@
 %_os			@RPMCANONOS@
-%_gnu			-gnu
+%_gnu			@RPMCANONGNU@
 
 %_host_platform		%{_host_cpu}-%{_host_vendor}-%{_host_os}%{?_gnu}
 %_build_platform	%{_build_cpu}-%{_build_vendor}-%{_build_os}%{?_gnu}
@@ -1120,7 +1148,7 @@ print (t)\
 %__spec_install_args	%{___build_args}
 %__spec_install_cmd	%{___build_cmd}
 %__spec_install_pre	%{___build_pre}\
-%{?buildroot:%{__rm} -rf '%{buildroot}'}
+%{?buildroot:%{__rm} -rf '%{buildroot}'; %{__mkdir_p} '%{buildroot}'}
 %__spec_install_body	%{___build_body}
 %__spec_install_post\
 %{?__debug_package:%{__debug_install_post}}\
@@ -1167,7 +1195,7 @@ print (t)\
 %__spec_clean_args	%{___build_args}
 %__spec_clean_cmd	%{___build_cmd}
 %__spec_clean_pre	%{___build_pre}
-%__spec_clean_body	%{__rm} -rf '%{buildroot}'\
+%__spec_clean_body	%{?buildroot:%{__rm} -rf '%{buildroot}'}\
 %{nil}
 %__spec_clean_post	%{nil}
 %__spec_clean_template	#!%{__spec_clean_cmd}\
@@ -1177,6 +1205,27 @@ print (t)\
 #%{__spec_clean_body}\
 #%{__spec_clean_post}\
 #%{nil}
+
+%__spec_track_shell    %{___build_shell}
+%__spec_track_args     %{___build_args}
+%__spec_track_cmd      %{___build_cmd}
+%__spec_track_pre      %{__vcheck} %{verbose:--verbose}%{!verbose:--noverbose} -f - << GO_SYSIN_DD
+%__spec_track_body     %{___build_body}
+%__spec_track_post     GO_SYSIN_DD\
+%{nil}
+%__spec_track_template #!%{__spec_track_shell}\
+%{__spec_track_pre}\
+%{nil}
+
+%__spec_sanitycheck_shell    %{___build_shell}
+%__spec_sanitycheck_args     %{___build_args}
+%__spec_sanitycheck_cmd      %{___build_cmd}
+%__spec_sanitycheck_pre      %{___build_pre}
+%__spec_sanitycheck_body     %{___build_body}
+%__spec_sanitycheck_post     %{___build_post}
+%__spec_sanitycheck_template #!%{__spec_sanitycheck_shell}\
+%{__spec_sanitycheck_pre}\
+%{nil}
 
 %__spec_rmbuild_shell	%{___build_shell}
 %__spec_rmbuild_args	%{___build_args}
@@ -1373,6 +1422,9 @@ done \
 #
 %ix86   i386 i486 i586 i686 pentium3 pentium4 athlon
 
+# same thing for arm
+%arm    arm armv3 armv3l armv3b armv4 armv4l armv4b armv5 armv5l armv5b armv5te armv5tel armv5teb xscale armv6 armv6l
+
 #------------------------------------------------------------------------
 # Use in %install to generate locale specific file lists. For example,
 #
@@ -1453,8 +1505,8 @@ end\
 
 # Useful macros for building *.rpm python packages (for python > 1.6).
 #
-%python_sitearch %(%{__python} -c "from distutils.sysconfig import get_python_lib; print get_python_lib(1)")
-%python_sitelib	%(%{__python} -c "from distutils.sysconfig import get_python_lib; print get_python_lib()")
+%python_sitearch %(%{__python} -c "import os; from distutils.sysconfig import get_python_lib; lib=get_python_lib(1); print os.path.islink(lib) and os.path.abspath(os.path.join(os.path.dirname(lib),os.readlink(lib))) or lib")
+%python_sitelib	%(%{__python} -c "import os; from distutils.sysconfig import get_python_lib; lib=get_python_lib(); print os.path.islink(lib) and os.path.abspath(os.path.join(os.path.dirname(lib),os.readlink(lib))) or lib")
 %python_version	%(%{__python} -c "import sys; print(sys.version[0:3])")
 
 %py_compile(O)  \

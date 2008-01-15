@@ -5,19 +5,18 @@
 
 #include "system.h"
 
-#include <rpmio_internal.h>
+#include <rpmio_internal.h>	/* XXX urlPath, fdGetCpioPos */
+#include <rpmcb.h>		/* XXX fnpyKey */
+#include <rpmtag.h>
 #include <rpmlib.h>
 
 #include "cpio.h"
 #include "tar.h"
 
+#define	_RPMFI_INTERNAL
 #include "fsm.h"
 #define	fsmUNSAFE	fsmStage
 
-#include "rpmerr.h"
-
-#define	_RPMFI_INTERNAL
-#include "rpmfi.h"
 #include "rpmte.h"
 #include "rpmts.h"
 #include "rpmsq.h"
@@ -302,7 +301,8 @@ void * dnlInitIterator(/*@special@*/ const FSM_t fsm,
 
 	/* Exclude parent directories that are explicitly included. */
 	for (i = 0; i < fi->fc; i++) {
-	    int dil, dnlen, bnlen;
+	    int dil;
+	    size_t dnlen, bnlen;
 
 	    if (!S_ISDIR(fi->fmodes[i]))
 		continue;
@@ -312,7 +312,7 @@ void * dnlInitIterator(/*@special@*/ const FSM_t fsm,
 	    bnlen = strlen(fi->bnl[i]);
 
 	    for (j = 0; j < fi->dc; j++) {
-		int jlen;
+		size_t jlen;
 
 		if (!dnli->active[j] || j == dil)
 		    /*@innercontinue@*/ continue;
@@ -339,14 +339,14 @@ void * dnlInitIterator(/*@special@*/ const FSM_t fsm,
 		if (!dnli->active[i]) continue;
 		if (j == 0) {
 		    j = 1;
-		    rpmMessage(RPMMESS_DEBUG,
+		    rpmlog(RPMLOG_DEBUG,
 	D_("========== Directories not explicitly included in package:\n"));
 		}
 		(void) urlPath(fi->dnl[i], &dnl);
-		rpmMessage(RPMMESS_DEBUG, "%10d %s\n", i, dnl);
+		rpmlog(RPMLOG_DEBUG, "%10d %s\n", i, dnl);
 	    }
 	    if (j)
-		rpmMessage(RPMMESS_DEBUG, "==========\n");
+		rpmlog(RPMLOG_DEBUG, "==========\n");
 	}
     }
     return dnli;
@@ -760,24 +760,44 @@ int fsmMapAttrs(FSM_t fsm)
 	mode_t perms = (S_ISDIR(st->st_mode) ? fi->dperms : fi->fperms);
 	mode_t finalMode = (fi->fmodes ? fi->fmodes[i] : perms);
 	dev_t finalRdev = (fi->frdevs ? fi->frdevs[i] : 0);
-	int_32 finalMtime = (fi->fmtimes ? fi->fmtimes[i] : 0);
+	uint32_t finalMtime = (fi->fmtimes ? fi->fmtimes[i] : 0);
 	uid_t uid = fi->uid;
 	gid_t gid = fi->gid;
 
+#if defined(RPM_VENDOR_OPENPKG) /* no-owner-group-on-srpm-install */
+	/* Make sure OpenPKG RPM does not try to set file owner/group on files during
+	   installation of _source_ RPMs. Instead, let it use the current
+	   run-time owner/group, because most of the time the owner/group in
+	   the source RPM (which is the owner/group of the files as staying on
+	   the package author system) is not existing on the target system, of
+	   course. */
+#endif
 	if (fi->fuser && unameToUid(fi->fuser[i], &uid)) {
+#if defined(RPM_VENDOR_OPENPKG) /* no-owner-group-on-srpm-install */
+	    if (!headerIsEntry(fi->h, RPMTAG_SOURCEPACKAGE)) {
+#endif
 	    if (fsm->goal == FSM_PKGINSTALL)
-		rpmMessage(RPMMESS_WARNING,
+		rpmlog(RPMLOG_WARNING,
 		    _("user %s does not exist - using root\n"), fi->fuser[i]);
 	    uid = 0;
 	    finalMode &= ~S_ISUID;      /* turn off suid bit */
+#if defined(RPM_VENDOR_OPENPKG) /* no-owner-group-on-srpm-install */
+	    }
+#endif
 	}
 
 	if (fi->fgroup && gnameToGid(fi->fgroup[i], &gid)) {
+#if defined(RPM_VENDOR_OPENPKG) /* no-owner-group-on-srpm-install */
+	    if (!headerIsEntry(fi->h, RPMTAG_SOURCEPACKAGE)) {
+#endif
 	    if (fsm->goal == FSM_PKGINSTALL)
-		rpmMessage(RPMMESS_WARNING,
+		rpmlog(RPMLOG_WARNING,
 		    _("group %s does not exist - using root\n"), fi->fgroup[i]);
 	    gid = 0;
 	    finalMode &= ~S_ISGID;	/* turn off sgid bit */
+#if defined(RPM_VENDOR_OPENPKG) /* no-owner-group-on-srpm-install */
+	    }
+#endif
 	}
 
 	if (fsm->mapFlags & CPIO_MAP_MODE)
@@ -1226,7 +1246,7 @@ static int fsmRmdirs(/*@special@*/ /*@partial@*/ FSM_t fsm)
     /*@-observertrans -dependenttrans@*/
     if (fsm->ldn != NULL && fsm->dnlx != NULL)
     while ((fsm->path = dnlNextIterator(dnli)) != NULL) {
-	int dnlen = strlen(fsm->path);
+	size_t dnlen = strlen(fsm->path);
 	char * te;
 
 	dc = dnlIndex(dnli);
@@ -1298,7 +1318,7 @@ static int fsmMkdirs(/*@special@*/ /*@partial@*/ FSM_t fsm)
     /*@-observertrans -dependenttrans@*/
     if (fsm->dnlx != NULL)
     while ((fsm->path = dnlNextIterator(dnli)) != NULL) {
-	int dnlen = strlen(fsm->path);
+	size_t dnlen = strlen(fsm->path);
 	char * te;
 
 	dc = dnlIndex(dnli);
@@ -1358,11 +1378,11 @@ static int fsmMkdirs(/*@special@*/ /*@partial@*/ FSM_t fsm)
 			rc = fsmNext(fsm, FSM_LSETFCON);
 		    }
 		    if (fsm->fcontext == NULL)
-			rpmMessage(RPMMESS_DEBUG,
+			rpmlog(RPMLOG_DEBUG,
 			    D_("%s directory created with perms %04o, no context.\n"),
 			    fsm->path, (unsigned)(st->st_mode & 07777));
 		    else
-			rpmMessage(RPMMESS_DEBUG,
+			rpmlog(RPMLOG_DEBUG,
 			    D_("%s directory created with perms %04o, context %s.\n"),
 			    fsm->path, (unsigned)(st->st_mode & 07777),
 			    fsm->fcontext);
@@ -1458,7 +1478,7 @@ int fsmStage(FSM_t fsm, fileStage stage)
 	/* do nothing */
     } else if (stage & FSM_INTERNAL) {
 	if (_fsm_debug && !(stage & FSM_SYSCALL))
-	    rpmMessage(RPMMESS_DEBUG, " %8s %06o%3d (%4d,%4d)%12lu %s %s\n",
+	    rpmlog(RPMLOG_DEBUG, " %8s %06o%3d (%4d,%4d)%12lu %s %s\n",
 		cur,
 		(unsigned)st->st_mode, (int)st->st_nlink,
 		(int)st->st_uid, (int)st->st_gid, (unsigned long)st->st_size,
@@ -1470,7 +1490,7 @@ int fsmStage(FSM_t fsm, fileStage stage)
 	    (void) urlPath(fsm->path, &apath);
 	fsm->stage = stage;
 	if (_fsm_debug || !(stage & FSM_VERBOSE))
-	    rpmMessage(RPMMESS_DEBUG, "%-8s  %06o%3d (%4d,%4d)%12lu %s %s\n",
+	    rpmlog(RPMLOG_DEBUG, "%-8s  %06o%3d (%4d,%4d)%12lu %s %s\n",
 		cur,
 		(unsigned)st->st_mode, (int)st->st_nlink,
 		(int)st->st_uid, (int)st->st_gid, (unsigned long)st->st_size,
@@ -1666,7 +1686,7 @@ if (!(fsmGetFi(fsm)->mapflags & CPIO_PAYLOAD_EXTRACT)) {
 	if (fsm->ix < 0) {
 	    if (fsm->goal == FSM_PKGINSTALL) {
 #if 0
-		rpmMessage(RPMMESS_WARNING,
+		rpmlog(RPMLOG_WARNING,
 		    _("archive file %s was not found in header file list\n"),
 			fsm->path);
 #endif
@@ -1810,7 +1830,7 @@ if (!(fsm->mapFlags & CPIO_ALL_HARDLINKS)) break;
 		fsm->path = fsmFsPath(fsm, st, NULL, fsm->osuffix);
 		rc = fsmNext(fsm, FSM_RENAME);
 		if (!rc)
-		    rpmMessage(RPMMESS_WARNING,
+		    rpmlog(RPMLOG_WARNING,
 			_("%s saved as %s\n"),
 				(fsm->opath ? fsm->opath : ""),
 				(fsm->path ? fsm->path : ""));
@@ -1878,7 +1898,7 @@ assert(fsm->lpath != NULL);
 	    rpmts ts = fsmGetTs(fsm);
 	    rpmfi fi = fsmGetFi(fsm);
 	    void * ptr;
-	    unsigned long long archivePos = fdGetCpioPos(fsm->cfd);
+	    uint64_t archivePos = fdGetCpioPos(fsm->cfd);
 	    if (archivePos > fi->archivePos) {
 		fi->archivePos = archivePos;
 		ptr = rpmtsNotify(ts, fi->te, RPMCALLBACK_INST_PROGRESS,
@@ -1931,7 +1951,7 @@ assert(fsm->lpath != NULL);
 	    fsm->path = fsmFsPath(fsm, st, NULL, fsm->osuffix);
 	    rc = fsmNext(fsm, FSM_RENAME);
 	    if (!rc) {
-		rpmMessage(RPMMESS_WARNING, _("%s saved as %s\n"),
+		rpmlog(RPMLOG_WARNING, _("%s saved as %s\n"),
 				(fsm->opath ? fsm->opath : ""),
 				(fsm->path ? fsm->path : ""));
 	    }
@@ -1956,14 +1976,14 @@ assert(fsm->lpath != NULL);
 			    /*@innerbreak@*/ break;
 
 			/* XXX common error message. */
-			rpmError(
-			    (strict_erasures ? RPMERR_RMDIR : RPMDEBUG_RMDIR),
+			rpmlog(
+			    (strict_erasures ? RPMLOG_ERR : RPMLOG_DEBUG),
 			    _("%s rmdir of %s failed: Directory not empty\n"), 
 				rpmfiTypeString(fi), fsm->path);
 			/*@innerbreak@*/ break;
 		    default:
-			rpmError(
-			    (strict_erasures ? RPMERR_RMDIR : RPMDEBUG_RMDIR),
+			rpmlog(
+			    (strict_erasures ? RPMLOG_ERR : RPMLOG_DEBUG),
 				_("%s rmdir of %s failed: %s\n"),
 				rpmfiTypeString(fi), fsm->path, strerror(errno));
 			/*@innerbreak@*/ break;
@@ -1977,8 +1997,8 @@ assert(fsm->lpath != NULL);
 			    /*@innerbreak@*/ break;
 			/*@fallthrough@*/
 		    default:
-			rpmError(
-			    (strict_erasures ? RPMERR_UNLINK : RPMDEBUG_UNLINK),
+			rpmlog(
+			    (strict_erasures ? RPMLOG_ERR : RPMLOG_DEBUG),
 				_(" %s: unlink of %s failed: %s\n"),
 				rpmfiTypeString(fi), fsm->path, strerror(errno));
 			/*@innerbreak@*/ break;
@@ -2004,7 +2024,7 @@ if (!(fsmGetFi(fsm)->mapflags & CPIO_PAYLOAD_EXTRACT)) {
 			(void) Unlink(fsm->opath);
 		else if (fsm->nsuffix) {
 		    const char * opath = fsmFsPath(fsm, st, NULL, NULL);
-		    rpmMessage(RPMMESS_WARNING, _("%s created as %s\n"),
+		    rpmlog(RPMLOG_WARNING, _("%s created as %s\n"),
 				(opath ? opath : ""),
 				(fsm->path ? fsm->path : ""));
 		    opath = _free(opath);
@@ -2149,7 +2169,7 @@ if (!(fsmGetFi(fsm)->mapflags & CPIO_PAYLOAD_EXTRACT)) {
 	}
 	rc = Unlink(fsm->path);
 	if (_fsm_debug && (stage & FSM_SYSCALL))
-	    rpmMessage(RPMMESS_DEBUG, " %8s (%s) %s\n", cur,
+	    rpmlog(RPMLOG_DEBUG, " %8s (%s) %s\n", cur,
 		fsm->path, (rc < 0 ? strerror(errno) : ""));
 	if (rc < 0)
 	    rc = (errno == ENOENT ? CPIOERR_ENOENT : CPIOERR_UNLINK_FAILED);
@@ -2180,14 +2200,14 @@ if (!(fsmGetFi(fsm)->mapflags & CPIO_PAYLOAD_EXTRACT)) {
 	}
 #endif
 	if (_fsm_debug && (stage & FSM_SYSCALL))
-	    rpmMessage(RPMMESS_DEBUG, " %8s (%s, %s) %s\n", cur,
+	    rpmlog(RPMLOG_DEBUG, " %8s (%s, %s) %s\n", cur,
 		fsm->opath, fsm->path, (rc < 0 ? strerror(errno) : ""));
 	if (rc < 0)	rc = CPIOERR_RENAME_FAILED;
 	break;
     case FSM_MKDIR:
 	rc = Mkdir(fsm->path, (st->st_mode & 07777));
 	if (_fsm_debug && (stage & FSM_SYSCALL))
-	    rpmMessage(RPMMESS_DEBUG, " %8s (%s, 0%04o) %s\n", cur,
+	    rpmlog(RPMLOG_DEBUG, " %8s (%s, 0%04o) %s\n", cur,
 		fsm->path, (unsigned)(st->st_mode & 07777),
 		(rc < 0 ? strerror(errno) : ""));
 	if (rc < 0)	rc = CPIOERR_MKDIR_FAILED;
@@ -2195,7 +2215,7 @@ if (!(fsmGetFi(fsm)->mapflags & CPIO_PAYLOAD_EXTRACT)) {
     case FSM_RMDIR:
 	rc = Rmdir(fsm->path);
 	if (_fsm_debug && (stage & FSM_SYSCALL))
-	    rpmMessage(RPMMESS_DEBUG, " %8s (%s) %s\n", cur,
+	    rpmlog(RPMLOG_DEBUG, " %8s (%s) %s\n", cur,
 		fsm->path, (rc < 0 ? strerror(errno) : ""));
 	if (rc < 0)
 	    switch (errno) {
@@ -2212,7 +2232,7 @@ if (!(fsmGetFi(fsm)->mapflags & CPIO_PAYLOAD_EXTRACT)) {
 	(void) urlPath(fsm->path, &fsmpath);	/* XXX fsm->path */
 	rc = lsetfilecon(fsmpath, (security_context_t)fsm->fcontext);
 	if (_fsm_debug && (stage & FSM_SYSCALL))
-	    rpmMessage(RPMMESS_DEBUG, " %8s (%s, %s) %s\n", cur,
+	    rpmlog(RPMLOG_DEBUG, " %8s (%s, %s) %s\n", cur,
 		fsm->path, fsm->fcontext,
 		(rc < 0 ? strerror(errno) : ""));
 	if (rc < 0) rc = (errno == EOPNOTSUPP ? 0 : CPIOERR_LSETFCON_FAILED);
@@ -2220,7 +2240,7 @@ if (!(fsmGetFi(fsm)->mapflags & CPIO_PAYLOAD_EXTRACT)) {
     case FSM_CHOWN:
 	rc = Chown(fsm->path, st->st_uid, st->st_gid);
 	if (_fsm_debug && (stage & FSM_SYSCALL))
-	    rpmMessage(RPMMESS_DEBUG, " %8s (%s, %d, %d) %s\n", cur,
+	    rpmlog(RPMLOG_DEBUG, " %8s (%s, %d, %d) %s\n", cur,
 		fsm->path, (int)st->st_uid, (int)st->st_gid,
 		(rc < 0 ? strerror(errno) : ""));
 	if (rc < 0)	rc = CPIOERR_CHOWN_FAILED;
@@ -2229,7 +2249,7 @@ if (!(fsmGetFi(fsm)->mapflags & CPIO_PAYLOAD_EXTRACT)) {
 #if ! CHOWN_FOLLOWS_SYMLINK
 	rc = Lchown(fsm->path, st->st_uid, st->st_gid);
 	if (_fsm_debug && (stage & FSM_SYSCALL))
-	    rpmMessage(RPMMESS_DEBUG, " %8s (%s, %d, %d) %s\n", cur,
+	    rpmlog(RPMLOG_DEBUG, " %8s (%s, %d, %d) %s\n", cur,
 		fsm->path, (int)st->st_uid, (int)st->st_gid,
 		(rc < 0 ? strerror(errno) : ""));
 	if (rc < 0)	rc = CPIOERR_CHOWN_FAILED;
@@ -2238,7 +2258,7 @@ if (!(fsmGetFi(fsm)->mapflags & CPIO_PAYLOAD_EXTRACT)) {
     case FSM_CHMOD:
 	rc = Chmod(fsm->path, (st->st_mode & 07777));
 	if (_fsm_debug && (stage & FSM_SYSCALL))
-	    rpmMessage(RPMMESS_DEBUG, " %8s (%s, 0%04o) %s\n", cur,
+	    rpmlog(RPMLOG_DEBUG, " %8s (%s, 0%04o) %s\n", cur,
 		fsm->path, (unsigned)(st->st_mode & 07777),
 		(rc < 0 ? strerror(errno) : ""));
 	if (rc < 0)	rc = CPIOERR_CHMOD_FAILED;
@@ -2249,7 +2269,7 @@ if (!(fsmGetFi(fsm)->mapflags & CPIO_PAYLOAD_EXTRACT)) {
 	    stamp.modtime = st->st_mtime;
 	    rc = Utime(fsm->path, &stamp);
 	    if (_fsm_debug && (stage & FSM_SYSCALL))
-		rpmMessage(RPMMESS_DEBUG, " %8s (%s, 0x%x) %s\n", cur,
+		rpmlog(RPMLOG_DEBUG, " %8s (%s, 0x%x) %s\n", cur,
 			fsm->path, (unsigned)st->st_mtime,
 			(rc < 0 ? strerror(errno) : ""));
 	    if (rc < 0)	rc = CPIOERR_UTIME_FAILED;
@@ -2258,21 +2278,21 @@ if (!(fsmGetFi(fsm)->mapflags & CPIO_PAYLOAD_EXTRACT)) {
     case FSM_SYMLINK:
 	rc = Symlink(fsm->lpath, fsm->path);
 	if (_fsm_debug && (stage & FSM_SYSCALL))
-	    rpmMessage(RPMMESS_DEBUG, " %8s (%s, %s) %s\n", cur,
+	    rpmlog(RPMLOG_DEBUG, " %8s (%s, %s) %s\n", cur,
 		fsm->lpath, fsm->path, (rc < 0 ? strerror(errno) : ""));
 	if (rc < 0)	rc = CPIOERR_SYMLINK_FAILED;
 	break;
     case FSM_LINK:
 	rc = Link(fsm->opath, fsm->path);
 	if (_fsm_debug && (stage & FSM_SYSCALL))
-	    rpmMessage(RPMMESS_DEBUG, " %8s (%s, %s) %s\n", cur,
+	    rpmlog(RPMLOG_DEBUG, " %8s (%s, %s) %s\n", cur,
 		fsm->opath, fsm->path, (rc < 0 ? strerror(errno) : ""));
 	if (rc < 0)	rc = CPIOERR_LINK_FAILED;
 	break;
     case FSM_MKFIFO:
 	rc = Mkfifo(fsm->path, (st->st_mode & 07777));
 	if (_fsm_debug && (stage & FSM_SYSCALL))
-	    rpmMessage(RPMMESS_DEBUG, " %8s (%s, 0%04o) %s\n", cur,
+	    rpmlog(RPMLOG_DEBUG, " %8s (%s, 0%04o) %s\n", cur,
 		fsm->path, (unsigned)(st->st_mode & 07777),
 		(rc < 0 ? strerror(errno) : ""));
 	if (rc < 0)	rc = CPIOERR_MKFIFO_FAILED;
@@ -2282,7 +2302,7 @@ if (!(fsmGetFi(fsm)->mapflags & CPIO_PAYLOAD_EXTRACT)) {
 	rc = Mknod(fsm->path, (st->st_mode & ~07777), st->st_rdev);
 	/*@=unrecog =portability @*/
 	if (_fsm_debug && (stage & FSM_SYSCALL))
-	    rpmMessage(RPMMESS_DEBUG, " %8s (%s, 0%o, 0x%x) %s\n", cur,
+	    rpmlog(RPMLOG_DEBUG, " %8s (%s, 0%o, 0x%x) %s\n", cur,
 		fsm->path, (unsigned)(st->st_mode & ~07777),
 		(unsigned)st->st_rdev,
 		(rc < 0 ? strerror(errno) : ""));
@@ -2291,7 +2311,7 @@ if (!(fsmGetFi(fsm)->mapflags & CPIO_PAYLOAD_EXTRACT)) {
     case FSM_LSTAT:
 	rc = Lstat(fsm->path, ost);
 	if (_fsm_debug && (stage & FSM_SYSCALL) && rc && errno != ENOENT)
-	    rpmMessage(RPMMESS_DEBUG, " %8s (%s, ost) %s\n", cur,
+	    rpmlog(RPMLOG_DEBUG, " %8s (%s, ost) %s\n", cur,
 		fsm->path, (rc < 0 ? strerror(errno) : ""));
 	if (rc < 0) {
 	    rc = (errno == ENOENT ? CPIOERR_ENOENT : CPIOERR_LSTAT_FAILED);
@@ -2301,7 +2321,7 @@ if (!(fsmGetFi(fsm)->mapflags & CPIO_PAYLOAD_EXTRACT)) {
     case FSM_STAT:
 	rc = Stat(fsm->path, ost);
 	if (_fsm_debug && (stage & FSM_SYSCALL) && rc && errno != ENOENT)
-	    rpmMessage(RPMMESS_DEBUG, " %8s (%s, ost) %s\n", cur,
+	    rpmlog(RPMLOG_DEBUG, " %8s (%s, ost) %s\n", cur,
 		fsm->path, (rc < 0 ? strerror(errno) : ""));
 	if (rc < 0) {
 	    rc = (errno == ENOENT ? CPIOERR_ENOENT : CPIOERR_STAT_FAILED);
@@ -2312,7 +2332,7 @@ if (!(fsmGetFi(fsm)->mapflags & CPIO_PAYLOAD_EXTRACT)) {
 	/* XXX NUL terminated result in fsm->rdbuf, len in fsm->rdnb. */
 	rc = Readlink(fsm->path, fsm->rdbuf, fsm->rdsize - 1);
 	if (_fsm_debug && (stage & FSM_SYSCALL))
-	    rpmMessage(RPMMESS_DEBUG, " %8s (%s, rdbuf, %d) %s\n", cur,
+	    rpmlog(RPMLOG_DEBUG, " %8s (%s, rdbuf, %d) %s\n", cur,
 		fsm->path, (int)(fsm->rdsize -1), (rc < 0 ? strerror(errno) : ""));
 	if (rc < 0)	rc = CPIOERR_READLINK_FAILED;
 	else {
@@ -2372,7 +2392,7 @@ if (!(fsmGetFi(fsm)->mapflags & CPIO_PAYLOAD_EXTRACT)) {
     case FSM_DREAD:
 	fsm->rdnb = Fread(fsm->wrbuf, sizeof(*fsm->wrbuf), fsm->wrlen, fsm->cfd);
 	if (_fsm_debug && (stage & FSM_SYSCALL))
-	    rpmMessage(RPMMESS_DEBUG, " %8s (%s, %d, cfd)\trdnb %d\n",
+	    rpmlog(RPMLOG_DEBUG, " %8s (%s, %d, cfd)\trdnb %d\n",
 		cur, (fsm->wrbuf == fsm->wrb ? "wrbuf" : "mmap"),
 		(int)fsm->wrlen, (int)fsm->rdnb);
 	if (fsm->rdnb != fsm->wrlen || Ferror(fsm->cfd))
@@ -2383,7 +2403,7 @@ if (!(fsmGetFi(fsm)->mapflags & CPIO_PAYLOAD_EXTRACT)) {
     case FSM_DWRITE:
 	fsm->wrnb = Fwrite(fsm->rdbuf, sizeof(*fsm->rdbuf), fsm->rdnb, fsm->cfd);
 	if (_fsm_debug && (stage & FSM_SYSCALL))
-	    rpmMessage(RPMMESS_DEBUG, " %8s (%s, %d, cfd)\twrnb %d\n",
+	    rpmlog(RPMLOG_DEBUG, " %8s (%s, %d, cfd)\twrnb %d\n",
 		cur, (fsm->rdbuf == fsm->rdb ? "rdbuf" : "mmap"),
 		(int)fsm->rdnb, (int)fsm->wrnb);
 	if (fsm->rdnb != fsm->wrnb || Ferror(fsm->cfd))
@@ -2401,13 +2421,13 @@ if (!(fsmGetFi(fsm)->mapflags & CPIO_PAYLOAD_EXTRACT)) {
 	    break;
 	}
 	if (_fsm_debug && (stage & FSM_SYSCALL))
-	    rpmMessage(RPMMESS_DEBUG, " %8s (%s, \"r\") rfd %p rdbuf %p\n", cur,
+	    rpmlog(RPMLOG_DEBUG, " %8s (%s, \"r\") rfd %p rdbuf %p\n", cur,
 		fsm->path, fsm->rfd, fsm->rdbuf);
 	break;
     case FSM_READ:
 	fsm->rdnb = Fread(fsm->rdbuf, sizeof(*fsm->rdbuf), fsm->rdlen, fsm->rfd);
 	if (_fsm_debug && (stage & FSM_SYSCALL))
-	    rpmMessage(RPMMESS_DEBUG, " %8s (rdbuf, %d, rfd)\trdnb %d\n",
+	    rpmlog(RPMLOG_DEBUG, " %8s (rdbuf, %d, rfd)\trdnb %d\n",
 		cur, (int)fsm->rdlen, (int)fsm->rdnb);
 	if (fsm->rdnb != fsm->rdlen || Ferror(fsm->rfd))
 	    rc = CPIOERR_READ_FAILED;
@@ -2415,7 +2435,7 @@ if (!(fsmGetFi(fsm)->mapflags & CPIO_PAYLOAD_EXTRACT)) {
     case FSM_RCLOSE:
 	if (fsm->rfd != NULL) {
 	    if (_fsm_debug && (stage & FSM_SYSCALL))
-		rpmMessage(RPMMESS_DEBUG, " %8s (%p)\n", cur, fsm->rfd);
+		rpmlog(RPMLOG_DEBUG, " %8s (%p)\n", cur, fsm->rfd);
 	    (void) rpmswAdd(rpmtsOp(fsmGetTs(fsm), RPMTS_OP_DIGEST),
 			fdstat_op(fsm->rfd, FDSTAT_DIGEST));
 	    (void) Fclose(fsm->rfd);
@@ -2431,13 +2451,13 @@ if (!(fsmGetFi(fsm)->mapflags & CPIO_PAYLOAD_EXTRACT)) {
 	    rc = CPIOERR_OPEN_FAILED;
 	}
 	if (_fsm_debug && (stage & FSM_SYSCALL))
-	    rpmMessage(RPMMESS_DEBUG, " %8s (%s, \"w\") wfd %p wrbuf %p\n", cur,
+	    rpmlog(RPMLOG_DEBUG, " %8s (%s, \"w\") wfd %p wrbuf %p\n", cur,
 		fsm->path, fsm->wfd, fsm->wrbuf);
 	break;
     case FSM_WRITE:
 	fsm->wrnb = Fwrite(fsm->wrbuf, sizeof(*fsm->wrbuf), fsm->rdnb, fsm->wfd);
 	if (_fsm_debug && (stage & FSM_SYSCALL))
-	    rpmMessage(RPMMESS_DEBUG, " %8s (wrbuf, %d, wfd)\twrnb %d\n",
+	    rpmlog(RPMLOG_DEBUG, " %8s (wrbuf, %d, wfd)\twrnb %d\n",
 		cur, (int)fsm->rdnb, (int)fsm->wrnb);
 	if (fsm->rdnb != fsm->wrnb || Ferror(fsm->wfd))
 	    rc = CPIOERR_WRITE_FAILED;
@@ -2445,7 +2465,7 @@ if (!(fsmGetFi(fsm)->mapflags & CPIO_PAYLOAD_EXTRACT)) {
     case FSM_WCLOSE:
 	if (fsm->wfd != NULL) {
 	    if (_fsm_debug && (stage & FSM_SYSCALL))
-		rpmMessage(RPMMESS_DEBUG, " %8s (%p)\n", cur, fsm->wfd);
+		rpmlog(RPMLOG_DEBUG, " %8s (%p)\n", cur, fsm->wfd);
 	    (void) rpmswAdd(rpmtsOp(fsmGetTs(fsm), RPMTS_OP_DIGEST),
 			fdstat_op(fsm->wfd, FDSTAT_DIGEST));
 	    (void) Fclose(fsm->wfd);

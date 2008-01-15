@@ -28,7 +28,71 @@ typedef enum rpmFileTypes_e {
     SOCK	= 12	/*!< socket */
 } rpmFileTypes;
 
+/**
+ * File States (when installed).
+ */
+typedef enum rpmfileState_e {
+    RPMFILE_STATE_NORMAL 	= 0,
+    RPMFILE_STATE_REPLACED 	= 1,
+    RPMFILE_STATE_NOTINSTALLED	= 2,
+    RPMFILE_STATE_NETSHARED	= 3,
+    RPMFILE_STATE_WRONGCOLOR	= 4
+} rpmfileState;
+#define	RPMFILE_STATE_MISSING	-1	/* XXX used for unavailable data */
+
+/**
+ * File Attributes.
+ */
+typedef	enum rpmfileAttrs_e {
+/*@-enummemuse@*/
+    RPMFILE_NONE	= 0,
+/*@=enummemuse@*/
+    RPMFILE_CONFIG	= (1 <<  0),	/*!< from %%config */
+    RPMFILE_DOC		= (1 <<  1),	/*!< from %%doc */
+    RPMFILE_ICON	= (1 <<  2),	/*!< from Icon: */
+    RPMFILE_MISSINGOK	= (1 <<  3),	/*!< from %%config(missingok) */
+    RPMFILE_NOREPLACE	= (1 <<  4),	/*!< from %%config(noreplace) */
+    RPMFILE_SPECFILE	= (1 <<  5),	/*!< the specfile (srpm only). */
+    RPMFILE_GHOST	= (1 <<  6),	/*!< from %%ghost */
+    RPMFILE_LICENSE	= (1 <<  7),	/*!< from %%license */
+    RPMFILE_README	= (1 <<  8),	/*!< from %%readme */
+    RPMFILE_EXCLUDE	= (1 <<  9),	/*!< from %%exclude, internal */
+    RPMFILE_UNPATCHED	= (1 << 10),	/*!< (deprecated) placeholder (SuSE) */
+    RPMFILE_PUBKEY	= (1 << 11),	/*!< from %%pubkey */
+    RPMFILE_POLICY	= (1 << 12),	/*!< from %%policy */
+    RPMFILE_EXISTS	= (1 << 13),	/*!< did lstat(fn, st) succeed? */
+    RPMFILE_SPARSE	= (1 << 14),	/*!< was ((512*st->st_blocks) < st->st_size) ? */
+    RPMFILE_TYPED	= (1 << 15),	/*!< (unimplemented) from %%spook */
+    RPMFILE_SOURCE	= (1 << 16),	/*!< from SourceN: (srpm only). */
+    RPMFILE_PATCH	= (1 << 17),	/*!< from PatchN: (srpm only). */
+    RPMFILE_OPTIONAL	= (1 << 18)	/*!< from %%optional. */
+} rpmfileAttrs;
+
+#define	RPMFILE_SPOOK	(RPMFILE_GHOST|RPMFILE_TYPED)
+#define	RPMFILE_ALL	~(RPMFILE_NONE)
+
+/**
+ * File disposition(s) during package install/erase transaction.
+ */
+typedef enum fileAction_e {
+    FA_UNKNOWN = 0,	/*!< initial action for file ... */
+    FA_CREATE,		/*!< ... copy in from payload. */
+    FA_COPYIN,		/*!< ... copy in from payload. */
+    FA_COPYOUT,		/*!< ... copy out to payload. */
+    FA_BACKUP,		/*!< ... renamed with ".rpmorig" extension. */
+    FA_SAVE,		/*!< ... renamed with ".rpmsave" extension. */
+    FA_SKIP, 		/*!< ... already replaced, don't remove. */
+    FA_ALTNAME,		/*!< ... create with ".rpmnew" extension. */
+    FA_ERASE,		/*!< ... to be removed. */
+    FA_SKIPNSTATE,	/*!< ... untouched, state "not installed". */
+    FA_SKIPNETSHARED,	/*!< ... untouched, state "netshared". */
+    FA_SKIPCOLOR	/*!< ... untouched, state "wrong color". */
+} fileAction;
+
 #if defined(_RPMFI_INTERNAL)
+#define XFA_SKIPPING(_a)	\
+    ((_a) == FA_SKIP || (_a) == FA_SKIPNSTATE || (_a) == FA_SKIPNETSHARED || (_a) == FA_SKIPCOLOR)
+
 /** \ingroup rpmfi
  * A package filename set.
  */
@@ -51,26 +115,26 @@ struct rpmfi_s {
 /*@only@*/ /*@relnull@*/
     const char ** fdigests;	/*!< File digest(s) (from header) */
 /*@only@*/ /*@null@*/
-    uint_32 * fdigestalgos;	/*!< File digest algorithm(s) (from header) */
+    uint32_t * fdigestalgos;	/*!< File digest algorithm(s) (from header) */
 /*@only@*/ /*@relnull@*/
     const char ** flinks;	/*!< File link(s) (from header) */
 /*@only@*/ /*@null@*/
     const char ** flangs;	/*!< File lang(s) (from header) */
 
 /*@only@*/ /*@relnull@*/
-          uint_32 * dil;	/*!< Directory indice(s) (from header) */
+          uint32_t * dil;	/*!< Directory indice(s) (from header) */
 /*@only@*/ /*?null?*/
-    const uint_32 * fflags;	/*!< File flag(s) (from header) */
+    const uint32_t * fflags;	/*!< File flag(s) (from header) */
 /*@only@*/ /*?null?*/
-    const uint_32 * fsizes;	/*!< File size(s) (from header) */
+    const uint32_t * fsizes;	/*!< File size(s) (from header) */
 /*@only@*/ /*?null?*/
-    const uint_32 * fmtimes;	/*!< File modification time(s) (from header) */
+    const uint32_t * fmtimes;	/*!< File modification time(s) (from header) */
 /*@only@*/ /*?null?*/
-          uint_16 * fmodes;	/*!< File mode(s) (from header) */
+          uint16_t * fmodes;	/*!< File mode(s) (from header) */
 /*@only@*/ /*?null?*/
-    const uint_16 * frdevs;	/*!< File rdev(s) (from header) */
+    const uint16_t * frdevs;	/*!< File rdev(s) (from header) */
 /*@only@*/ /*?null?*/
-    const uint_32 * finodes;	/*!< File inodes(s) (from header) */
+    const uint32_t * finodes;	/*!< File inodes(s) (from header) */
 
 /*@only@*/ /*@null@*/
     const char ** fuser;	/*!< File owner(s) (from header) */
@@ -78,47 +142,42 @@ struct rpmfi_s {
     const char ** fgroup;	/*!< File group(s) (from header) */
 
 /*@only@*/ /*@null@*/
-    char * fstates;		/*!< File state(s) (from header) */
+    uint8_t * fstates;		/*!< File state(s) (from header) */
 
 /*@only@*/ /*@null@*/
-    const uint_32 * fcolors;	/*!< File color bits (header) */
+    const uint32_t * fcolors;	/*!< File color bits (header) */
 
 /*@only@*/ /*@null@*/
     const char ** fcontexts;	/*! FIle security contexts. */
 
 /*@only@*/ /*@null@*/
     const char ** cdict;	/*!< File class dictionary (header) */
-    int_32 ncdict;		/*!< No. of class entries. */
+    uint32_t ncdict;		/*!< No. of class entries. */
 /*@only@*/ /*@null@*/
-    const uint_32 * fcdictx;	/*!< File class dictionary index (header) */
+    const uint32_t * fcdictx;	/*!< File class dictionary index (header) */
 
 /*@only@*/ /*@null@*/
-    const uint_32 * ddict;	/*!< File depends dictionary (header) */
-    int_32 nddict;		/*!< No. of depends entries. */
+    const uint32_t * ddict;	/*!< File depends dictionary (header) */
+    uint32_t nddict;		/*!< No. of depends entries. */
 /*@only@*/ /*@null@*/
-    const uint_32 * fddictx;	/*!< File depends dictionary start (header) */
+    const uint32_t * fddictx;	/*!< File depends dictionary start (header) */
 /*@only@*/ /*@null@*/
-    const uint_32 * fddictn;	/*!< File depends dictionary count (header) */
+    const uint32_t * fddictn;	/*!< File depends dictionary count (header) */
 
 /*@only@*/ /*?null?*/
-    const uint_32 * vflags;	/*!< File verify flag(s) (from header) */
+    const uint32_t * vflags;	/*!< File verify flag(s) (from header) */
 
-    int_32 dc;			/*!< No. of directories. */
-    int_32 fc;			/*!< No. of files. */
+    uint32_t dc;		/*!< No. of directories. */
+    uint32_t fc;		/*!< No. of files. */
 
 /*=============================*/
 /*@dependent@*/ /*@relnull@*/
     rpmte te;
 
-    HGE_t hge;			/*!< Vector to headerGetEntry() */
-    HAE_t hae;			/*!< Vector to headerAddEntry() */
-    HME_t hme;			/*!< Vector to headerModifyEntry() */
-    HRE_t hre;			/*!< Vector to headerRemoveEntry() */
-    HFD_t hfd;			/*!< Vector to headerFreeData() */
 /*-----------------------------*/
     uid_t uid;			/*!< File uid (default). */
     gid_t gid;			/*!< File gid (default). */
-    uint_32 flags;		/*!< File flags (default). */
+    uint32_t flags;		/*!< File flags (default). */
     fileAction action;		/*!< File disposition (default). */
 /*@owned@*/ /*@relnull@*/
     fileAction * actions;	/*!< File disposition(s). */
@@ -129,12 +188,12 @@ struct rpmfi_s {
 /*@owned@*/
     const char ** odnl;		/*!< Original dirname(s) (from header) */
 /*@unused@*/
-    int_32 * odil;		/*!< Original dirindex(s) (from header) */
+    uint32_t * odil;		/*!< Original dirindex(s) (from header) */
 
 /*@only@*/ /*@relnull@*/
     unsigned char * digests;	/*!< File digest(s) in binary. */
-    uint_32 digestalgo;		/*!< File digest algorithm. */
-    uint_32 digestlen;		/*!< No. bytes in binary digest. */
+    uint32_t digestalgo;	/*!< File digest algorithm. */
+    uint32_t digestlen;		/*!< No. bytes in binary digest. */
 
 /*@only@*/ /*@relnull@*/
     const char * pretrans;
@@ -144,13 +203,17 @@ struct rpmfi_s {
     const char * posttrans;
 /*@only@*/ /*@relnull@*/
     const char * posttransprog;
+/*@only@*/ /*@relnull@*/
+    const char * verifyscript;
+/*@only@*/ /*@relnull@*/
+    const char * verifyscriptprog;
 
 /*@only@*/ /*@null@*/
     char * fn;			/*!< File name buffer. */
-    int fnlen;			/*!< File name buffer length. */
+    size_t fnlen;			/*!< File name buffer length. */
 
-    int astriplen;
-    int striplen;
+    size_t astriplen;
+    size_t striplen;
     unsigned long long archivePos;
     unsigned long long archiveSize;
     mode_t dperms;		/*!< Directory perms (0755) if not mapped. */
@@ -162,13 +225,12 @@ struct rpmfi_s {
     int * fmapflags;
 /*@owned@*/
     FSM_t fsm;			/*!< File state machine data. */
-    int keep_header;		/*!< Keep header? */
-    uint_32 color;		/*!< Color bit(s) from file color union. */
+    uint32_t color;		/*!< Color bit(s) from file color union. */
 
     int isSource;		/*!< Is this a SRPM? */
 
 /*@owned@*/
-    uint_32 * replacedSizes;	/*!< (TR_ADDED) */
+    uint32_t * replacedSizes;	/*!< (TR_ADDED) */
 
     unsigned int record;	/*!< (TR_REMOVED) */
     int magic;
@@ -328,7 +390,7 @@ extern const char * rpmfiFN(/*@null@*/ rpmfi fi)
  * @param fi		file info set
  * @return		current file flags, 0 on invalid
  */
-uint_32 rpmfiFFlags(/*@null@*/ rpmfi fi)
+uint32_t rpmfiFFlags(/*@null@*/ rpmfi fi)
 	/*@*/;
 
 /**
@@ -337,7 +399,7 @@ uint_32 rpmfiFFlags(/*@null@*/ rpmfi fi)
  * @param FFlags	new file flags
  * @return		previous file flags, 0 on invalid
  */
-uint_32 rpmfiSetFFlags(/*@null@*/ rpmfi fi, uint_32 FFlags)
+uint32_t rpmfiSetFFlags(/*@null@*/ rpmfi fi, uint32_t FFlags)
 	/*@modifies fi @*/;
 
 /**
@@ -345,7 +407,7 @@ uint_32 rpmfiSetFFlags(/*@null@*/ rpmfi fi, uint_32 FFlags)
  * @param fi		file info set
  * @return		current file verify flags, 0 on invalid
  */
-uint_32 rpmfiVFlags(/*@null@*/ rpmfi fi)
+uint32_t rpmfiVFlags(/*@null@*/ rpmfi fi)
 	/*@*/;
 
 /**
@@ -354,7 +416,7 @@ uint_32 rpmfiVFlags(/*@null@*/ rpmfi fi)
  * @param VFlags	new file verify flags
  * @return		previous file verify flags, 0 on invalid
  */
-uint_32 rpmfiSetVFlags(/*@null@*/ rpmfi fi, uint_32 VFlags)
+uint32_t rpmfiSetVFlags(/*@null@*/ rpmfi fi, uint32_t VFlags)
 	/*@modifies fi @*/;
 
 /**
@@ -362,7 +424,7 @@ uint_32 rpmfiSetVFlags(/*@null@*/ rpmfi fi, uint_32 VFlags)
  * @param fi		file info set
  * @return		current file mode, 0 on invalid
  */
-int_16 rpmfiFMode(/*@null@*/ rpmfi fi)
+uint16_t rpmfiFMode(/*@null@*/ rpmfi fi)
 	/*@*/;
 
 /**
@@ -409,7 +471,7 @@ extern const char * rpmfiFLink(/*@null@*/ rpmfi fi)
  * @param fi		file info set
  * @return		current file size, 0 on invalid
  */
-int_32 rpmfiFSize(/*@null@*/ rpmfi fi)
+uint32_t rpmfiFSize(/*@null@*/ rpmfi fi)
 	/*@*/;
 
 /**
@@ -417,7 +479,7 @@ int_32 rpmfiFSize(/*@null@*/ rpmfi fi)
  * @param fi		file info set
  * @return		current file rdev, 0 on invalid
  */
-int_16 rpmfiFRdev(/*@null@*/ rpmfi fi)
+uint16_t rpmfiFRdev(/*@null@*/ rpmfi fi)
 	/*@*/;
 
 /**
@@ -425,7 +487,7 @@ int_16 rpmfiFRdev(/*@null@*/ rpmfi fi)
  * @param fi		file info set
  * @return		current file inode, 0 on invalid
  */
-int_32 rpmfiFInode(/*@null@*/ rpmfi fi)
+uint32_t rpmfiFInode(/*@null@*/ rpmfi fi)
 	/*@*/;
 
 /**
@@ -433,7 +495,7 @@ int_32 rpmfiFInode(/*@null@*/ rpmfi fi)
  * @param fi		file info set
  * @return		current color
  */
-uint_32 rpmfiColor(/*@null@*/ rpmfi fi)
+uint32_t rpmfiColor(/*@null@*/ rpmfi fi)
 	/*@*/;
 
 /**
@@ -441,7 +503,7 @@ uint_32 rpmfiColor(/*@null@*/ rpmfi fi)
  * @param fi		file info set
  * @return		current file color
  */
-uint_32 rpmfiFColor(/*@null@*/ rpmfi fi)
+uint32_t rpmfiFColor(/*@null@*/ rpmfi fi)
 	/*@*/;
 
 /**
@@ -472,8 +534,8 @@ extern const char * rpmfiFContext(/*@null@*/ rpmfi fi)
  * @retval *fddictp	file depends dictionary array (or NULL)
  * @return		no. of file depends entries, 0 on invalid
  */
-int_32 rpmfiFDepends(/*@null@*/ rpmfi fi,
-		/*@out@*/ /*@null@*/ const uint_32 ** fddictp)
+uint32_t rpmfiFDepends(/*@null@*/ rpmfi fi,
+		/*@out@*/ /*@null@*/ const uint32_t ** fddictp)
 	/*@modifies *fddictp @*/;
 
 /**
@@ -481,7 +543,7 @@ int_32 rpmfiFDepends(/*@null@*/ rpmfi fi,
  * @param fi		file info set
  * @return		current file nlink count, 0 on invalid
  */
-int_32 rpmfiFNlink(/*@null@*/ rpmfi fi)
+uint32_t rpmfiFNlink(/*@null@*/ rpmfi fi)
 	/*@*/;
 
 /**
@@ -489,7 +551,7 @@ int_32 rpmfiFNlink(/*@null@*/ rpmfi fi)
  * @param fi		file info set
  * @return		current file modify time, 0 on invalid
  */
-int_32 rpmfiFMtime(/*@null@*/ rpmfi fi)
+uint32_t rpmfiFMtime(/*@null@*/ rpmfi fi)
 	/*@*/;
 
 /**
@@ -580,7 +642,7 @@ rpmfi rpmfiNew(/*@null@*/ const rpmts ts, Header h, rpmTag tagN, int flags)
  * @retval *fcp		number of files
  */
 void rpmfiBuildFClasses(Header h,
-		/*@out@*/ const char *** fclassp, /*@out@*/ int * fcp)
+		/*@out@*/ const char *** fclassp, /*@out@*/ uint32_t * fcp)
 	/*@globals rpmGlobalMacroContext, h_errno, fileSystem, internalState @*/
 	/*@modifies h, *fclassp, *fcp, rpmGlobalMacroContext,
 		fileSystem, internalState @*/;
@@ -595,7 +657,7 @@ void rpmfiBuildFClasses(Header h,
  * @retval *fcp		number of files
  */
 void rpmfiBuildFContexts(Header h,
-		/*@out@*/ const char *** fcontextp, /*@out@*/ int * fcp)
+		/*@out@*/ const char *** fcontextp, /*@out@*/ uint32_t * fcp)
 	/*@globals rpmGlobalMacroContext, h_errno, fileSystem, internalState @*/
 	/*@modifies h, *fcontextp, *fcp, rpmGlobalMacroContext,
 		fileSystem, internalState @*/;
@@ -610,7 +672,7 @@ void rpmfiBuildFContexts(Header h,
  * @retval *fcp		number of files
  */
 void rpmfiBuildFSContexts(Header h,
-		/*@out@*/ const char *** fcontextp, /*@out@*/ int * fcp)
+		/*@out@*/ const char *** fcontextp, /*@out@*/ uint32_t * fcp)
 	/*@globals rpmGlobalMacroContext, h_errno, fileSystem, internalState @*/
 	/*@modifies h, *fcontextp, *fcp, rpmGlobalMacroContext,
 		fileSystem, internalState @*/;
@@ -625,7 +687,7 @@ void rpmfiBuildFSContexts(Header h,
  * @retval *fcp		number of files
  */
 void rpmfiBuildREContexts(Header h,
-		/*@out@*/ const char *** fcontextp, /*@out@*/ int * fcp)
+		/*@out@*/ const char *** fcontextp, /*@out@*/ uint32_t * fcp)
 	/*@globals rpmGlobalMacroContext, h_errno, fileSystem, internalState @*/
 	/*@modifies h, *fcontextp, *fcp, rpmGlobalMacroContext,
 		fileSystem, internalState @*/;
@@ -641,7 +703,7 @@ void rpmfiBuildREContexts(Header h,
  * @retval *fcp		number of files
  */
 void rpmfiBuildFDeps(Header h, rpmTag tagN,
-		/*@out@*/ const char *** fdepsp, /*@out@*/ int * fcp)
+		/*@out@*/ const char *** fdepsp, /*@out@*/ uint32_t * fcp)
 	/*@globals rpmGlobalMacroContext, h_errno, fileSystem, internalState @*/
 	/*@modifies h, *fdepsp, *fcp,
 		rpmGlobalMacroContext, fileSystem, internalState @*/;

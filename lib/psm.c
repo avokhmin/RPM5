@@ -5,21 +5,22 @@
 
 #include "system.h"
 
-#include <rpmio_internal.h>
-#include <rpmlib.h>
+#include <rpmio_internal.h>	/* XXX FDSTAT_READ */
+#include <rpmcb.h>		/* XXX fnpyKey */
 #include <rpmmacro.h>
 #include <rpmurl.h>
 #include <rpmlua.h>
+#include <rpmtag.h>
+#include <rpmlib.h>
 
 #include "cpio.h"
+#define	_RPMFI_INTERNAL
 #include "fsm.h"		/* XXX CPIO_FOO/FSM_FOO constants */
+#define	_RPMSQ_INTERNAL
 #include "psm.h"
 
 #define	_RPMEVR_INTERNAL
 #include "rpmds.h"
-
-#define _RPMFI_INTERNAL
-#include "rpmfi.h"
 
 #define	_RPMTE_INTERNAL
 #include "rpmte.h"
@@ -28,7 +29,7 @@
 #include "rpmts.h"
 
 #include <pkgio.h>
-#include "misc.h"		/* XXX rpmMkdirPath */
+#include "misc.h"		/* XXX rpmMkdirPath, makeTempFile, doputenv */
 #include "rpmdb.h"		/* XXX for db_chrootDone */
 #include "signature.h"		/* signature constants */
 #include "debug.h"
@@ -38,9 +39,6 @@
 int _psm_debug = _PSM_DEBUG;
 /*@unchecked@*/
 int _psm_threads = 0;
-
-extern int _nolead;
-extern int _nosigh;
 
 /*@access FD_t @*/		/* XXX void * arg */
 /*@access Header @*/		/* XXX void * arg */
@@ -55,32 +53,49 @@ extern int _nosigh;
 
 int rpmVersionCompare(Header first, Header second)
 {
+    HE_t he = memset(alloca(sizeof(*he)), 0, sizeof(*he));
     const char * one, * two;
-    int_32 * epochOne, * epochTwo;
-    static int_32 zero = 0;
+    uint32_t Eone, Etwo;
     int rc;
+    int xx;
 
-    if (!headerGetEntry(first, RPMTAG_EPOCH, NULL, &epochOne, NULL))
-	epochOne = &zero;
-    if (!headerGetEntry(second, RPMTAG_EPOCH, NULL, &epochTwo, NULL))
-	epochTwo = &zero;
+    he->tag = RPMTAG_EPOCH;
+    xx = headerGet(first, he, 0);
+    Eone = (xx && he->p.ui32p ? he->p.ui32p[0] : 0);
+    he->p.ptr = _free(he->p.ptr);
+    he->tag = RPMTAG_EPOCH;
+    xx = headerGet(second, he, 0);
+    Etwo = (xx && he->p.ui32p ? he->p.ui32p[0] : 0);
+    he->p.ptr = _free(he->p.ptr);
 
-    if (*epochOne < *epochTwo)
+    if (Eone < Etwo)
 	return -1;
-    else if (*epochOne > *epochTwo)
+    else if (Eone > Etwo)
 	return 1;
 
-    rc = headerGetEntry(first, RPMTAG_VERSION, NULL, &one, NULL);
-    rc = headerGetEntry(second, RPMTAG_VERSION, NULL, &two, NULL);
-
+    he->tag = RPMTAG_VERSION;
+    xx = headerGet(first, he, 0);
+    one = he->p.str;
+    he->tag = RPMTAG_VERSION;
+    xx = headerGet(second, he, 0);
+    two = he->p.str;
     rc = rpmvercmp(one, two);
+    one = _free(one);
+    two = _free(two);
     if (rc)
 	return rc;
 
-    rc = headerGetEntry(first, RPMTAG_RELEASE, NULL, &one, NULL);
-    rc = headerGetEntry(second, RPMTAG_RELEASE, NULL, &two, NULL);
+    he->tag = RPMTAG_RELEASE;
+    xx = headerGet(first, he, 0);
+    one = he->p.str;
+    he->tag = RPMTAG_RELEASE;
+    xx = headerGet(second, he, 0);
+    two = he->p.str;
+    rc = rpmvercmp(one, two);
+    one = _free(one);
+    two = _free(two);
 
-    return rpmvercmp(one, two);
+    return rc;
 }
 
 /**
@@ -92,17 +107,18 @@ static rpmRC markReplacedFiles(const rpmpsm psm)
 	/*@globals rpmGlobalMacroContext, h_errno, fileSystem, internalState @*/
 	/*@modifies psm, rpmGlobalMacroContext, fileSystem, internalState @*/
 {
+    HE_t he = memset(alloca(sizeof(*he)), 0, sizeof(*he));
     const rpmts ts = psm->ts;
     rpmte te = psm->te;
     rpmfi fi = psm->fi;
-    HGE_t hge = (HGE_t)fi->hge;
     sharedFileInfo replaced = (te ? te->replaced : NULL);
     sharedFileInfo sfi;
     rpmdbMatchIterator mi;
     Header h;
     int * offsets;
     unsigned int prev;
-    int num, xx;
+    int num;
+    int xx;
 
     if (!(rpmfiFC(fi) > 0 && replaced != NULL))
 	return RPMRC_OK;
@@ -133,21 +149,22 @@ static rpmRC markReplacedFiles(const rpmpsm psm)
 
     sfi = replaced;
     while ((h = rpmdbNextIterator(mi)) != NULL) {
-	char * secStates;
 	int modified;
-	int count;
 
 	modified = 0;
 
-	if (!hge(h, RPMTAG_FILESTATES, NULL, &secStates, &count))
+	/* XXX FIXME: not correct yet, but headerGetEntry needs to die now! */
+	he->tag = RPMTAG_FILESTATES;
+	xx = headerGet(h, he, 0);
+	if (!xx)
 	    continue;
 	
 	prev = rpmdbGetIteratorOffset(mi);
 	num = 0;
 	while (sfi->otherPkg && sfi->otherPkg == prev) {
-	    assert(sfi->otherFileNum < count);
-	    if (secStates[sfi->otherFileNum] != RPMFILE_STATE_REPLACED) {
-		secStates[sfi->otherFileNum] = RPMFILE_STATE_REPLACED;
+assert(sfi->otherFileNum < he->c);
+	    if (he->p.ui8p[sfi->otherFileNum] != RPMFILE_STATE_REPLACED) {
+		he->p.ui8p[sfi->otherFileNum] = RPMFILE_STATE_REPLACED;
 		if (modified == 0) {
 		    /* Modified header will be rewritten. */
 		    modified = 1;
@@ -157,6 +174,7 @@ static rpmRC markReplacedFiles(const rpmpsm psm)
 	    }
 	    sfi++;
 	}
+	he->p.ptr = _free(he->p.ptr);
     }
     mi = rpmdbFreeIterator(mi);
 
@@ -166,14 +184,13 @@ static rpmRC markReplacedFiles(const rpmpsm psm)
 rpmRC rpmInstallSourcePackage(rpmts ts, void * _fd,
 		const char ** specFilePtr, const char ** cookie)
 {
+    HE_t he = memset(alloca(sizeof(*he)), 0, sizeof(*he));
     FD_t fd = _fd;
-    int scareMem = 1;	/* XXX fi->h is needed */
+    int scareMem = 0;
     rpmfi fi = NULL;
     const char * _sourcedir = NULL;
     const char * _specdir = NULL;
     const char * specFile = NULL;
-    HGE_t hge;
-    HFD_t hfd;
     Header h = NULL;
     struct rpmpsm_s psmbuf;
     rpmpsm psm = &psmbuf;
@@ -205,7 +222,7 @@ rpmRC rpmInstallSourcePackage(rpmts ts, void * _fd,
 	 headerIsEntry(h, RPMTAG_ARCH) != 0);
 
     if (!isSource) {
-	rpmError(RPMERR_NOTSRPM, _("source package expected, binary found\n"));
+	rpmlog(RPMLOG_ERR, _("source package expected, binary found\n"));
 	rpmrc = RPMRC_FAIL;
 	goto exit;
     }
@@ -213,6 +230,7 @@ rpmRC rpmInstallSourcePackage(rpmts ts, void * _fd,
     (void) rpmtsAddInstallElement(ts, h, NULL, 0, NULL);
 
     fi = rpmfiNew(ts, h, RPMTAG_BASENAMES, scareMem);
+    fi->h = headerLink(h);
     h = headerFree(h);
 
     if (fi == NULL) {	/* XXX can't happen */
@@ -229,10 +247,9 @@ rpmRC rpmInstallSourcePackage(rpmts ts, void * _fd,
     }
 
 assert(fi->h != NULL);
-    fi->te->h = headerLink(fi->h);
+assert(fi->te->h == NULL);	/* XXX headerFree side effect */
+    (void) rpmteSetHeader(fi->te, fi->h);
     fi->te->fd = fdLink(fd, "installSourcePackage");
-    hge = fi->hge;
-    hfd = fi->hfd;
 
     (void) headerMacrosLoad(fi->h);
 
@@ -243,8 +260,9 @@ assert(fi->h != NULL);
 
     if (cookie) {
 	*cookie = NULL;
-	if (hge(fi->h, RPMTAG_COOKIE, NULL, (void **) cookie, NULL))
-	    *cookie = xstrdup(*cookie);
+	he->tag = RPMTAG_COOKIE;
+	xx = headerGet(fi->h, he, 0);
+	*cookie = he->p.str;
     }
 
     /* XXX FIXME: don't do per-file mapping, force global flags. */
@@ -253,6 +271,26 @@ assert(fi->h != NULL);
 
     fi->uid = getuid();
     fi->gid = getgid();
+#if defined(RPM_VENDOR_OPENPKG) /* switch-from-susr-to-musr-on-srpm-install */
+    /* If running as the OpenPKG "susr", do not unpack source RPM
+       packages with "susr" file ownerships as the OpenPKG Set-UID
+       wrapper switches from "musr" to "susr" on "openpkg rpm -Uvh
+       *.src.rpm". As a result the installed files could be never
+       removed again by "musr". It is more consistent to always unpack
+       as "musr" if possible. */
+    if (fi->uid == 0) {
+        char *muid_str;
+        char *mgid_str;
+        uid_t muid;
+        gid_t mgid;
+        if ((muid_str = rpmExpand("%{l_muid}", NULL)) != NULL)
+            if ((muid = (uid_t)strtol(muid_str, (char **)NULL, 10)) > 0)
+                fi->uid = muid;
+        if ((mgid_str = rpmExpand("%{l_mgid}", NULL)) != NULL)
+            if ((mgid = (gid_t)strtol(mgid_str, (char **)NULL, 10)) > 0)
+                fi->gid = mgid;
+    }
+#endif
     fi->astriplen = 0;
     fi->striplen = 0;
 
@@ -262,7 +300,9 @@ assert(fi->h != NULL);
     i = fi->fc;
 
     if (fi->h != NULL) {	/* XXX can't happen */
-	xx = headerGetExtension(fi->h, RPMTAG_FILEPATHS, NULL, &fi->apath, NULL);
+	he->tag = RPMTAG_FILEPATHS;
+	xx = headerGet(fi->h, he, 0);
+	fi->apath = he->p.argv;
 
 	if (headerIsEntry(fi->h, RPMTAG_COOKIE))
 	    for (i = 0; i < fi->fc; i++)
@@ -285,11 +325,14 @@ assert(fi->h != NULL);
 	goto exit;
     }
     if (Access(_sourcedir, W_OK)) {
-	rpmError(RPMERR_CREATE, _("cannot write to %%%s %s\n"),
+	rpmlog(RPMLOG_ERR, _("cannot write to %%%s %s\n"),
 		"_sourcedir", _sourcedir);
 	rpmrc = RPMRC_FAIL;
 	goto exit;
     }
+#if defined(RPM_VENDOR_OPENPKG) /* switch-from-susr-to-musr-on-srpm-install */
+    chown(_sourcedir, fi->uid, fi->gid);
+#endif
 
     _specdir = rpmGenPath(rpmtsRootDir(ts), "%{_specdir}", "");
     rpmrc = rpmMkdirPath(_specdir, "specdir");
@@ -298,19 +341,22 @@ assert(fi->h != NULL);
 	goto exit;
     }
     if (Access(_specdir, W_OK)) {
-	rpmError(RPMERR_CREATE, _("cannot write to %%%s %s\n"),
+	rpmlog(RPMLOG_ERR, _("cannot write to %%%s %s\n"),
 		"_specdir", _specdir);
 	rpmrc = RPMRC_FAIL;
 	goto exit;
     }
+#if defined(RPM_VENDOR_OPENPKG) /* switch-from-susr-to-musr-on-srpm-install */
+    chown(_specdir, fi->uid, fi->gid);
+#endif
 
     /* Build dnl/dil with {_sourcedir, _specdir} as values. */
     if (i < fi->fc) {
-	int speclen = strlen(_specdir) + 2;
-	int sourcelen = strlen(_sourcedir) + 2;
+	size_t speclen = strlen(_specdir) + 2;
+	size_t sourcelen = strlen(_sourcedir) + 2;
 	char * t;
 
-/*@i@*/	fi->dnl = hfd(fi->dnl, -1);
+/*@i@*/	fi->dnl = _free(fi->dnl);
 
 	fi->dc = 2;
 	fi->dnl = xmalloc(fi->dc * sizeof(*fi->dnl)
@@ -331,7 +377,7 @@ assert(fi->h != NULL);
 	(void) stpcpy( stpcpy( stpcpy(t, _specdir), "/"), fi->bnl[i]);
 	specFile = t;
     } else {
-	rpmError(RPMERR_NOSPEC, _("source package contains no .spec file\n"));
+	rpmlog(RPMLOG_ERR, _("source package contains no .spec file\n"));
 	rpmrc = RPMRC_FAIL;
 	goto exit;
     }
@@ -361,12 +407,14 @@ exit:
     if (h != NULL) h = headerFree(h);
 
     if (fi != NULL) {
-	fi->te->h = headerFree(fi->te->h);
+	(void) rpmteSetHeader(fi->te, NULL);
 	if (fi->te->fd != NULL)
 	    (void) Fclose(fi->te->fd);
 	fi->te->fd = NULL;
 	fi->te = NULL;
+#if 0
 	fi = rpmfiFree(fi);
+#endif
     }
 
     /* XXX nuke the added package(s). */
@@ -400,6 +448,7 @@ static /*@observer@*/ const char * tag2sln(int tag)
     case RPMTAG_POSTTRANS:	return "%posttrans";
     case RPMTAG_TRIGGERPOSTUN:	return "%triggerpostun";
     case RPMTAG_VERIFYSCRIPT:	return "%verify";
+    case RPMTAG_SANITYCHECK:	return "%sanitycheck";
     }
     return "%unknownscript";
 }
@@ -424,6 +473,7 @@ static rpmScriptID tag2slx(int tag)
     case RPMTAG_POSTTRANS:	return RPMSCRIPT_POSTTRANS;
     case RPMTAG_TRIGGERPOSTUN:	return RPMSCRIPT_TRIGGERPOSTUN;
     case RPMTAG_VERIFYSCRIPT:	return RPMSCRIPT_VERIFY;
+    case RPMTAG_SANITYCHECK:	return RPMSCRIPT_SANITYCHECK;
     }
     return RPMSCRIPT_UNKNOWN;
 }
@@ -444,7 +494,7 @@ static pid_t psmWait(rpmpsm psm)
     msecs = psm->sq.op.usecs/1000;
     (void) rpmswAdd(rpmtsOp(ts, RPMTS_OP_SCRIPTLETS), &psm->sq.op);
 
-    rpmMessage(RPMMESS_DEBUG,
+    rpmlog(RPMLOG_DEBUG,
 	D_("%s: waitpid(%d) rc %d status %x secs %u.%03u\n"),
 	psm->stepName, (unsigned)psm->sq.child,
 	(unsigned)psm->sq.reaped, psm->sq.status,
@@ -470,9 +520,9 @@ static rpmRC runLuaScript(rpmpsm psm, Header h, const char *sln,
 	/*@globals h_errno, fileSystem, internalState @*/
 	/*@modifies psm, fileSystem, internalState @*/
 {
+    HE_t he = memset(alloca(sizeof(*he)), 0, sizeof(*he));
     const rpmts ts = psm->ts;
     int rootFdno = -1;
-    const char * NVRA = NULL;
     rpmRC rc = RPMRC_OK;
     int i;
     int xx;
@@ -485,8 +535,9 @@ static rpmRC runLuaScript(rpmpsm psm, Header h, const char *sln,
     if (ssp != NULL)
 	*ssp |= (RPMSCRIPT_STATE_LUA|RPMSCRIPT_STATE_EXEC);
 
-    xx = headerGetExtension(h, RPMTAG_NVRA, NULL, &NVRA, NULL);
-assert(NVRA != NULL);
+    he->tag = RPMTAG_NVRA;
+    xx = headerGet(h, he, 0);
+assert(he->p.str != NULL);
 
     /* Save the current working directory. */
 /*@-nullpass@*/
@@ -534,10 +585,14 @@ assert(NVRA != NULL);
 
     {
 	char buf[BUFSIZ];
-	xx = snprintf(buf, BUFSIZ, "%s(%s)", sln, NVRA);
+	xx = snprintf(buf, BUFSIZ, "%s(%s)", sln, he->p.str);
 	xx = rpmluaRunScript(lua, script, buf);
-	if (xx == -1)
+	if (xx == -1) {
+	    void * ptr = rpmtsNotify(ts, psm->te, RPMCALLBACK_SCRIPT_ERROR,
+				 psm->scriptTag, 1);
+	    ptr = ptr;	/* XXX keep gcc happy. */
 	    rc = RPMRC_FAIL;
+	}
 	if (ssp != NULL) {
 	    *ssp &= ~0xffff;
 	    *ssp |= (xx & 0xffff);
@@ -561,7 +616,7 @@ assert(NVRA != NULL);
 	xx = fchdir(rootFdno);
 
     xx = close(rootFdno);
-    NVRA = _free(NVRA);
+    he->p.ptr = _free(he->p.ptr);
 
     return rc;
 }
@@ -601,28 +656,24 @@ static rpmRC runScript(rpmpsm psm, Header h, const char * sln,
 	/*@modifies psm, ldconfig_done, rpmGlobalMacroContext,
 		fileSystem, internalState @*/
 {
+    HE_t he = memset(alloca(sizeof(*he)), 0, sizeof(*he));
     const rpmts ts = psm->ts;
-    rpmfi fi = psm->fi;
-    HGE_t hge = fi->hge;
-    HFD_t hfd = (fi->hfd ? fi->hfd : headerFreeData);
     const char ** argv = NULL;
     int argc = 0;
     const char ** prefixes = NULL;
     int numPrefixes;
-    rpmTagType ipt;
-    const char * oldPrefix;
-    int maxPrefixLength;
-    int len;
+    size_t maxPrefixLength;
+    size_t len;
     char * prefixBuf = NULL;
     const char * fn = NULL;
-    int xx;
-    int i;
-    int freePrefixes = 0;
     FD_t scriptFd;
     FD_t out;
     rpmRC rc = RPMRC_FAIL;	/* assume failure */
-    const char * NVRA = NULL;
+    const char * NVRA;
+    const char * body = NULL;
     int * ssp = NULL;
+    int xx;
+    int i;
 
     if (psm->sstates != NULL)
 	ssp = psm->sstates + tag2slx(psm->scriptTag);
@@ -632,16 +683,21 @@ static rpmRC runScript(rpmpsm psm, Header h, const char * sln,
     if (progArgv == NULL && script == NULL)
 	return RPMRC_OK;
 
-    xx = headerGetExtension(h, RPMTAG_NVRA, NULL, &NVRA, NULL);
-assert(NVRA != NULL);
+    /* Macro expand all scriptlets. */
+    body = rpmExpand(script, NULL);
+
+    he->tag = RPMTAG_NVRA;
+    xx = headerGet(h, he, 0);
+assert(he->p.str != NULL);
+    NVRA = he->p.str;
 
     if (progArgv && strcmp(progArgv[0], "<lua>") == 0) {
 #ifdef WITH_LUA
-	rpmMessage(RPMMESS_DEBUG,
+	rpmlog(RPMLOG_DEBUG,
 		D_("%s: %s(%s) running <lua> scriptlet.\n"),
 		psm->stepName, tag2sln(psm->scriptTag), NVRA);
 	rc = runLuaScript(psm, h, sln, progArgc, progArgv,
-			    script, arg1, arg2);
+			    body, arg1, arg2);
 #endif
 	goto exit;
     }
@@ -653,7 +709,7 @@ assert(NVRA != NULL);
      */
     if (ldconfig_path && progArgv != NULL && psm->unorderedSuccessor) {
  	if (ldconfig_done && !strcmp(progArgv[0], ldconfig_path)) {
-	    rpmMessage(RPMMESS_DEBUG,
+	    rpmlog(RPMLOG_DEBUG,
 		D_("%s: %s(%s) skipping redundant \"%s\".\n"),
 		psm->stepName, tag2sln(psm->scriptTag), NVRA,
 		progArgv[0]);
@@ -662,7 +718,7 @@ assert(NVRA != NULL);
 	}
     }
 
-    rpmMessage(RPMMESS_DEBUG,
+    rpmlog(RPMLOG_DEBUG,
 		D_("%s: %s(%s) %ssynchronous scriptlet start\n"),
 		psm->stepName, tag2sln(psm->scriptTag), NVRA,
 		(psm->unorderedSuccessor ? "a" : ""));
@@ -680,13 +736,26 @@ assert(NVRA != NULL);
 		? 1 : 0);
     }
 
-    if (hge(h, RPMTAG_INSTPREFIXES, &ipt, &prefixes, &numPrefixes)) {
-	freePrefixes = 1;
-    } else if (hge(h, RPMTAG_INSTALLPREFIX, NULL, &oldPrefix, NULL)) {
-	prefixes = &oldPrefix;
-	numPrefixes = 1;
-    } else {
-	numPrefixes = 0;
+    he->tag = RPMTAG_INSTPREFIXES;
+    xx = headerGet(h, he, 0);
+    prefixes = he->p.argv;
+    numPrefixes = he->c;
+    if (!xx) {
+	he->p.ptr = _free(he->p.ptr);
+	he->tag = RPMTAG_INSTALLPREFIX;
+	xx = headerGet(h, he, 0);
+	if (xx) {
+	    char * t;
+	    prefixes = xmalloc(sizeof(*prefixes) + strlen(he->p.argv[0]) + 1);
+	    prefixes[0] = t = (char *) &prefixes[1];
+	    t = stpcpy(t, he->p.argv[0]);
+	    *t = '\0';
+	    he->p.ptr = _free(he->p.ptr);
+	    numPrefixes = 1;
+	} else {
+	    prefixes = NULL;
+	    numPrefixes = 0;
+	}
     }
 
     maxPrefixLength = 0;
@@ -711,10 +780,10 @@ assert(NVRA != NULL);
 	    xx = Fwrite(set_x, sizeof(set_x[0]), sizeof(set_x)-1, fd);
 	}
 
-	if (ldconfig_path && strstr(script, ldconfig_path) != NULL)
+	if (ldconfig_path && strstr(body, ldconfig_path) != NULL)
 	    ldconfig_done = 1;
 
-	xx = Fwrite(script, sizeof(script[0]), strlen(script), fd);
+	xx = Fwrite(body, sizeof(body[0]), strlen(body), fd);
 	xx = Fclose(fd);
 
 	{   const char * sn = fn;
@@ -774,7 +843,7 @@ assert(NVRA != NULL);
 	    flag = fcntl(fdno, F_GETFD);
 	    if (flag == -1 || (flag & FD_CLOEXEC))
 		continue;
-	    rpmMessage(RPMMESS_DEBUG,
+	    rpmlog(RPMLOG_DEBUG,
 			D_("%s: %s(%s)\tfdno(%d) missing FD_CLOEXEC\n"),
 			psm->stepName, sln, NVRA,
 			fdno);
@@ -829,7 +898,7 @@ assert(NVRA != NULL);
 		/*@=modobserver@*/
 	    }
 	    xx = Chdir("/");
-	    rpmMessage(RPMMESS_DEBUG, D_("%s: %s(%s)\texecv(%s) pid %d\n"),
+	    rpmlog(RPMLOG_DEBUG, D_("%s: %s(%s)\texecv(%s) pid %d\n"),
 			psm->stepName, sln, NVRA,
 			argv[0], (unsigned)getpid());
 
@@ -861,7 +930,7 @@ assert(NVRA != NULL);
     }
 
     if (psm->sq.child == (pid_t)-1) {
-        rpmError(RPMERR_FORK, _("Couldn't fork %s: %s\n"), sln, strerror(errno));
+        rpmlog(RPMLOG_ERR, _("Couldn't fork %s: %s\n"), sln, strerror(errno));
         goto exit;
     }
 
@@ -869,19 +938,24 @@ assert(NVRA != NULL);
 
   /* XXX filter order dependent multilib "other" arch helper error. */
   if (!(psm->sq.reaped >= 0 && !strcmp(argv[0], "/usr/sbin/glibc_post_upgrade") && WEXITSTATUS(psm->sq.status) == 110)) {
+    void *ptr = NULL;
     if (psm->sq.reaped < 0) {
-	rpmError(RPMERR_SCRIPT,
+	rpmlog(RPMLOG_ERR,
 		_("%s(%s) scriptlet failed, waitpid(%d) rc %d: %s\n"),
 		 sln, NVRA, psm->sq.child, psm->sq.reaped, strerror(errno));
 	goto exit;
     } else
     if (!WIFEXITED(psm->sq.status) || WEXITSTATUS(psm->sq.status)) {
 	if (WIFSIGNALED(psm->sq.status)) {
-	    rpmError(RPMERR_SCRIPT,
+	    ptr = rpmtsNotify(ts, psm->te, RPMCALLBACK_SCRIPT_ERROR,
+				 psm->scriptTag, WTERMSIG(psm->sq.status));
+	    rpmlog(RPMLOG_ERR,
                  _("%s(%s) scriptlet failed, signal %d\n"),
                  sln, NVRA, WTERMSIG(psm->sq.status));
 	} else {
-	    rpmError(RPMERR_SCRIPT,
+	    ptr = rpmtsNotify(ts, psm->te, RPMCALLBACK_SCRIPT_ERROR,
+				 psm->scriptTag, WEXITSTATUS(psm->sq.status));
+	    rpmlog(RPMLOG_ERR,
 		_("%s(%s) scriptlet failed, exit status %d\n"),
 		sln, NVRA, WEXITSTATUS(psm->sq.status));
 	}
@@ -892,7 +966,7 @@ assert(NVRA != NULL);
     rc = RPMRC_OK;
 
 exit:
-    if (freePrefixes) prefixes = hfd(prefixes, ipt);
+    prefixes = _free(prefixes);
 
     if (out)
 	xx = Fclose(out);	/* XXX dup'd STDOUT_FILENO */
@@ -903,6 +977,7 @@ exit:
 	fn = _free(fn);
     }
 
+    body = _free(body);
     NVRA = _free(NVRA);
 
     return rc;
@@ -917,42 +992,46 @@ static rpmRC runInstScript(rpmpsm psm)
 	/*@globals rpmGlobalMacroContext, h_errno, fileSystem, internalState @*/
 	/*@modifies psm, rpmGlobalMacroContext, fileSystem, internalState @*/
 {
+    HE_t he = memset(alloca(sizeof(*he)), 0, sizeof(*he));
     rpmfi fi = psm->fi;
-    HGE_t hge = fi->hge;
-    HFD_t hfd = (fi->hfd ? fi->hfd : headerFreeData);
-    void ** progArgv = NULL;
-    int progArgc;
     const char * argv0 = NULL;
-    const char ** argv;
-    rpmTagType ptt, stt;
     const char * script;
     rpmRC rc = RPMRC_OK;
     int xx;
 
 assert(fi->h != NULL);
-    xx = hge(fi->h, psm->scriptTag, &stt, &script, NULL);
-    xx = hge(fi->h, psm->progTag, &ptt, &progArgv, &progArgc);
-    if (progArgv == NULL && script == NULL)
+    he->tag = psm->scriptTag;
+    xx = headerGet(fi->h, he, 0);
+    script = he->p.str;
+    if (script == NULL)
+	goto exit;
+    he->tag = psm->progTag;
+    xx = headerGet(fi->h, he, 0);
+    if (he->p.ptr == NULL)
 	goto exit;
 
-    if (progArgv && ptt == RPM_STRING_TYPE) {
-	argv = alloca(sizeof(*argv));
-	*argv = (const char *) progArgv;
-    } else {
-	argv = (const char **) progArgv;
+    /* Coerce strings into header argv return. */
+    if (he->t == RPM_STRING_TYPE) {
+	const char * s = he->p.str;
+	char * t;
+	he->p.argv = xmalloc(sizeof(*he->p.argv)+strlen(s)+1);
+	he->p.argv[0] = t = (char *) &he->p.argv[1];
+	t = stpcpy(t, s);
+	*t = '\0';
+	s = _free(s);
     }
 
-    if (argv[0][0] == '%')
-	argv[0] = argv0 = rpmExpand(argv[0], NULL);
+    /* Expand "%script -p %%{interpreter}" macros. */
+    if (he->p.argv[0][0] == '%')
+	he->p.argv[0] = argv0 = rpmExpand(he->p.argv[0], NULL);
 
-    if (fi->h != NULL)	/* XXX can't happen */
-    rc = runScript(psm, fi->h, tag2sln(psm->scriptTag), progArgc, argv,
+    rc = runScript(psm, fi->h, tag2sln(psm->scriptTag), he->c, he->p.argv,
 		script, psm->scriptArg, -1);
 
 exit:
     argv0 = _free(argv0);
-    progArgv = hfd(progArgv, ptt);
-    script = hfd(script, stt);
+    he->p.ptr = _free(he->p.ptr);
+    script = _free(script);
     return rc;
 }
 
@@ -974,33 +1053,34 @@ static rpmRC handleOneTrigger(const rpmpsm psm,
 		rpmGlobalMacroContext, fileSystem, internalState @*/
 {
     int scareMem = 0;
+    HE_t he = memset(alloca(sizeof(*he)), 0, sizeof(*he));
     const rpmts ts = psm->ts;
-    rpmfi fi = psm->fi;
-    HGE_t hge = fi->hge;
-    HFD_t hfd = (fi->hfd ? fi->hfd : headerFreeData);
     rpmds trigger = NULL;
     const char ** triggerScripts;
     const char ** triggerProgs;
-    int_32 * triggerIndices;
+    uint32_t * triggerIndices;
     const char * sourceName;
     const char * triggerName;
     rpmRC rc = RPMRC_OK;
     int xx;
     int i;
 
-    xx = hge(sourceH, RPMTAG_NAME, NULL, &sourceName, NULL);
-    xx = hge(triggeredH, RPMTAG_NAME, NULL, &triggerName, NULL);
+    he->tag = RPMTAG_NAME;
+    xx = headerGet(sourceH, he, 0);
+    sourceName = he->p.str;
+    he->tag = RPMTAG_NAME;
+    xx = headerGet(triggeredH, he, 0);
+    triggerName = he->p.str;
 
     trigger = rpmdsInit(rpmdsNew(triggeredH, RPMTAG_TRIGGERNAME, scareMem));
     if (trigger == NULL)
-	return rc;
+	goto exit;
 
     (void) rpmdsSetNoPromote(trigger, 1);
 
     while ((i = rpmdsNext(trigger)) >= 0) {
-	rpmTagType tit, tst, tpt;
 	const char * Name;
-	int_32 Flags = rpmdsFlags(trigger);
+	uint32_t Flags = rpmdsFlags(trigger);
 
 	if ((Name = rpmdsN(trigger)) == NULL)
 	    continue;   /* XXX can't happen */
@@ -1016,16 +1096,18 @@ static rpmRC handleOneTrigger(const rpmpsm psm,
 	if (!rpmdsAnyMatchesDep(sourceH, trigger, 1))
 	    continue;
 
-	if (!(	hge(triggeredH, RPMTAG_TRIGGERINDEX, &tit,
-		       &triggerIndices, NULL) &&
-		hge(triggeredH, RPMTAG_TRIGGERSCRIPTS, &tst,
-		       &triggerScripts, NULL) &&
-		hge(triggeredH, RPMTAG_TRIGGERSCRIPTPROG, &tpt,
-		       &triggerProgs, NULL))
-	    )
-	    continue;
+	he->tag = RPMTAG_TRIGGERINDEX;
+	xx = headerGet(triggeredH, he, 0);
+	triggerIndices = he->p.ui32p;
+	he->tag = RPMTAG_TRIGGERSCRIPTS;
+	xx = headerGet(triggeredH, he, 0);
+	triggerScripts = he->p.argv;
+	he->tag = RPMTAG_TRIGGERSCRIPTPROG;
+	xx = headerGet(triggeredH, he, 0);
+	triggerProgs = he->p.argv;
 
-	{   int arg1;
+	if (triggerIndices && triggerScripts && triggerProgs) {
+	    int arg1;
 	    int index;
 
 	    arg1 = rpmdbCountPackages(rpmtsGetRdb(ts), triggerName);
@@ -1047,9 +1129,9 @@ static rpmRC handleOneTrigger(const rpmpsm psm,
 	    }
 	}
 
-	triggerIndices = hfd(triggerIndices, tit);
-	triggerScripts = hfd(triggerScripts, tst);
-	triggerProgs = hfd(triggerProgs, tpt);
+	triggerIndices = _free(triggerIndices);
+	triggerScripts = _free(triggerScripts);
+	triggerProgs = _free(triggerProgs);
 
 	/*
 	 * Each target/source header pair can only result in a single
@@ -1059,6 +1141,10 @@ static rpmRC handleOneTrigger(const rpmpsm psm,
     }
 
     trigger = rpmdsFree(trigger);
+
+exit:
+    sourceName = _free(sourceName);
+    triggerName = _free(triggerName);
 
     return rc;
 }
@@ -1116,27 +1202,32 @@ static rpmRC runImmedTriggers(rpmpsm psm)
 	/*@modifies psm, rpmGlobalMacroContext,
 		fileSystem, internalState @*/
 {
+    HE_t he = memset(alloca(sizeof(*he)), 0, sizeof(*he));
     const rpmts ts = psm->ts;
     rpmfi fi = psm->fi;
-    HGE_t hge = fi->hge;
-    HFD_t hfd = (fi->hfd ? fi->hfd : headerFreeData);
     const char ** triggerNames;
     int numTriggers;
-    int_32 * triggerIndices;
-    rpmTagType tnt, tit;
+    uint32_t * triggerIndices;
     int numTriggerIndices;
     unsigned char * triggersRun;
     rpmRC rc = RPMRC_OK;
     size_t nb;
+    int xx;
 
+assert(fi->h != NULL);
     if (fi->h == NULL)	return rc;	/* XXX can't happen */
 
-    if (!(	hge(fi->h, RPMTAG_TRIGGERNAME, &tnt,
-			&triggerNames, &numTriggers) &&
-		hge(fi->h, RPMTAG_TRIGGERINDEX, &tit,
-			&triggerIndices, &numTriggerIndices))
-	)
-	return rc;
+    he->tag = RPMTAG_TRIGGERNAME;
+    xx = headerGet(fi->h, he, 0);
+    triggerNames = he->p.argv;
+    numTriggers = he->c;
+    he->tag = RPMTAG_TRIGGERINDEX;
+    xx = headerGet(fi->h, he, 0);
+    triggerIndices = he->p.ui32p;
+    numTriggerIndices = he->c;
+
+    if (!(triggerNames && numTriggers > 0 && triggerIndices && numTriggerIndices > 0))
+	goto exit;
 
     nb = sizeof(*triggersRun) * numTriggerIndices;
     triggersRun = memset(alloca(nb), 0, nb);
@@ -1160,8 +1251,10 @@ static rpmRC runImmedTriggers(rpmpsm psm)
 	    mi = rpmdbFreeIterator(mi);
 	}
     }
-    triggerIndices = hfd(triggerIndices, tit);
-    triggerNames = hfd(triggerNames, tnt);
+
+exit:
+    triggerIndices = _free(triggerIndices);
+    triggerNames = _free(triggerNames);
     return rc;
 }
 
@@ -1289,18 +1382,17 @@ rpmpsm rpmpsmNew(rpmts ts, rpmte te, rpmfi fi)
  * @param tag		tag to load
  * @return		tag value (0 on failure)
  */
-static uint_32 hLoadTID(Header h, int_32 tag)
+static uint32_t hLoadTID(Header h, rpmTag tag)
 	/*@*/
 {
-    uint_32 val = 0;
-    int_32 typ = 0;
-    void * ptr = NULL;
-    int_32 cnt = 0;
+    HE_t he = memset(alloca(sizeof(*he)), 0, sizeof(*he));
+    uint32_t val;
+    int xx;
 
-    if (headerGetEntry(h, tag, &typ, &ptr, &cnt)
-     && typ == RPM_INT32_TYPE && ptr != NULL && cnt == 1)
-	val = *(uint_32 *)ptr;
-    ptr = headerFreeData(ptr, typ);
+    he->tag = tag;
+    xx = headerGet(h, he, 0);
+    val = (xx && he->p.ui32p ? he->p.ui32p[0] : 0);
+    he->p.ptr = _free(he->p.ptr);
     return val;
 }
 
@@ -1311,18 +1403,16 @@ static uint_32 hLoadTID(Header h, int_32 tag)
  * @param tag		tag to copy
  * @return		0 always
  */
-static int hCopyTag(Header sh, Header th, int_32 tag)
+static int hCopyTag(Header sh, Header th, rpmTag tag)
 	/*@modifies th @*/
 {
-    int_32 typ = 0;
-    void * ptr = NULL;
-    int_32 cnt = 0;
+    HE_t he = memset(alloca(sizeof(*he)), 0, sizeof(*he));
     int xx = 1;
 
-    if (headerGetEntry(sh, tag, &typ, &ptr, &cnt) && cnt > 0)
-	xx = headerAddEntry(th, tag, typ, ptr, cnt);
-assert(xx);
-    ptr = headerFreeData(ptr, typ);
+    he->tag = tag;
+    if (headerGet(sh, he, 0) && he->c > 0)
+	xx = headerPut(th, he, 0);
+    he->p.ptr = _free(he->p.ptr);
     return 0;
 }
 
@@ -1335,37 +1425,48 @@ assert(xx);
 static int hSaveBlinks(Header h, const struct rpmChainLink_s * blink)
 	/*@modifies h @*/
 {
-    /*@observer@*/
+    HE_t he = memset(alloca(sizeof(*he)), 0, sizeof(*he));
+/*@observer@*/
     static const char * chain_end = RPMTE_CHAIN_END;
     int ac;
     int xx = 1;
 
+    /* Save forward links into header upgrade chain. */
+    he->tag = RPMTAG_BLINKNEVRA;
+    he->t = RPM_STRING_ARRAY_TYPE;
     ac = argvCount(blink->NEVRA);
-    if (ac > 0)
-	xx = headerAddEntry(h, RPMTAG_BLINKNEVRA, RPM_STRING_ARRAY_TYPE,
-			argvData(blink->NEVRA), ac);
-    else     /* XXX Add an explicit chain terminator on 1st install. */
-	xx = headerAddEntry(h, RPMTAG_BLINKNEVRA, RPM_STRING_ARRAY_TYPE,
-			&chain_end, 1);
-assert(xx);
+    if (ac > 0) {
+	he->p.argv = argvData(blink->NEVRA);
+	he->c = ac;
+    } else {    /* XXX Add an explicit chain terminator on 1st install. */
+	he->p.argv = &chain_end;
+	he->c = 1;
+    }
+    xx = headerPut(h, he, 0);
     
+    he->tag = RPMTAG_BLINKPKGID;
+    he->t = RPM_STRING_ARRAY_TYPE;
     ac = argvCount(blink->Pkgid);
-    if (ac > 0) 
-	xx = headerAddEntry(h, RPMTAG_BLINKPKGID, RPM_STRING_ARRAY_TYPE,
-			argvData(blink->Pkgid), ac);
-    else     /* XXX Add an explicit chain terminator on 1st install. */
-	xx = headerAddEntry(h, RPMTAG_BLINKPKGID, RPM_STRING_ARRAY_TYPE,
-			&chain_end, 1);
-assert(xx);
+    if (ac > 0) {
+	he->p.argv = argvData(blink->Pkgid);
+	he->c = ac;
+    } else {	/* XXX Add an explicit chain terminator on 1st install. */
+	he->p.argv = &chain_end;
+	he->c = 1;
+    }
+    xx = headerPut(h, he, 0);
 
+    he->tag = RPMTAG_BLINKHDRID;
+    he->t = RPM_STRING_ARRAY_TYPE;
     ac = argvCount(blink->Hdrid);
-    if (ac > 0)
-	xx = headerAddEntry(h, RPMTAG_BLINKHDRID, RPM_STRING_ARRAY_TYPE,
-			argvData(blink->Hdrid), ac);
-    else     /* XXX Add an explicit chain terminator on 1st install. */
-	xx = headerAddEntry(h, RPMTAG_BLINKNEVRA, RPM_STRING_ARRAY_TYPE,
-			&chain_end, 1);
-assert(xx);
+    if (ac > 0) {
+	he->p.argv = argvData(blink->Hdrid);
+	he->c = ac;
+    } else {	/* XXX Add an explicit chain terminator on 1st install. */
+	he->p.argv = &chain_end;
+	he->c = 1;
+    }
+    xx = headerPut(h, he, 0);
 
     return 0;
 }
@@ -1379,6 +1480,7 @@ assert(xx);
 static int hSaveFlinks(Header h, const struct rpmChainLink_s * flink)
 	/*@modifies h @*/
 {
+    HE_t he = memset(alloca(sizeof(*he)), 0, sizeof(*he));
 #ifdef	NOTYET
     /*@observer@*/
     static const char * chain_end = RPMTE_CHAIN_END;
@@ -1386,39 +1488,51 @@ static int hSaveFlinks(Header h, const struct rpmChainLink_s * flink)
     int ac;
     int xx = 1;
 
-    /* Save backward links into header upgrade chain. */
+    /* Save forward links into header upgrade chain. */
+    he->tag = RPMTAG_FLINKNEVRA;
+    he->t = RPM_STRING_ARRAY_TYPE;
     ac = argvCount(flink->NEVRA);
-    if (ac > 0)
-	xx = headerAddEntry(h, RPMTAG_FLINKNEVRA, RPM_STRING_ARRAY_TYPE,
-			argvData(flink->NEVRA), ac);
+    if (ac > 0) {
+	he->p.argv = argvData(flink->NEVRA);
+	he->c = ac;
+    }
 #ifdef	NOTYET	/* XXX is an explicit flink terminator needed? */
-    else     /* XXX Add an explicit chain terminator on 1st install. */
-	xx = headerAddEntry(h, RPMTAG_FLINKNEVRA, RPM_STRING_ARRAY_TYPE,
-			&chain_end, 1);
+    else {	/* XXX Add an explicit chain terminator on 1st install. */
+	he->p.argv = &chain_end;
+	he->c = 1;
+    }
 #endif
-assert(xx);
+    xx = headerPut(h, he, 0);
 
+    he->tag = RPMTAG_FLINKPKGID;
+    he->t = RPM_STRING_ARRAY_TYPE;
     ac = argvCount(flink->Pkgid);
-    if (ac > 0) 
-	xx = headerAddEntry(h, RPMTAG_FLINKPKGID, RPM_STRING_ARRAY_TYPE,
-			argvData(flink->Pkgid), ac);
+    if (ac > 0) {
+	he->p.argv = argvData(flink->Pkgid);
+	he->c = ac;
+    }
 #ifdef	NOTYET	/* XXX is an explicit flink terminator needed? */
-    else     /* XXX Add an explicit chain terminator on 1st install. */
-	xx = headerAddEntry(h, RPMTAG_FLINKPKGID, RPM_STRING_ARRAY_TYPE,
-			&chain_end, 1);
+    else {	/* XXX Add an explicit chain terminator on 1st install. */
+	he->p.argv = &chain_end;
+	he->c = 1;
+    }
 #endif
-assert(xx);
+    xx = headerPut(h, he, 0);
 
+    he->tag = RPMTAG_FLINKHDRID;
+    he->t = RPM_STRING_ARRAY_TYPE;
     ac = argvCount(flink->Hdrid);
-    if (ac > 0)
-	xx = headerAddEntry(h, RPMTAG_FLINKHDRID, RPM_STRING_ARRAY_TYPE,
-			argvData(flink->Hdrid), ac);
+    if (ac > 0) {
+	he->p.argv = argvData(flink->Hdrid);
+	he->c = ac;
+    }
 #ifdef	NOTYET	/* XXX is an explicit flink terminator needed? */
-    else     /* XXX Add an explicit chain terminator on 1st install. */
-	xx = headerAddEntry(h, RPMTAG_FLINKNEVRA, RPM_STRING_ARRAY_TYPE,
-			&chain_end, 1);
+    else {	/* XXX Add an explicit chain terminator on 1st install. */
+	he->p.argv = &chain_end;
+	he->c = 1;
+    }
 #endif
-assert(xx);
+    xx = headerPut(h, he, 0);
 
     return 0;
 }
@@ -1433,39 +1547,49 @@ assert(xx);
 static int populateInstallHeader(const rpmts ts, const rpmte te, rpmfi fi)
 	/*@modifies fi @*/
 {
-    uint_32 tscolor = rpmtsColor(ts);
-    uint_32 tecolor = rpmteColor(te);
-    int_32 installTime = (int_32) time(NULL);
+    HE_t he = memset(alloca(sizeof(*he)), 0, sizeof(*he));
+    uint32_t tscolor = rpmtsColor(ts);
+    uint32_t tecolor = rpmteColor(te);
+    uint32_t installTime = (uint32_t) time(NULL);
     int fc = rpmfiFC(fi);
-    const char * origin;
     int xx = 1;
 
 assert(fi->h != NULL);
-    if (fi->fstates != NULL && fc > 0)
-	xx = headerAddEntry(fi->h, RPMTAG_FILESTATES, RPM_CHAR_TYPE,
-				fi->fstates, fc);
-assert(xx);
+    if (fi->fstates != NULL && fc > 0) {
+	he->tag = RPMTAG_FILESTATES;
+	he->t = RPM_UINT8_TYPE;
+	he->p.ui8p = fi->fstates;
+	he->c = fc;
+	xx = headerPut(fi->h, he, 0);
+    }
 
-    xx = headerAddEntry(fi->h, RPMTAG_INSTALLTIME, RPM_INT32_TYPE,
-			&installTime, 1);
-assert(xx);
+    he->tag = RPMTAG_INSTALLTIME;
+    he->t = RPM_UINT32_TYPE;
+    he->p.ui32p = &installTime;
+    he->c = 1;
+    xx = headerPut(fi->h, he, 0);
 
-    xx = headerAddEntry(fi->h, RPMTAG_INSTALLCOLOR, RPM_INT32_TYPE,
-			&tscolor, 1);
-assert(xx);
+    he->tag = RPMTAG_INSTALLCOLOR;
+    he->t = RPM_UINT32_TYPE;
+    he->p.ui32p = &tscolor;
+    he->c = 1;
+    xx = headerPut(fi->h, he, 0);
 
     /* XXX FIXME: add preferred color at install. */
 
-    xx = headerAddEntry(fi->h, RPMTAG_PACKAGECOLOR, RPM_INT32_TYPE,
-				&tecolor, 1);
-assert(xx);
+    he->tag = RPMTAG_PACKAGECOLOR;
+    he->t = RPM_UINT32_TYPE;
+    he->p.ui32p = &tecolor;
+    he->c = 1;
+    xx = headerPut(fi->h, he, 0);
 
     /* Add the header's origin (i.e. URL) */
-    origin = headerGetOrigin(fi->h);
-    if (origin != NULL)
-	xx = headerAddEntry(fi->h, RPMTAG_PACKAGEORIGIN, RPM_STRING_TYPE,
-				origin, 1);
-assert(xx);
+    he->tag = RPMTAG_PACKAGEORIGIN;
+    he->t = RPM_STRING_TYPE;
+    he->p.str = headerGetOrigin(fi->h);
+    he->c = 1;
+    if (he->p.str != NULL)
+	xx = headerPut(fi->h, he, 0);
 
     /* XXX Don't clobber forward/backward upgrade chain on rollbacks */
     if (rpmtsType(ts) != RPMTRANS_TYPE_ROLLBACK)
@@ -1505,21 +1629,25 @@ static int rpmpsmNext(rpmpsm psm, pkgStage nstage)
 /*@-nullpass@*/ /* FIX: testing null annotation for fi->h */
 rpmRC rpmpsmStage(rpmpsm psm, pkgStage stage)
 {
+    HE_t he = memset(alloca(sizeof(*he)), 0, sizeof(*he));
     const rpmts ts = psm->ts;
-    uint_32 tscolor = rpmtsColor(ts);
+    uint32_t tscolor = rpmtsColor(ts);
     rpmfi fi = psm->fi;
-    HGE_t hge = fi->hge;
-    HAE_t hae = fi->hae;
-    HFD_t hfd = (fi->hfd ? fi->hfd : headerFreeData);
     rpmRC rc = psm->rc;
     int saveerrno;
     int xx;
+
+/* XXX hackery to assert(!scaremem) in rpmfiNew. */
+if (fi->h == NULL && fi->te && fi->te->h != NULL) fi->h = headerLink(fi->te->h);
+#if 0
+assert(fi->h != NULL);	/* XXX install/verify have fi->h, erasures doesn't. */
+#endif
 
     switch (stage) {
     case PSM_UNKNOWN:
 	break;
     case PSM_INIT:
-	rpmMessage(RPMMESS_DEBUG, D_("%s: %s has %d files, test = %d\n"),
+	rpmlog(RPMLOG_DEBUG, D_("%s: %s has %d files, test = %d\n"),
 		psm->stepName, rpmteNEVR(psm->te),
 		rpmfiFC(fi), (rpmtsFlags(ts) & RPMTRANS_FLAG_TEST));
 
@@ -1596,24 +1724,31 @@ assert(psm->mi == NULL);
 	     * prefix stripped to form the cpio list, while all other packages
 	     * need the leading / stripped.
 	     */
-	    {   const char * p;
-		xx = hge(fi->h, RPMTAG_DEFAULTPREFIX, NULL, &p, NULL);
-		fi->striplen = (xx ? strlen(p) + 1 : 1);
-	    }
+	    he->tag = RPMTAG_DEFAULTPREFIX;
+	    xx = headerGet(fi->h, he, 0);
+	    fi->striplen = (xx && he->p.str ? strlen(he->p.str) + 1 : 1);
+	    he->p.ptr = _free(he->p.ptr);
 	    fi->mapflags =
 		CPIO_MAP_PATH | CPIO_MAP_MODE | CPIO_MAP_UID | CPIO_MAP_GID | (fi->mapflags & CPIO_SBIT_CHECK);
 	
 	    if (headerIsEntry(fi->h, RPMTAG_ORIGBASENAMES))
-		xx = headerGetExtension(fi->h, RPMTAG_ORIGPATHS, NULL, &fi->apath, NULL);
+		he->tag = RPMTAG_ORIGPATHS;
 	    else
-		xx = headerGetExtension(fi->h, RPMTAG_FILEPATHS, NULL, &fi->apath, NULL);
+		he->tag = RPMTAG_FILEPATHS;
+	    xx = headerGet(fi->h, he, 0);
+assert(he->p.argv != NULL);
+	    fi->apath = he->p.argv;
 	
-	    if (fi->fuser == NULL)
-		xx = hge(fi->h, RPMTAG_FILEUSERNAME, NULL,
-				&fi->fuser, NULL);
-	    if (fi->fgroup == NULL)
-		xx = hge(fi->h, RPMTAG_FILEGROUPNAME, NULL,
-				&fi->fgroup, NULL);
+	    if (fi->fuser == NULL) {
+		he->tag = RPMTAG_FILEUSERNAME;
+		xx = headerGet(fi->h, he, 0);
+		fi->fuser = he->p.argv;
+	    }
+	    if (fi->fgroup == NULL) {
+		he->tag = RPMTAG_FILEGROUPNAME;
+		xx = headerGet(fi->h, he, 0);
+		fi->fgroup = he->p.argv;
+	    }
 	    rc = RPMRC_OK;
 	}
 	if (psm->goal == PSM_PKGERASE || psm->goal == PSM_PKGSAVE) {
@@ -1621,9 +1756,14 @@ assert(psm->mi == NULL);
 	
 	    /* Retrieve installed header. */
 	    rc = rpmpsmNext(psm, PSM_RPMDB_LOAD);
+#ifdef	DYING
 if (rc == RPMRC_OK)
 if (psm->te)
 psm->te->h = headerLink(fi->h);
+#else
+	    if (rc == RPMRC_OK && psm->te)
+		(void) rpmteSetHeader(psm->te, fi->h);
+#endif
 	}
 	if (psm->goal == PSM_PKGSAVE) {
 	    /* Open output package for writing. */
@@ -1636,7 +1776,7 @@ psm->te->h = headerLink(fi->h);
 		xx = snprintf(tiddn, sizeof(tiddn), "%d", rpmtsGetTid(ts));
 		bfmt = rpmGetPath(tiddn, "/", "%{_repackage_name_fmt}", NULL);
 		pkgbn = headerSprintf(fi->h, bfmt,
-					rpmTagTable, rpmHeaderFormats, NULL);
+					NULL, rpmHeaderFormats, NULL);
 		bfmt = _free(bfmt);
 		psm->pkgURL = rpmGenPath("%{?_repackage_root}",
 					 "%{?_repackage_dir}",
@@ -1696,7 +1836,7 @@ psm->te->h = headerLink(fi->h);
 	    if (!(rpmtsFlags(ts) & RPMTRANS_FLAG_NOPRE)) {
 		rc = rpmpsmNext(psm, PSM_SCRIPT);
 		if (rc != RPMRC_OK) {
-		    rpmError(RPMERR_SCRIPT,
+		    rpmlog(RPMLOG_ERR,
 			_("%s: %s scriptlet failed (%d), skipping %s\n"),
 			psm->stepName, tag2sln(psm->scriptTag), rc,
 			rpmteNEVR(psm->te));
@@ -1730,45 +1870,48 @@ psm->te->h = headerLink(fi->h);
 
 	    /* Regenerate original header. */
 	    {	void * uh = NULL;
-		int_32 uht, uhc;
 
-		/* Save originnal header's origin (i.e. URL) */
-		origin = NULL;
-		xx = headerGetEntry(fi->h, RPMTAG_PACKAGEORIGIN, NULL,
-			&origin, NULL);
+		/* Save original header's origin (i.e. URL) */
+		he->tag = RPMTAG_PACKAGEORIGIN;
+		xx = headerGet(fi->h, he, 0);
+		origin = he->p.str;
 
 		/* Retrieve original header blob. */
-		if (headerGetEntry(fi->h, RPMTAG_HEADERIMMUTABLE, &uht, &uh, &uhc)) {
+		he->tag = RPMTAG_HEADERIMMUTABLE;
+		xx = headerGet(fi->h, he, 0);
+		uh = he->p.ptr;
+		if (xx && uh != NULL) {
 		    psm->oh = headerCopyLoad(uh);
-		    uh = hfd(uh, uht);
-		} else
-		if (headerGetEntry(fi->h, RPMTAG_HEADERIMAGE, &uht, &uh, &uhc))
-		{
-		    HeaderIterator hi;
-		    int_32 tag, type, count;
-		    hPTR_t ptr;
-		    Header oh;
+		    uh = _free(uh);
+		} else {
+		    he->tag = RPMTAG_HEADERIMAGE;
+		    xx = headerGet(fi->h, he, 0);
+		    uh = he->p.ptr;
+		    if (xx && uh != NULL) {
+			HeaderIterator hi;
+			Header oh;
 
-		    /* Load the original header from the blob. */
-		    oh = headerCopyLoad(uh);
+			/* Load the original header from the blob. */
+			oh = headerCopyLoad(uh);
 
-		    /* XXX this is headerCopy w/o headerReload() */
-		    psm->oh = headerNew();
+			/* XXX this is headerCopy w/o headerReload() */
+			psm->oh = headerNew();
 
-		    for (hi = headerInitIterator(oh);
-		        headerNextIterator(hi, &tag, &type, &ptr, &count);
-		        ptr = headerFreeData((void *)ptr, type))
-		    {
-			if (tag == RPMTAG_ARCHIVESIZE)
-			    noArchiveSize = 1;
-		        if (ptr) xx = hae(psm->oh, tag, type, ptr, count);
-		    }
-		    hi = headerFreeIterator(hi);
+			for (hi = headerInit(oh);
+			     headerNext(hi, he, 0);
+			     he->p.ptr = _free(he->p.ptr))
+			{
+			    if (he->tag == RPMTAG_ARCHIVESIZE)
+				noArchiveSize = 1;
+			    xx = headerPut(psm->oh, he, 0);
+			}
+			hi = headerFini(hi);
 
-		    oh = headerFree(oh);
-		    uh = hfd(uh, uht);
-		} else
-		    break;	/* XXX shouldn't ever happen */
+			oh = headerFree(oh);
+			uh = _free(uh);
+		    } else
+			break;	/* XXX shouldn't ever happen */
+		}
 	    }
 
 	    /* Retrieve type of payload compression. */
@@ -1777,8 +1920,7 @@ psm->te->h = headerLink(fi->h);
 	    /*@=nullstate@*/
 
 	    /* Write the lead section into the package. */
-	    if (!_nolead) {
-		static const char item[] = "Lead";
+	    {	static const char item[] = "Lead";
 		const char * NEVR = rpmteNEVR(psm->te);
 		size_t nb = rpmpkgSizeof(item, NULL);
 	
@@ -1790,7 +1932,7 @@ psm->te->h = headerLink(fi->h);
 		    rc = rpmpkgWrite(item, psm->fd, l, &NEVR);
 		}
 		if (rc != RPMRC_OK) {
-		    rpmError(RPMERR_NOSPACE, _("Unable to write package: %s\n"),
+		    rpmlog(RPMLOG_ERR, _("Unable to write package: %s\n"),
 				Fstrerror(psm->fd));
 		    break;
 		}
@@ -1798,13 +1940,12 @@ psm->te->h = headerLink(fi->h);
 
 	    /* Write the signature section into the package. */
 	    /* XXX rpm-4.1 and later has archive size in signature header. */
-	    if (!_nosigh) {
-		static const char item[] = "Signature";
+	    {	static const char item[] = "Signature";
 		Header sigh = headerRegenSigHeader(fi->h, noArchiveSize);
 		/* Reallocate the signature into one contiguous region. */
 		sigh = headerReload(sigh, RPMTAG_HEADERSIGNATURES);
 		if (sigh == NULL) {
-		    rpmError(RPMERR_NOSPACE, _("Unable to reload signature header\n"));
+		    rpmlog(RPMLOG_ERR, _("Unable to reload signature header\n"));
 		    rc = RPMRC_FAIL;
 		    break;
 		}
@@ -1817,15 +1958,23 @@ psm->te->h = headerLink(fi->h);
 
 	    /* Add remove transaction id to header. */
 	    if (psm->oh != NULL)
-	    {	int_32 tid = rpmtsGetTid(ts);
+	    {	uint32_t tid = rpmtsGetTid(ts);
 
-		xx = hae(psm->oh, RPMTAG_REMOVETID, RPM_INT32_TYPE,
-				&tid, 1);
+		he->tag = RPMTAG_REMOVETID;
+		he->t = RPM_UINT32_TYPE;
+		he->p.ui32p = &tid;
+		he->c = 1;
+		xx = headerPut(psm->oh, he, 0);
 
 		/* Add original header's origin (i.e. URL) */
-		if (origin != NULL)
-		    xx = hae(psm->oh, RPMTAG_PACKAGEORIGIN, RPM_STRING_TYPE,
-				origin, 1);
+		if (origin != NULL) {
+		    he->tag = RPMTAG_PACKAGEORIGIN;
+		    he->t = RPM_STRING_TYPE;
+		    he->p.str = origin;
+		    he->c = 1;
+		    xx = headerPut(psm->oh, he, 0);
+		    origin = _free(origin);
+		}
 
 		/* Copy upgrade chain link tags. */
 		xx = hCopyTag(fi->h, psm->oh, RPMTAG_INSTALLTID);
@@ -1838,8 +1987,15 @@ assert(psm->te != NULL);
 	    }
 
 	    /* Write the metadata section into the package. */
-	    rc = headerWrite(psm->fd, psm->oh);
-	    if (rc) break;
+	    {	const char item[] = "Header";
+		const char * msg = NULL;
+		rc = rpmpkgWrite(item, psm->fd, psm->oh, &msg);
+		if (rc != RPMRC_OK) {
+		    rpmlog(RPMLOG_ERR, "%s: %s: %s", psm->pkgfn, item,
+			(msg && *msg ? msg : "write failed\n"));
+		    msg = _free(msg);
+		}
+	    }
 	}
 	break;
     case PSM_PROCESS:
@@ -1898,7 +2054,7 @@ assert(psm->te != NULL);
 	    xx = rpmpsmNext(psm, PSM_NOTIFY);
 
 	    if (rc) {
-		rpmError(RPMERR_CPIO,
+		rpmlog(RPMLOG_ERR,
 			_("unpacking of archive failed%s%s: %s\n"),
 			(psm->failedFile != NULL ? _(" on file ") : ""),
 			(psm->failedFile != NULL ? psm->failedFile : ""),
@@ -2070,18 +2226,18 @@ assert(psm->te != NULL);
 
 	if (psm->goal == PSM_PKGSAVE) {
 	    if (!rc && ts && ts->notify == NULL) {
-		rpmMessage(RPMMESS_VERBOSE, _("Wrote: %s\n"),
+		rpmlog(RPMLOG_INFO, _("Wrote: %s\n"),
 			(psm->pkgURL ? psm->pkgURL : "???"));
 	    }
 	}
 
 	if (rc) {
 	    if (psm->failedFile)
-		rpmError(RPMERR_CPIO,
+		rpmlog(RPMLOG_ERR,
 			_("%s failed on file %s: %s\n"),
 			psm->stepName, psm->failedFile, cpioStrerror(rc));
 	    else
-		rpmError(RPMERR_CPIO, _("%s failed: %s\n"),
+		rpmlog(RPMLOG_ERR, _("%s failed: %s\n"),
 			psm->stepName, cpioStrerror(rc));
 
 	    /* XXX notify callback on error. */
@@ -2094,9 +2250,14 @@ assert(psm->te != NULL);
 	}
 
 	if (psm->goal == PSM_PKGERASE || psm->goal == PSM_PKGSAVE) {
+#ifdef	DYING
 if (psm->te != NULL)
 if (psm->te->h != NULL)
 psm->te->h = headerFree(psm->te->h);
+#else
+	    if (psm->te != NULL)
+		(void) rpmteSetHeader(psm->te, NULL);
+#endif
 	    if (fi->h != NULL)
 		fi->h = headerFree(fi->h);
  	}
@@ -2106,8 +2267,8 @@ psm->te->h = headerFree(psm->te->h);
 	psm->payload_format = _free(psm->payload_format);
 	psm->failedFile = _free(psm->failedFile);
 
-	fi->fgroup = hfd(fi->fgroup, -1);
-	fi->fuser = hfd(fi->fuser, -1);
+	fi->fgroup = _free(fi->fgroup);
+	fi->fuser = _free(fi->fuser);
 	fi->apath = _free(fi->apath);
 	fi->fstates = _free(fi->fstates);
 	break;
@@ -2210,9 +2371,12 @@ psm->te->h = headerFree(psm->te->h);
 	const char * payload_format = NULL;
 	char * t;
 
-	if (!hge(fi->h, RPMTAG_PAYLOADCOMPRESSOR, NULL,
-			    &payload_compressor, NULL))
-	    payload_compressor = "gzip";
+	he->tag = RPMTAG_PAYLOADCOMPRESSOR;
+	xx = headerGet(fi->h, he, 0);
+	payload_compressor = he->p.str;
+	if (payload_compressor == NULL)
+	    payload_compressor = xstrdup("gzip");
+
 	psm->rpmio_flags = t = xmalloc(sizeof("w9.gzdio"));
 	*t = '\0';
 	t = stpcpy(t, ((psm->goal == PSM_PKGSAVE) ? "w9" : "r"));
@@ -2222,12 +2386,18 @@ psm->te->h = headerFree(psm->te->h);
 	    t = stpcpy(t, ".bzdio");
 	if (!strcmp(payload_compressor, "lzma"))
 	    t = stpcpy(t, ".lzdio");
+	payload_compressor = _free(payload_compressor);
 
-	if (!hge(fi->h, RPMTAG_PAYLOADFORMAT, NULL,
-			    &payload_format, NULL)
-	 || !(!strcmp(payload_format, "tar") || !strcmp(payload_format, "ustar")))
-	    payload_format = "cpio";
-	psm->payload_format = xstrdup(payload_format);
+	he->tag = RPMTAG_PAYLOADFORMAT;
+	xx = headerGet(fi->h, he, 0);
+	payload_format = he->p.str;
+	if (!xx || payload_format == NULL
+	 || !(!strcmp(payload_format, "tar") || !strcmp(payload_format, "ustar"))) {
+	    payload_format = _free(payload_format);
+	    payload_format = xstrdup("cpio");
+	}
+	psm->payload_format = _free(psm->payload_format);
+	psm->payload_format = payload_format;
 	rc = RPMRC_OK;
     }	break;
 
@@ -2253,7 +2423,7 @@ assert(psm->mi == NULL);
 
 	/* Add header to db, doing header check if requested */
 	/* XXX rollback headers propagate the previous transaction id. */
-	{   uint_32 tid = ((rpmtsType(ts) == RPMTRANS_TYPE_ROLLBACK)
+	{   uint32_t tid = ((rpmtsType(ts) == RPMTRANS_TYPE_ROLLBACK)
 		? hLoadTID(fi->h, RPMTAG_INSTALLTID) : rpmtsGetTid(ts));
 	    (void) rpmswEnter(rpmtsOp(ts, RPMTS_OP_DBADD), 0);
 	    if (!(rpmtsVSFlags(ts) & RPMVSF_NOHDRCHK))

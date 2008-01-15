@@ -8,11 +8,18 @@
 
 #define	MYALLPERMS	07777
 
+#if defined(WITH_PCRE) && defined(WITH_PCRE_POSIX)
+#include <pcreposix.h>
+#else
 #include <regex.h>
+#endif
 
-#include <rpmio_internal.h>
+#include <rpmio_internal.h>	/* XXX fdGetFp */
 #include <fts.h>
 
+#define	_RPMTAG_INTERNAL	/* XXX rpmTags->aTags */
+#define	_RPMFI_INTERNAL
+#define	_RPMTE_INTERNAL
 #include <rpmbuild.h>
 
 #include "cpio.h"
@@ -20,16 +27,10 @@
 #include "argv.h"
 #include "rpmfc.h"
 
-#define	_RPMFI_INTERNAL
-#include "rpmfi.h"
-
-#define	_RPMTE_INTERNAL
-#include "rpmte.h"
-
 #include "buildio.h"
 
 #include "legacy.h"	/* XXX dodigest */
-#include "misc.h"
+#include "misc.h"	/* for splitString, freeSplitString */
 #include "debug.h"
 
 /*@access Header @*/
@@ -217,12 +218,12 @@ static void dumpAttrRec(const char * msg, AttrRec ar)
 #endif
 
 /**
+ * Strip quotes from strtok(3) string.
  * @param s		string
  * @param delim		token delimiters
  */
-/*@-boundswrite@*/
 /*@null@*/
-static char *strtokWithQuotes(/*@null@*/ char *s, char *delim)
+static char *strtokWithQuotes(/*@null@*/ char *s, const char *delim)
 	/*@modifies *s @*/
 {
     static char *olds = NULL;
@@ -262,7 +263,6 @@ static char *strtokWithQuotes(/*@null@*/ char *s, char *delim)
     return token;
     /*@=retalias =temptrans @*/
 }
-/*@=boundswrite@*/
 
 /**
  */
@@ -270,24 +270,26 @@ static void timeCheck(int tc, Header h)
 	/*@globals internalState @*/
 	/*@modifies internalState @*/
 {
-    HGE_t hge = (HGE_t)headerGetEntryMinMemory;
-    HFD_t hfd = headerFreeData;
-    int * mtime;
-    const char ** files;
-    rpmTagType fnt;
-    int count, x;
-    time_t currentTime = time(NULL);
+    HE_t he = memset(alloca(sizeof(*he)), 0, sizeof(*he));
+    uint32_t currentTime = time(NULL);
+    uint32_t * mtime;
+    int xx;
+    int i;
 
-    x = hge(h, RPMTAG_OLDFILENAMES, &fnt, &files, &count);
-    x = hge(h, RPMTAG_FILEMTIMES, NULL, &mtime, NULL);
+    he->tag = RPMTAG_FILEMTIMES;
+    xx = headerGet(h, he, 0);
+    mtime = he->p.ui32p;
+    he->tag = RPMTAG_OLDFILENAMES;
+    xx = headerGet(h, he, 0);
     
-/*@-boundsread@*/
-    for (x = 0; x < count; x++) {
-	if ((currentTime - mtime[x]) > tc)
-	    rpmMessage(RPMMESS_WARNING, _("TIMECHECK failure: %s\n"), files[x]);
+    for (i = 0; i < he->c; i++) {
+	xx = currentTime - mtime[i];
+	if (xx < 0) xx = -xx;
+	if (xx > tc)
+	    rpmlog(RPMLOG_WARNING, _("TIMECHECK failure: %s\n"), he->p.argv[i]);
     }
-    files = hfd(files, fnt);
-/*@=boundsread@*/
+    he->p.ptr = _free(he->p.ptr);
+    mtime = _free(mtime);
 }
 
 /**
@@ -319,10 +321,9 @@ VFA_t verifyAttrs[] = {
  * Parse %verify and %defverify from file manifest.
  * @param buf		current spec file line
  * @param fl		package file tree walk data
- * @return		0 on success
+ * @return		RPMRC_OK on success
  */
-/*@-boundswrite@*/
-static int parseForVerify(char * buf, FileList fl)
+static rpmRC parseForVerify(char * buf, FileList fl)
 	/*@modifies buf, fl->processingFailed,
 		fl->currentVerifyFlags, fl->defVerifyFlags,
 		fl->currentSpecdFlags, fl->defSpecdFlags @*/
@@ -341,7 +342,7 @@ static int parseForVerify(char * buf, FileList fl)
 	resultVerify = &(fl->defVerifyFlags);
 	specdFlags = &fl->defSpecdFlags;
     } else
-	return 0;
+	return RPMRC_OK;
 
     for (pe = p; (pe-p) < strlen(name); pe++)
 	*pe = ' ';
@@ -349,9 +350,9 @@ static int parseForVerify(char * buf, FileList fl)
     SKIPSPACE(pe);
 
     if (*pe != '(') {
-	rpmError(RPMERR_BADSPEC, _("Missing '(' in %s %s\n"), name, pe);
+	rpmlog(RPMLOG_ERR, _("Missing '(' in %s %s\n"), name, pe);
 	fl->processingFailed = 1;
-	return RPMERR_BADSPEC;
+	return RPMRC_FAIL;
     }
 
     /* Bracket %*verify args */
@@ -360,9 +361,9 @@ static int parseForVerify(char * buf, FileList fl)
 	{};
 
     if (*pe == '\0') {
-	rpmError(RPMERR_BADSPEC, _("Missing ')' in %s(%s\n"), name, p);
+	rpmlog(RPMLOG_ERR, _("Missing ')' in %s(%s\n"), name, p);
 	fl->processingFailed = 1;
-	return RPMERR_BADSPEC;
+	return RPMRC_FAIL;
     }
 
     /* Localize. Erase parsed string */
@@ -398,18 +399,17 @@ static int parseForVerify(char * buf, FileList fl)
 	if (!strcmp(p, "not")) {
 	    negated ^= 1;
 	} else {
-	    rpmError(RPMERR_BADSPEC, _("Invalid %s token: %s\n"), name, p);
+	    rpmlog(RPMLOG_ERR, _("Invalid %s token: %s\n"), name, p);
 	    fl->processingFailed = 1;
-	    return RPMERR_BADSPEC;
+	    return RPMRC_FAIL;
 	}
     }
 
     *resultVerify = negated ? ~(verifyFlags) : verifyFlags;
     *specdFlags |= SPECD_VERIFY;
 
-    return 0;
+    return RPMRC_OK;
 }
-/*@=boundswrite@*/
 
 #define	isAttrDefault(_ars)	((_ars)[0] == '-' && (_ars)[1] == '\0')
 
@@ -417,20 +417,19 @@ static int parseForVerify(char * buf, FileList fl)
  * Parse %dev from file manifest.
  * @param buf		current spec file line
  * @param fl		package file tree walk data
- * @return		0 on success
+ * @return		RPMRC_OK on success
  */
-/*@-boundswrite@*/
-static int parseForDev(char * buf, FileList fl)
+static rpmRC parseForDev(char * buf, FileList fl)
 	/*@modifies buf, fl->processingFailed,
 		fl->noGlob, fl->devtype, fl->devmajor, fl->devminor @*/
 {
     const char * name;
     const char * errstr = NULL;
     char *p, *pe, *q;
-    int rc = RPMERR_BADSPEC;	/* assume error */
+    rpmRC rc = RPMRC_FAIL;	/* assume error */
 
     if ((p = strstr(buf, (name = "%dev"))) == NULL)
-	return 0;
+	return RPMRC_OK;
 
     for (pe = p; (pe-p) < strlen(name); pe++)
 	*pe = ' ';
@@ -508,21 +507,19 @@ static int parseForDev(char * buf, FileList fl)
 
 exit:
     if (rc) {
-	rpmError(RPMERR_BADSPEC, _("Missing %s in %s %s\n"), errstr, name, p);
+	rpmlog(RPMLOG_ERR, _("Missing %s in %s %s\n"), errstr, name, p);
 	fl->processingFailed = 1;
     }
     return rc;
 }
-/*@=boundswrite@*/
 
 /**
  * Parse %attr and %defattr from file manifest.
  * @param buf		current spec file line
  * @param fl		package file tree walk data
- * @return		0 on success
+ * @return		RPMRC_OK on success
  */
-/*@-boundswrite@*/
-static int parseForAttr(char * buf, FileList fl)
+static rpmRC parseForAttr(char * buf, FileList fl)
 	/*@modifies buf, fl->processingFailed,
 		fl->cur_ar, fl->def_ar,
 		fl->currentSpecdFlags, fl->defSpecdFlags @*/
@@ -541,7 +538,7 @@ static int parseForAttr(char * buf, FileList fl)
 	ret_ar = &(fl->def_ar);
 	specdFlags = &fl->defSpecdFlags;
     } else
-	return 0;
+	return RPMRC_OK;
 
     for (pe = p; (pe-p) < strlen(name); pe++)
 	*pe = ' ';
@@ -549,9 +546,9 @@ static int parseForAttr(char * buf, FileList fl)
     SKIPSPACE(pe);
 
     if (*pe != '(') {
-	rpmError(RPMERR_BADSPEC, _("Missing '(' in %s %s\n"), name, pe);
+	rpmlog(RPMLOG_ERR, _("Missing '(' in %s %s\n"), name, pe);
 	fl->processingFailed = 1;
-	return RPMERR_BADSPEC;
+	return RPMRC_FAIL;
     }
 
     /* Bracket %*attr args */
@@ -564,10 +561,10 @@ static int parseForAttr(char * buf, FileList fl)
 	q++;
 	SKIPSPACE(q);
 	if (*q != '\0') {
-	    rpmError(RPMERR_BADSPEC,
+	    rpmlog(RPMLOG_ERR,
 		     _("Non-white space follows %s(): %s\n"), name, q);
 	    fl->processingFailed = 1;
-	    return RPMERR_BADSPEC;
+	    return RPMRC_FAIL;
 	}
     }
 
@@ -603,9 +600,9 @@ static int parseForAttr(char * buf, FileList fl)
     }
 
     if (!(ar->ar_fmodestr && ar->ar_user && ar->ar_group) || *p != '\0') {
-	rpmError(RPMERR_BADSPEC, _("Bad syntax: %s(%s)\n"), name, q);
+	rpmlog(RPMLOG_ERR, _("Bad syntax: %s(%s)\n"), name, q);
 	fl->processingFailed = 1;
-	return RPMERR_BADSPEC;
+	return RPMRC_FAIL;
     }
 
     /* Do a quick test on the mode argument and adjust for "-" */
@@ -613,9 +610,9 @@ static int parseForAttr(char * buf, FileList fl)
 	unsigned int ui;
 	x = sscanf(ar->ar_fmodestr, "%o", &ui);
 	if ((x == 0) || (ar->ar_fmode & ~MYALLPERMS)) {
-	    rpmError(RPMERR_BADSPEC, _("Bad mode spec: %s(%s)\n"), name, q);
+	    rpmlog(RPMLOG_ERR, _("Bad mode spec: %s(%s)\n"), name, q);
 	    fl->processingFailed = 1;
-	    return RPMERR_BADSPEC;
+	    return RPMRC_FAIL;
 	}
 	ar->ar_fmode = ui;
     } else
@@ -625,9 +622,9 @@ static int parseForAttr(char * buf, FileList fl)
 	unsigned int ui;
 	x = sscanf(ar->ar_dmodestr, "%o", &ui);
 	if ((x == 0) || (ar->ar_dmode & ~MYALLPERMS)) {
-	    rpmError(RPMERR_BADSPEC, _("Bad dirmode spec: %s(%s)\n"), name, q);
+	    rpmlog(RPMLOG_ERR, _("Bad dirmode spec: %s(%s)\n"), name, q);
 	    fl->processingFailed = 1;
-	    return RPMERR_BADSPEC;
+	    return RPMRC_FAIL;
 	}
 	ar->ar_dmode = ui;
     } else
@@ -644,25 +641,23 @@ static int parseForAttr(char * buf, FileList fl)
     /* XXX fix all this */
     *specdFlags |= SPECD_UID | SPECD_GID | SPECD_FILEMODE | SPECD_DIRMODE;
     
-    return 0;
+    return RPMRC_OK;
 }
-/*@=boundswrite@*/
 
 /**
  * Parse %config from file manifest.
  * @param buf		current spec file line
  * @param fl		package file tree walk data
- * @return		0 on success
+ * @return		RPMRC_OK on success
  */
-/*@-boundswrite@*/
-static int parseForConfig(char * buf, FileList fl)
+static rpmRC parseForConfig(char * buf, FileList fl)
 	/*@modifies buf, fl->processingFailed, fl->currentFlags @*/
 {
     char *p, *pe, *q;
     const char *name;
 
     if ((p = strstr(buf, (name = "%config"))) == NULL)
-	return 0;
+	return RPMRC_OK;
 
     fl->currentFlags |= RPMFILE_CONFIG;
 
@@ -671,7 +666,7 @@ static int parseForConfig(char * buf, FileList fl)
 	*pe = ' ';
     SKIPSPACE(pe);
     if (*pe != '(')
-	return 0;
+	return RPMRC_OK;
 
     /* Bracket %config args */
     *pe++ = ' ';
@@ -679,9 +674,9 @@ static int parseForConfig(char * buf, FileList fl)
 	{};
 
     if (*pe == '\0') {
-	rpmError(RPMERR_BADSPEC, _("Missing ')' in %s(%s\n"), name, p);
+	rpmlog(RPMLOG_ERR, _("Missing ')' in %s(%s\n"), name, p);
 	fl->processingFailed = 1;
-	return RPMERR_BADSPEC;
+	return RPMRC_FAIL;
     }
 
     /* Localize. Erase parsed string. */
@@ -704,34 +699,30 @@ static int parseForConfig(char * buf, FileList fl)
 	} else if (!strcmp(p, "noreplace")) {
 	    fl->currentFlags |= RPMFILE_NOREPLACE;
 	} else {
-	    rpmError(RPMERR_BADSPEC, _("Invalid %s token: %s\n"), name, p);
+	    rpmlog(RPMLOG_ERR, _("Invalid %s token: %s\n"), name, p);
 	    fl->processingFailed = 1;
-	    return RPMERR_BADSPEC;
+	    return RPMRC_FAIL;
 	}
     }
 
-    return 0;
+    return RPMRC_OK;
 }
-/*@=boundswrite@*/
 
 /**
  */
 static int langCmp(const void * ap, const void * bp)
 	/*@*/
 {
-/*@-boundsread@*/
     return strcmp(*(const char **)ap, *(const char **)bp);
-/*@=boundsread@*/
 }
 
 /**
  * Parse %lang from file manifest.
  * @param buf		current spec file line
  * @param fl		package file tree walk data
- * @return		0 on success
+ * @return		RPMRC_OK on success
  */
-/*@-bounds@*/
-static int parseForLang(char * buf, FileList fl)
+static rpmRC parseForLang(char * buf, FileList fl)
 	/*@modifies buf, fl->processingFailed,
 		fl->currentLangs, fl->nLangs @*/
 {
@@ -745,9 +736,9 @@ static int parseForLang(char * buf, FileList fl)
     SKIPSPACE(pe);
 
     if (*pe != '(') {
-	rpmError(RPMERR_BADSPEC, _("Missing '(' in %s %s\n"), name, pe);
+	rpmlog(RPMLOG_ERR, _("Missing '(' in %s %s\n"), name, pe);
 	fl->processingFailed = 1;
-	return RPMERR_BADSPEC;
+	return RPMRC_FAIL;
     }
 
     /* Bracket %lang args */
@@ -756,9 +747,9 @@ static int parseForLang(char * buf, FileList fl)
 	{};
 
     if (*pe == '\0') {
-	rpmError(RPMERR_BADSPEC, _("Missing ')' in %s(%s\n"), name, p);
+	rpmlog(RPMLOG_ERR, _("Missing ')' in %s(%s\n"), name, p);
 	fl->processingFailed = 1;
-	return RPMERR_BADSPEC;
+	return RPMRC_FAIL;
     }
 
     /* Localize. Erase parsed string. */
@@ -782,11 +773,11 @@ static int parseForLang(char * buf, FileList fl)
 	
 	/* Sanity check on locale lengths */
 	if (np < 1 || (np == 1 && *p != 'C') || np >= 32) {
-	    rpmError(RPMERR_BADSPEC,
+	    rpmlog(RPMLOG_ERR,
 		_("Unusual locale length: \"%.*s\" in %%lang(%s)\n"),
 		(int)np, p, q);
 	    fl->processingFailed = 1;
-	    return RPMERR_BADSPEC;
+	    return RPMRC_FAIL;
 	}
 
 	/* Check for duplicate locales */
@@ -794,10 +785,10 @@ static int parseForLang(char * buf, FileList fl)
 	for (i = 0; i < fl->nLangs; i++) {
 	    if (strncmp(fl->currentLangs[i], p, np))
 		/*@innercontinue@*/ continue;
-	    rpmError(RPMERR_BADSPEC, _("Duplicate locale %.*s in %%lang(%s)\n"),
+	    rpmlog(RPMLOG_ERR, _("Duplicate locale %.*s in %%lang(%s)\n"),
 		(int)np, p, q);
 	    fl->processingFailed = 1;
-	    return RPMERR_BADSPEC;
+	    return RPMRC_FAIL;
 	}
 
 	/* Add new locale */
@@ -815,13 +806,11 @@ static int parseForLang(char * buf, FileList fl)
     if (fl->currentLangs)
 	qsort(fl->currentLangs, fl->nLangs, sizeof(*fl->currentLangs), langCmp);
 
-    return 0;
+    return RPMRC_OK;
 }
-/*@=bounds@*/
 
 /**
  */
-/*@-boundswrite@*/
 static int parseForRegexLang(const char * fileName, /*@out@*/ char ** lang)
 	/*@globals rpmGlobalMacroContext, h_errno @*/
 	/*@modifies *lang, rpmGlobalMacroContext @*/
@@ -863,7 +852,6 @@ static int parseForRegexLang(const char * fileName, /*@out@*/ char ** lang)
 	*lang = buf;
     return 0;
 }
-/*@=boundswrite@*/
 
 /**
  */
@@ -878,6 +866,7 @@ VFA_t virtualFileAttributes[] = {
 	{ "%license",	0,	RPMFILE_LICENSE },
 	{ "%pubkey",	0,	RPMFILE_PUBKEY },
 	{ "%policy",	0,	RPMFILE_POLICY },
+	{ "%optional",	0,	RPMFILE_OPTIONAL },
 
 #if WHY_NOT
 	{ "%icon",	0,	RPMFILE_ICON },
@@ -898,25 +887,24 @@ VFA_t virtualFileAttributes[] = {
  * @param buf		current spec file line
  * @param fl		package file tree walk data
  * @retval *fileName	file name
- * @return		0 on success
+ * @return		RPMRC_OK on success
  */
-/*@-boundswrite@*/
-static int parseForSimple(/*@unused@*/Spec spec, Package pkg, char * buf,
+static rpmRC parseForSimple(/*@unused@*/Spec spec, Package pkg, char * buf,
 			  FileList fl, /*@out@*/ const char ** fileName)
 	/*@globals rpmGlobalMacroContext, h_errno @*/
 	/*@modifies buf, fl->processingFailed, *fileName,
 		fl->currentFlags,
 		fl->docDirs, fl->docDirCount, fl->isDir,
 		fl->passedSpecialDoc, fl->isSpecialDoc,
-		pkg->specialDoc, rpmGlobalMacroContext @*/
+		pkg->header, pkg->specialDoc, rpmGlobalMacroContext @*/
 {
     char *s, *t;
-    int res, specialDoc = 0;
+    int specialDoc = 0;
     char specialDocBuf[BUFSIZ];
+    rpmRC res = RPMRC_OK;	/* assume success */
 
     specialDocBuf[0] = '\0';
     *fileName = NULL;
-    res = 0;
 
     t = buf;
     while ((s = strtokWithQuotes(t, " \t\n")) != NULL) {
@@ -924,17 +912,17 @@ static int parseForSimple(/*@unused@*/Spec spec, Package pkg, char * buf,
 	if (!strcmp(s, "%docdir")) {
 	    s = strtokWithQuotes(NULL, " \t\n");
 	    if (fl->docDirCount == MAXDOCDIR) {
-		rpmError(RPMERR_INTERNAL, _("Hit limit for %%docdir\n"));
+		rpmlog(RPMLOG_CRIT, _("Hit limit for %%docdir\n"));
 		fl->processingFailed = 1;
-		res = 1;
+		res = RPMRC_FAIL;
 	    }
 	
 	    if (s != NULL)
 		fl->docDirs[fl->docDirCount++] = xstrdup(s);
 	    if (s == NULL || strtokWithQuotes(NULL, " \t\n")) {
-		rpmError(RPMERR_INTERNAL, _("Only one arg for %%docdir\n"));
+		rpmlog(RPMLOG_CRIT, _("Only one arg for %%docdir\n"));
 		fl->processingFailed = 1;
-		res = 1;
+		res = RPMRC_FAIL;
 	    }
 	    break;
 	}
@@ -966,13 +954,12 @@ static int parseForSimple(/*@unused@*/Spec spec, Package pkg, char * buf,
 
 	if (*fileName) {
 	    /* We already got a file -- error */
-	    rpmError(RPMERR_BADSPEC, _("Two files on one line: %s\n"),
+	    rpmlog(RPMLOG_ERR, _("Two files on one line: %s\n"),
 		*fileName);
 	    fl->processingFailed = 1;
-	    res = 1;
+	    res = RPMRC_FAIL;
 	}
 
-	/*@-branchstate@*/
 	if (*s != '/') {
 	    if (fl->currentFlags & RPMFILE_DOC) {
 		specialDoc = 1;
@@ -987,10 +974,10 @@ static int parseForSimple(/*@unused@*/Spec spec, Package pkg, char * buf,
 		int urltype = urlPath(s, &sfn);
 		switch (urltype) {
 		default: /* relative path, not in %doc and not a URL */
-		    rpmError(RPMERR_BADSPEC,
+		    rpmlog(RPMLOG_ERR,
 			_("File must begin with \"/\": %s\n"), s);
 		    fl->processingFailed = 1;
-		    res = 1;
+		    res = RPMRC_FAIL;
 		    /*@switchbreak@*/ break;
 		case URL_IS_PATH:
 		    *fileName = s;
@@ -1000,37 +987,41 @@ static int parseForSimple(/*@unused@*/Spec spec, Package pkg, char * buf,
 	} else {
 	    *fileName = s;
 	}
-	/*@=branchstate@*/
     }
 
     if (specialDoc) {
 	if (*fileName || (fl->currentFlags & ~(RPMFILE_DOC))) {
-	    rpmError(RPMERR_BADSPEC,
+	    rpmlog(RPMLOG_ERR,
 		     _("Can't mix special %%doc with other forms: %s\n"),
 		     (*fileName ? *fileName : ""));
 	    fl->processingFailed = 1;
-	    res = 1;
+	    res = RPMRC_FAIL;
 	} else {
 	/* XXX WATCHOUT: buf is an arg */
-	   {	static char *_docdir_fmt= 0;
+	   {	
+		/*@only@*/
+		static char *_docdir_fmt = NULL;
 		static int oneshot = 0;
 		const char *ddir, *fmt, *errstr;
 		if (!oneshot) {
 		    _docdir_fmt = rpmExpand("%{?_docdir_fmt}", NULL);
-		    if (!_docdir_fmt || !*_docdir_fmt)
-			_docdir_fmt = "%{NAME}-%{VERSION}";
+		    if (!(_docdir_fmt && *_docdir_fmt))
+			_docdir_fmt = _free(_docdir_fmt);
 		    oneshot = 1;
 		}
-		fmt = headerSprintf(pkg->header, _docdir_fmt, rpmTagTable, rpmHeaderFormats, &errstr);
-		if (!fmt) {
-		    rpmError(RPMERR_BADSPEC, _("illegal _docdir_fmt: %s\n"), errstr);
+		if (_docdir_fmt == NULL)
+		    _docdir_fmt = xstrdup("%{NAME}-%{VERSION}");
+		fmt = headerSprintf(pkg->header, _docdir_fmt, NULL, rpmHeaderFormats, &errstr);
+		if (fmt == NULL) {
+		    rpmlog(RPMLOG_ERR, _("illegal _docdir_fmt: %s\n"), errstr);
 		    fl->processingFailed = 1;
-		    res = 1;
+		    res = RPMRC_FAIL;
+		} else {
+		    ddir = rpmGetPath("%{_docdir}/", fmt, NULL);
+		    strcpy(buf, ddir);
+		    ddir = _free(ddir);
+		    fmt = _free(fmt);
 		}
-		ddir = rpmGetPath("%{_docdir}/", fmt, NULL);
-		strcpy(buf, ddir);
-		ddir = _free(ddir);
-		fmt = _free(fmt);
 	    }
 
 	/* XXX FIXME: this is easy to do as macro expansion */
@@ -1071,7 +1062,6 @@ static int parseForSimple(/*@unused@*/Spec spec, Package pkg, char * buf,
 
     return res;
 }
-/*@=boundswrite@*/
 
 /**
  */
@@ -1139,7 +1129,6 @@ static int checkHardLinks(FileList fl)
     return 0;
 }
 
-/*@-boundsread@*/
 static int dncmp(const void * a, const void * b)
 	/*@*/
 {
@@ -1151,9 +1140,7 @@ static int dncmp(const void * a, const void * b)
     (void) urlPath(*burlp, &bdn);
     return strcmp(adn, bdn);
 }
-/*@=boundsread@*/
 
-/*@-bounds@*/
 /**
  * Convert absolute path tag to (dirname,basename,dirindex) tags.
  * @param h             header
@@ -1161,19 +1148,16 @@ static int dncmp(const void * a, const void * b)
 static void compressFilelist(Header h)
 	/*@modifies h @*/
 {
-    HGE_t hge = (HGE_t)headerGetEntryMinMemory;
-    HAE_t hae = (HAE_t)headerAddEntry;
-    HRE_t hre = (HRE_t)headerRemoveEntry;
-    HFD_t hfd = headerFreeData;
-    char ** fileNames;
+    HE_t he = memset(alloca(sizeof(*he)), 0, sizeof(*he));
+    const char ** fileNames;
     const char * fn;
     const char ** dirNames;
     const char ** baseNames;
-    int_32 * dirIndexes;
-    rpmTagType fnt;
+    uint32_t * dirIndexes;
     int count;
-    int i, xx;
     int dirIndex = -1;
+    int xx;
+    int i;
 
     /*
      * This assumes the file list is already sorted, and begins with a
@@ -1182,14 +1166,17 @@ static void compressFilelist(Header h)
      */
 
     if (headerIsEntry(h, RPMTAG_DIRNAMES)) {
-	xx = hre(h, RPMTAG_OLDFILENAMES);
+	he->tag = RPMTAG_OLDFILENAMES;
+	xx = headerDel(h, he, 0);
 	return;		/* Already converted. */
     }
 
-    if (!hge(h, RPMTAG_OLDFILENAMES, &fnt, &fileNames, &count))
+    he->tag = RPMTAG_OLDFILENAMES;
+    xx = headerGet(h, he, 0);
+    fileNames = he->p.argv;
+    count = he->c;
+    if (!xx || fileNames == NULL || count <= 0)
 	return;		/* no file list */
-    if (fileNames == NULL || count <= 0)
-	return;
 
     dirNames = alloca(sizeof(*dirNames) * count);	/* worst case */
     baseNames = alloca(sizeof(*dirNames) * count);
@@ -1207,12 +1194,11 @@ static void compressFilelist(Header h)
 	goto exit;
     }
 
-    /*@-branchstate@*/
     for (i = 0; i < count; i++) {
 	const char ** needle;
 	char savechar;
 	char * baseName;
-	int len;
+	size_t len;
 
 	if (fileNames[i] == NULL)	/* XXX can't happen */
 	    continue;
@@ -1236,22 +1222,33 @@ static void compressFilelist(Header h)
 	*baseName = savechar;
 	baseNames[i] = baseName;
     }
-    /*@=branchstate@*/
 
 exit:
     if (count > 0) {
-	xx = hae(h, RPMTAG_DIRINDEXES, RPM_INT32_TYPE, dirIndexes, count);
-	xx = hae(h, RPMTAG_BASENAMES, RPM_STRING_ARRAY_TYPE,
-			baseNames, count);
-	xx = hae(h, RPMTAG_DIRNAMES, RPM_STRING_ARRAY_TYPE,
-			dirNames, dirIndex + 1);
+	he->tag = RPMTAG_DIRINDEXES;
+	he->t = RPM_UINT32_TYPE;
+	he->p.ui32p = dirIndexes;
+	he->c = count;
+	xx = headerPut(h, he, 0);
+
+	he->tag = RPMTAG_BASENAMES;
+	he->t = RPM_STRING_ARRAY_TYPE;
+	he->p.argv = baseNames;
+	he->c = count;
+	xx = headerPut(h, he, 0);
+
+	he->tag = RPMTAG_DIRNAMES;
+	he->t = RPM_STRING_ARRAY_TYPE;
+	he->p.argv = dirNames;
+	he->c = dirIndex + 1;
+	xx = headerPut(h, he, 0);
     }
 
-    fileNames = hfd(fileNames, fnt);
+    fileNames = _free(fileNames);
 
-    xx = hre(h, RPMTAG_OLDFILENAMES);
+    he->tag = RPMTAG_OLDFILENAMES;
+    xx = headerDel(h, he, 0);
 }
-/*@=bounds@*/
 
 /**
  * Add file entries to header.
@@ -1262,14 +1259,16 @@ exit:
  * @param h
  * @param isSrc
  */
-/*@-bounds@*/
 static void genCpioListAndHeader(/*@partial@*/ FileList fl,
 		rpmfi * fip, Header h, int isSrc)
 	/*@globals rpmGlobalMacroContext, h_errno, fileSystem, internalState @*/
 	/*@modifies h, *fip, fl->processingFailed, fl->fileList,
 		rpmGlobalMacroContext, fileSystem, internalState @*/
 {
+    HE_t he = memset(alloca(sizeof(*he)), 0, sizeof(*he));
     const char * apath;
+    uint16_t ui16;
+    uint32_t ui32;
     int _addDotSlash = !isSrc;
     int apathlen = 0;
     int dpathlen = 0;
@@ -1293,8 +1292,10 @@ static void genCpioListAndHeader(/*@partial@*/ FileList fl,
     }
 
     sxfn = rpmGetPath("%{?_build_file_context_path}", NULL);
+/*@-moduncon@*/
     if (sxfn != NULL && *sxfn != '\0')
 	xx = matchpathcon_init(sxfn);
+/*@=moduncon@*/
 
     for (i = 0, flp = fl->fileList; i < fl->fileListRecsUsed; i++, flp++) {
 	const char *s;
@@ -1310,7 +1311,7 @@ static void genCpioListAndHeader(/*@partial@*/ FileList fl,
 	    flp[1].flags |= flp->flags;	
 
 	    if (!(flp[1].flags & RPMFILE_EXCLUDE))
-		rpmMessage(RPMMESS_WARNING, _("File listed twice: %s\n"),
+		rpmlog(RPMLOG_WARNING, _("File listed twice: %s\n"),
 			flp->fileURL);
    
 	    /* file mode */
@@ -1365,71 +1366,99 @@ static void genCpioListAndHeader(/*@partial@*/ FileList fl,
 	 * compressed file list write before we write the actual package to
 	 * disk.
 	 */
-	(void) headerAddOrAppendEntry(h, RPMTAG_OLDFILENAMES, RPM_STRING_ARRAY_TYPE,
-			       &(flp->fileURL), 1);
+	he->tag = RPMTAG_OLDFILENAMES;
+	he->t = RPM_STRING_ARRAY_TYPE;
+	he->p.argv = &flp->fileURL;
+	he->c = 1;
+	he->append = 1;
+	xx = headerPut(h, he, 0);
+	he->append = 0;
 
 /*@-sizeoftype@*/
-      if (sizeof(flp->fl_size) != sizeof(uint_32)) {
-	uint_32 psize = (uint_32)flp->fl_size;
-	(void) headerAddOrAppendEntry(h, RPMTAG_FILESIZES, RPM_INT32_TYPE,
-			       &(psize), 1);
-      } else {
-	(void) headerAddOrAppendEntry(h, RPMTAG_FILESIZES, RPM_INT32_TYPE,
-			       &(flp->fl_size), 1);
-      }
-	(void) headerAddOrAppendEntry(h, RPMTAG_FILEUSERNAME, RPM_STRING_ARRAY_TYPE,
-			       &(flp->uname), 1);
-	(void) headerAddOrAppendEntry(h, RPMTAG_FILEGROUPNAME, RPM_STRING_ARRAY_TYPE,
-			       &(flp->gname), 1);
-      if (sizeof(flp->fl_mtime) != sizeof(uint_32)) {
-	uint_32 mtime = (uint_32)flp->fl_mtime;
-	(void) headerAddOrAppendEntry(h, RPMTAG_FILEMTIMES, RPM_INT32_TYPE,
-			       &(mtime), 1);
-      } else {
-	(void) headerAddOrAppendEntry(h, RPMTAG_FILEMTIMES, RPM_INT32_TYPE,
-			       &(flp->fl_mtime), 1);
-      }
-      if (sizeof(flp->fl_mode) != sizeof(uint_16)) {
-	uint_16 pmode = (uint_16)flp->fl_mode;
-	(void) headerAddOrAppendEntry(h, RPMTAG_FILEMODES, RPM_INT16_TYPE,
-			       &(pmode), 1);
-      } else {
-	(void) headerAddOrAppendEntry(h, RPMTAG_FILEMODES, RPM_INT16_TYPE,
-			       &(flp->fl_mode), 1);
-      }
-      if (sizeof(flp->fl_rdev) != sizeof(uint_16)) {
-	uint_16 prdev = (uint_16)flp->fl_rdev;
-	(void) headerAddOrAppendEntry(h, RPMTAG_FILERDEVS, RPM_INT16_TYPE,
-			       &(prdev), 1);
-      } else {
-	(void) headerAddOrAppendEntry(h, RPMTAG_FILERDEVS, RPM_INT16_TYPE,
-			       &(flp->fl_rdev), 1);
-      }
-      if (sizeof(flp->fl_dev) != sizeof(uint_32)) {
-	uint_32 pdevice = (uint_32)flp->fl_dev;
-	(void) headerAddOrAppendEntry(h, RPMTAG_FILEDEVICES, RPM_INT32_TYPE,
-			       &(pdevice), 1);
-      } else {
-	(void) headerAddOrAppendEntry(h, RPMTAG_FILEDEVICES, RPM_INT32_TYPE,
-			       &(flp->fl_dev), 1);
-      }
-      if (sizeof(flp->fl_ino) != sizeof(uint_32)) {
-	uint_32 ino = (uint_32)flp->fl_ino;
-	(void) headerAddOrAppendEntry(h, RPMTAG_FILEINODES, RPM_INT32_TYPE,
-				&(ino), 1);
-      } else {
-	(void) headerAddOrAppendEntry(h, RPMTAG_FILEINODES, RPM_INT32_TYPE,
-				&(flp->fl_ino), 1);
-      }
+	ui32 = flp->fl_size;
+	he->tag = RPMTAG_FILESIZES;
+	he->t = RPM_UINT32_TYPE;
+	he->p.ui32p = &ui32;
+	he->c = 1;
+	he->append = 1;
+	xx = headerPut(h, he, 0);
+	he->append = 0;
+
+	he->tag = RPMTAG_FILEUSERNAME;
+	he->t = RPM_STRING_ARRAY_TYPE;
+	he->p.argv = &flp->uname;
+	he->c = 1;
+	he->append = 1;
+	xx = headerPut(h, he, 0);
+	he->append = 0;
+
+	he->tag = RPMTAG_FILEGROUPNAME;
+	he->t = RPM_STRING_ARRAY_TYPE;
+	he->p.argv = &flp->gname;
+	he->c = 1;
+	he->append = 1;
+	xx = headerPut(h, he, 0);
+	he->append = 0;
+
+	ui32 = flp->fl_mtime;
+	he->tag = RPMTAG_FILEMTIMES;
+	he->t = RPM_UINT32_TYPE;
+	he->p.ui32p = &ui32;
+	he->c = 1;
+	he->append = 1;
+	xx = headerPut(h, he, 0);
+	he->append = 0;
+
+	ui16 = flp->fl_mode;
+	he->tag = RPMTAG_FILEMODES;
+	he->t = RPM_UINT16_TYPE;
+	he->p.ui16p = &ui16;
+	he->c = 1;
+	he->append = 1;
+	xx = headerPut(h, he, 0);
+	he->append = 0;
+
+	ui16 = flp->fl_rdev;
+	he->tag = RPMTAG_FILERDEVS;
+	he->t = RPM_UINT16_TYPE;
+	he->p.ui16p = &ui16;
+	he->c = 1;
+	he->append = 1;
+	xx = headerPut(h, he, 0);
+	he->append = 0;
+
+	ui32 = flp->fl_dev;
+	he->tag = RPMTAG_FILEDEVICES;
+	he->t = RPM_UINT32_TYPE;
+	he->p.ui32p = &ui32;
+	he->c = 1;
+	he->append = 1;
+	xx = headerPut(h, he, 0);
+	he->append = 0;
+
+	ui32 = flp->fl_ino;
+	he->tag = RPMTAG_FILEINODES;
+	he->t = RPM_UINT32_TYPE;
+	he->p.ui32p = &ui32;
+	he->c = 1;
+	he->append = 1;
+	xx = headerPut(h, he, 0);
+	he->append = 0;
+
 /*@=sizeoftype@*/
 
-	(void) headerAddOrAppendEntry(h, RPMTAG_FILELANGS, RPM_STRING_ARRAY_TYPE,
-			       &(flp->langs),  1);
-	
-      { static uint_32 source_file_dalgo = 0;
-	static uint_32 binary_file_dalgo = 0;
+	he->tag = RPMTAG_FILELANGS;
+	he->t = RPM_STRING_ARRAY_TYPE;
+	he->p.argv = &flp->langs;
+	he->c = 1;
+	he->append = 1;
+	xx = headerPut(h, he, 0);
+	he->append = 0;
+
+      { static uint32_t source_file_dalgo = 0;
+	static uint32_t binary_file_dalgo = 0;
 	static int oneshot = 0;
-	uint_32 dalgo = 0;
+	uint32_t dalgo = 0;
 
 	if (!oneshot) {
 	    source_file_dalgo =
@@ -1466,15 +1495,28 @@ static void genCpioListAndHeader(/*@partial@*/ FileList fl,
 	if (S_ISREG(flp->fl_mode))
 	    (void) dodigest(dalgo, flp->diskURL, (unsigned char *)buf, 1, NULL);
 	s = buf;
-	(void) headerAddOrAppendEntry(h, RPMTAG_FILEDIGESTS, RPM_STRING_ARRAY_TYPE,
-			       &s, 1);
-	(void) headerAddOrAppendEntry(h, RPMTAG_FILEDIGESTALGOS, RPM_INT32_TYPE,
-			       &dalgo, 1);
+
+	he->tag = RPMTAG_FILEDIGESTS;
+	he->t = RPM_STRING_ARRAY_TYPE;
+	he->p.argv = &s;
+	he->c = 1;
+	he->append = 1;
+	xx = headerPut(h, he, 0);
+	he->append = 0;
+
+	ui32 = dalgo;
+	he->tag = RPMTAG_FILEDIGESTALGOS;
+	he->t = RPM_UINT32_TYPE;
+	he->p.ui32p = &ui32;
+	he->c = 1;
+	he->append = 1;
+	xx = headerPut(h, he, 0);
+	he->append = 0;
       }
 	
 	buf[0] = '\0';
 	if (S_ISLNK(flp->fl_mode)) {
-	    int xx = Readlink(flp->diskURL, buf, BUFSIZ);
+	    xx = Readlink(flp->diskURL, buf, BUFSIZ);
 	    if (xx >= 0)
 		buf[xx] = '\0';
 	    if (fl->buildRootURL) {
@@ -1483,7 +1525,7 @@ static void genCpioListAndHeader(/*@partial@*/ FileList fl,
 
 		if (buf[0] == '/' && strcmp(buildRoot, "/") &&
 		    !strncmp(buf, buildRoot, strlen(buildRoot))) {
-		     rpmError(RPMERR_BADSPEC,
+		     rpmlog(RPMLOG_ERR,
 				_("Symlink points to BuildRoot: %s -> %s\n"),
 				flp->fileURL, buf);
 		    fl->processingFailed = 1;
@@ -1491,15 +1533,26 @@ static void genCpioListAndHeader(/*@partial@*/ FileList fl,
 	    }
 	}
 	s = buf;
-	(void) headerAddOrAppendEntry(h, RPMTAG_FILELINKTOS, RPM_STRING_ARRAY_TYPE,
-			       &s, 1);
-	
+	he->tag = RPMTAG_FILELINKTOS;
+	he->t = RPM_STRING_ARRAY_TYPE;
+	he->p.argv = &s;
+	he->c = 1;
+	he->append = 1;
+	xx = headerPut(h, he, 0);
+	he->append = 0;
+
 	if (flp->flags & RPMFILE_GHOST) {
 	    flp->verifyFlags &= ~(RPMVERIFY_MD5 | RPMVERIFY_FILESIZE |
 				RPMVERIFY_LINKTO | RPMVERIFY_MTIME);
 	}
-	(void) headerAddOrAppendEntry(h, RPMTAG_FILEVERIFYFLAGS, RPM_INT32_TYPE,
-			       &(flp->verifyFlags), 1);
+	ui32 = flp->verifyFlags;
+	he->tag = RPMTAG_FILEVERIFYFLAGS;
+	he->t = RPM_UINT32_TYPE;
+	he->p.ui32p = &ui32;
+	he->c = 1;
+	he->append = 1;
+	xx = headerPut(h, he, 0);
+	he->append = 0;
 	
 	if (!isSrc && isDoc(fl, flp->fileURL))
 	    flp->flags |= RPMFILE_DOC;
@@ -1507,29 +1560,52 @@ static void genCpioListAndHeader(/*@partial@*/ FileList fl,
 	if (S_ISDIR(flp->fl_mode))
 	    flp->flags &= ~(RPMFILE_CONFIG|RPMFILE_DOC);
 
-	(void) headerAddOrAppendEntry(h, RPMTAG_FILEFLAGS, RPM_INT32_TYPE,
-			       &(flp->flags), 1);
-
+	ui32 = flp->flags;
+	he->tag = RPMTAG_FILEFLAGS;
+	he->t = RPM_UINT32_TYPE;
+	he->p.ui32p = &ui32;
+	he->c = 1;
+	he->append = 1;
+	xx = headerPut(h, he, 0);
+	he->append = 0;
+	
 	/* Add file security context to package. */
 	{
-	    mode_t fmode;
 	    static char *nocon = "";
-	    fmode = (uint_16)flp->fl_mode;
-	    if (matchpathcon(flp->fileURL, fmode, &scon) || scon == NULL)
+/*@-moduncon@*/
+	    if (matchpathcon(flp->fileURL, flp->fl_mode, &scon) || scon == NULL)
 		scon = nocon;
-	    (void) headerAddOrAppendEntry(h, RPMTAG_FILECONTEXTS, RPM_STRING_ARRAY_TYPE,
-			       &scon, 1);
+/*@=moduncon@*/
+
+	    he->tag = RPMTAG_FILECONTEXTS;
+	    he->t = RPM_STRING_ARRAY_TYPE;
+	    he->p.argv = (const char **)&scon;	/* XXX NOCAST */
+	    he->c = 1;
+	    he->append = 1;
+	    xx = headerPut(h, he, 0);
+	    he->append = 0;
+
+/*@-modobserver@*/	/* observer nocon not modified. */
 	    if (scon != nocon)
 		freecon(scon);
+/*@=modobserver@*/
 	}
     }
+/*@-moduncon -noeffectuncon @*/
     if (sxfn != NULL && *sxfn != '\0')
 	matchpathcon_fini();
+/*@=moduncon =noeffectuncon @*/
     sxfn = _free(sxfn);
 
-    (void) headerAddEntry(h, RPMTAG_SIZE, RPM_INT32_TYPE,
-		   &(fl->totalFileSize), 1);
-
+    ui32 = fl->totalFileSize;
+    he->tag = RPMTAG_SIZE;
+    he->t = RPM_UINT32_TYPE;
+    he->p.ui32p = &ui32;
+    he->c = 1;
+    he->append = 1;
+    xx = headerPut(h, he, 0);
+    he->append = 0;
+	
     compressFilelist(h);
 
   { int scareMem = 0;
@@ -1554,10 +1630,10 @@ static void genCpioListAndHeader(/*@partial@*/ FileList fl,
     *d = '\0';
 
     fi->bnl = xmalloc(fi->fc * (sizeof(*fi->bnl) + sizeof(*fi->dil)));
-/*@-dependenttrans@*/ /* FIX: artifact of spoofing headerGetEntry */
+/*@-dependenttrans@*/ /* FIX: artifact of spoofing header tag store */
     fi->dil = (!scareMem)
 	? xcalloc(sizeof(*fi->dil), fi->fc)
-	: (int *)(fi->bnl + fi->fc);
+	: (uint32_t *)(fi->bnl + fi->fc);
 /*@=dependenttrans@*/
 
     /* XXX Insure at least 1 byte is always allocated. */
@@ -1572,8 +1648,8 @@ static void genCpioListAndHeader(/*@partial@*/ FileList fl,
     if (fl->buildRootURL)
 	fi->astriplen = strlen(fl->buildRootURL);
     fi->striplen = 0;
-    fi->fuser = headerFreeData(fi->fuser, -1);		/* XXX memory leak */
-    fi->fgroup = headerFreeData(fi->fgroup, -1);	/* XXX memory leak */
+    fi->fuser = _free(fi->fuser);
+    fi->fgroup = _free(fi->fgroup);
 
     /* Make the cpio list */
     if (fi->dil != NULL)	/* XXX can't happen */
@@ -1595,7 +1671,7 @@ static void genCpioListAndHeader(/*@partial@*/ FileList fl,
 
 	/* Create disk directory and base name. */
 	fi->dil[i] = i;
-/*@-dependenttrans@*/ /* FIX: artifact of spoofing headerGetEntry */
+/*@-dependenttrans@*/ /* FIX: artifact of spoofing header tag store */
 	fi->dnl[fi->dil[i]] = d;
 /*@=dependenttrans@*/
 	d = stpcpy(d, flp->diskURL);
@@ -1629,19 +1705,17 @@ static void genCpioListAndHeader(/*@partial@*/ FileList fl,
 	    fi->fmapflags[i] |= CPIO_FOLLOW_SYMLINKS;
 
     }
-    /*@-branchstate -compdef@*/
+    /*@-compdef@*/
     if (fip)
 	*fip = fi;
     else
 	fi = rpmfiFree(fi);
-    /*@=branchstate =compdef@*/
+    /*@=compdef@*/
   }
 }
-/*@=bounds@*/
 
 /**
  */
-/*@-boundswrite@*/
 static /*@null@*/ FileListRec freeFileList(/*@only@*/ FileListRec fileList,
 			int count)
 	/*@*/
@@ -1654,10 +1728,9 @@ static /*@null@*/ FileListRec freeFileList(/*@only@*/ FileListRec fileList,
     fileList = _free(fileList);
     return NULL;
 }
-/*@=boundswrite@*/
 
 /* forward ref */
-static int recurseDir(FileList fl, const char * diskURL)
+static rpmRC recurseDir(FileList fl, const char * diskURL)
 	/*@globals check_fileList, rpmGlobalMacroContext, h_errno,
 		fileSystem, internalState @*/
 	/*@modifies *fl, fl->processingFailed,
@@ -1671,9 +1744,8 @@ static int recurseDir(FileList fl, const char * diskURL)
  * @param fl		package file tree walk data
  * @param diskURL	path to file
  * @param statp		file stat (possibly NULL)
- * @return		0 on success
+ * @return		RPMRC_OK on success
  */
-/*@-boundswrite@*/
 static int addFile(FileList fl, const char * diskURL,
 		/*@null@*/ struct stat * statp)
 	/*@globals check_fileList, rpmGlobalMacroContext, h_errno,
@@ -1693,7 +1765,7 @@ static int addFile(FileList fl, const char * diskURL,
     const char *fileUname;
     const char *fileGname;
     char *lang;
-    int rc = 0;
+    rpmRC rc = RPMRC_OK;
     
     /* Path may have prepended buildRootURL, so locate the original filename. */
     /*
@@ -1706,7 +1778,6 @@ static int addFile(FileList fl, const char * diskURL,
      *  recurseDir		path			stat
      *
      */
-/*@-branchstate@*/
     {	const char *fileName;
 	int urltype = urlPath(fileURL, &fileName);
 	switch (urltype) {
@@ -1726,13 +1797,10 @@ static int addFile(FileList fl, const char * diskURL,
 	    break;
 	}
     }
-/*@=branchstate@*/
 
     /* XXX make sure '/' can be packaged also */
-    /*@-branchstate@*/
     if (*fileURL == '\0')
 	fileURL = "/";
-    /*@=branchstate@*/
 
     /* If we are using a prefix, validate the file */
     if (!fl->inFtw && fl->prefix) {
@@ -1745,10 +1813,10 @@ static int addFile(FileList fl, const char * diskURL,
 	    prefixTest++;
 	}
 	if (*prefixPtr || (*prefixTest && *prefixTest != '/')) {
-	    rpmError(RPMERR_BADSPEC, _("File doesn't match prefix (%s): %s\n"),
+	    rpmlog(RPMLOG_ERR, _("File doesn't match prefix (%s): %s\n"),
 		     fl->prefix, fileURL);
 	    fl->processingFailed = 1;
-	    rc = RPMERR_BADSPEC;
+	    rc = RPMRC_FAIL;
 	    goto exit;
 	}
     }
@@ -1770,9 +1838,14 @@ static int addFile(FileList fl, const char * diskURL,
 	    statp->st_mtime = now;
 	    statp->st_ctime = now;
 	} else if (Lstat(diskURL, statp)) {
-	    rpmError(RPMERR_BADSPEC, _("File not found: %s\n"), diskURL);
-	    fl->processingFailed = 1;
-	    rc = RPMERR_BADSPEC;
+	    if (fl->currentFlags & RPMFILE_OPTIONAL) {
+		rpmlog(RPMLOG_WARNING, _("Optional file not found: %s\n"), diskURL);
+		rc = RPMRC_OK;
+	    } else {
+		rpmlog(RPMLOG_ERR, _("File not found: %s\n"), diskURL);
+		fl->processingFailed = 1;
+		rc = RPMRC_FAIL;
+	    }
 	    goto exit;
 	}
     }
@@ -1894,21 +1967,20 @@ exit:
 /*@i@*/ fn = _free(fn);
     return rc;
 }
-/*@=boundswrite@*/
 
 /**
  * Add directory (and all of its files) to the package manifest.
  * @param fl		package file tree walk data
  * @param diskURL	path to file
- * @return		0 on success
+ * @return		RPMRC_OK on success
  */
-static int recurseDir(FileList fl, const char * diskURL)
+static rpmRC recurseDir(FileList fl, const char * diskURL)
 {
     char * ftsSet[2];
     FTS * ftsp;
     FTSENT * fts;
     int myFtsOpts = (FTS_COMFOLLOW | FTS_NOCHDIR | FTS_PHYSICAL);
-    int rc = RPMERR_BADSPEC;
+    rpmRC rc = RPMRC_FAIL;
 
     fl->inFtw = 1;  /* Flag to indicate file has buildRootURL prefixed */
     fl->isDir = 1;  /* Keep it from following myftw() again         */
@@ -1937,10 +2009,10 @@ static int recurseDir(FileList fl, const char * diskURL)
 	case FTS_INIT:		/* initialized only */
 	case FTS_W:		/* whiteout object */
 	default:
-	    rc = RPMERR_BADSPEC;
+	    rc = RPMRC_FAIL;
 	    /*@switchbreak@*/ break;
 	}
-	if (rc)
+	if (rc != RPMRC_OK)
 	    break;
     }
     (void) Fts_close(ftsp);
@@ -1957,9 +2029,9 @@ static int recurseDir(FileList fl, const char * diskURL)
  * @param fl		package file tree walk data
  * @param fileURL	path to file, relative is builddir, absolute buildroot.
  * @param tag		tag to add
- * @return		0 on success
+ * @return		RPMRC_OK on success
  */
-static int processMetadataFile(Package pkg, FileList fl, const char * fileURL,
+static rpmRC processMetadataFile(Package pkg, FileList fl, const char * fileURL,
 		rpmTag tag)
 	/*@globals check_fileList, rpmGlobalMacroContext, h_errno,
 		fileSystem, internalState @*/
@@ -1969,13 +2041,14 @@ static int processMetadataFile(Package pkg, FileList fl, const char * fileURL,
 		check_fileList, rpmGlobalMacroContext,
 		fileSystem, internalState @*/
 {
+    HE_t he = memset(alloca(sizeof(*he)), 0, sizeof(*he));
     const char * buildURL = "%{_builddir}/%{?buildsubdir}/";
     const char * fn = NULL;
     const char * apkt = NULL;
-    byte * pkt = NULL;
+    uint8_t * pkt = NULL;
     ssize_t pktlen = 0;
     int absolute = 0;
-    int rc = 1;
+    rpmRC rc = RPMRC_FAIL;
     int xx;
 
     (void) urlPath(fileURL, &fn);
@@ -1985,39 +2058,42 @@ static int processMetadataFile(Package pkg, FileList fl, const char * fileURL,
     } else
 	fn = rpmGenPath(buildURL, NULL, fn);
 
-/*@-branchstate@*/
     switch (tag) {
     default:
-	rpmError(RPMERR_BADSPEC, _("%s: can't load unknown tag (%d).\n"),
+	rpmlog(RPMLOG_ERR, _("%s: can't load unknown tag (%d).\n"),
 		fn, tag);
 	goto exit;
 	/*@notreached@*/ break;
     case RPMTAG_PUBKEYS:
-	if ((rc = pgpReadPkts(fn, (const byte **)&pkt, (size_t *)&pktlen)) <= 0) {
-	    rpmError(RPMERR_BADSPEC, _("%s: public key read failed.\n"), fn);
+	if ((xx = pgpReadPkts(fn, (const uint8_t **)&pkt, (size_t *)&pktlen)) <= 0) {
+	    rpmlog(RPMLOG_ERR, _("%s: public key read failed.\n"), fn);
 	    goto exit;
 	}
-	if (rc != PGPARMOR_PUBKEY) {
-	    rpmError(RPMERR_BADSPEC, _("%s: not an armored public key.\n"), fn);
+	if (xx != PGPARMOR_PUBKEY) {
+	    rpmlog(RPMLOG_ERR, _("%s: not an armored public key.\n"), fn);
 	    goto exit;
 	}
 	apkt = pgpArmorWrap(PGPARMOR_PUBKEY, pkt, pktlen);
 	break;
     case RPMTAG_POLICIES:
-	if ((rc = rpmioSlurp(fn, &pkt, &pktlen)) != 0) {
-	    rpmError(RPMERR_BADSPEC, _("%s: *.te policy read failed.\n"), fn);
+	if ((xx = rpmioSlurp(fn, &pkt, &pktlen)) != 0) {
+	    rpmlog(RPMLOG_ERR, _("%s: *.te policy read failed.\n"), fn);
 	    goto exit;
 	}
 	apkt = (const char *) pkt;	/* XXX unsigned char */
 	pkt = NULL;
 	break;
     }
-/*@=branchstate@*/
 
-    xx = headerAddOrAppendEntry(pkg->header, tag,
-		RPM_STRING_ARRAY_TYPE, &apkt, 1);
+    he->tag = tag;
+    he->t = RPM_STRING_ARRAY_TYPE;
+    he->p.argv = &apkt;
+    he->c = 1;
+    he->append = 1;
+    xx = headerPut(pkg->header, he, 0);
+    he->append = 0;
 
-    rc = 0;
+    rc = RPMRC_OK;
     if (absolute)
 	rc = addFile(fl, fn, NULL);
 
@@ -2025,10 +2101,8 @@ exit:
     apkt = _free(apkt);
     pkt = _free(pkt);
     fn = _free(fn);
-    if (rc) {
+    if (rc != RPMRC_OK)
 	fl->processingFailed = 1;
-	rc = RPMERR_BADSPEC;
-    }
     return rc;
 }
 
@@ -2037,9 +2111,9 @@ exit:
  * @param pkg		package control structure
  * @param fl		package file tree walk data
  * @param fileURL
- * @return		0 on success
+ * @return		RPMRC_OK on success
  */
-static int processBinaryFile(/*@unused@*/ Package pkg, FileList fl,
+static rpmRC processBinaryFile(/*@unused@*/ Package pkg, FileList fl,
 		const char * fileURL)
 	/*@globals rpmGlobalMacroContext, h_errno, fileSystem, internalState @*/
 	/*@modifies *fl, fl->processingFailed,
@@ -2050,7 +2124,8 @@ static int processBinaryFile(/*@unused@*/ Package pkg, FileList fl,
     int quote = 1;	/* XXX permit quoted glob characters. */
     int doGlob;
     const char *diskURL = NULL;
-    int rc = 0;
+    rpmRC rc = RPMRC_OK;
+    int xx;
     
     doGlob = Glob_pattern_p(fileURL, quote);
 
@@ -2058,9 +2133,9 @@ static int processBinaryFile(/*@unused@*/ Package pkg, FileList fl,
     {	const char * fileName;
 	(void) urlPath(fileURL, &fileName);
 	if (*fileName != '/') {
-	    rpmError(RPMERR_BADSPEC, _("File needs leading \"/\": %s\n"),
+	    rpmlog(RPMLOG_ERR, _("File needs leading \"/\": %s\n"),
 			fileName);
-	    rc = 1;
+	    rc = RPMRC_FAIL;
 	    goto exit;
 	}
     }
@@ -2082,46 +2157,44 @@ static int processBinaryFile(/*@unused@*/ Package pkg, FileList fl,
 
 	/* XXX for %dev marker in file manifest only */
 	if (fl->noGlob) {
-	    rpmError(RPMERR_BADSPEC, _("Glob not permitted: %s\n"),
+	    rpmlog(RPMLOG_ERR, _("Glob not permitted: %s\n"),
 			diskURL);
-	    rc = 1;
+	    rc = RPMRC_FAIL;
 	    goto exit;
 	}
 
-	/*@-branchstate@*/
-	rc = rpmGlob(diskURL, &argc, &argv);
-	if (rc == 0 && argc >= 1) {
+	xx = rpmGlob(diskURL, &argc, &argv);
+	if (xx == 0 && argc >= 1) {
 	    for (i = 0; i < argc; i++) {
 		rc = addFile(fl, argv[i], NULL);
-/*@-boundswrite@*/
 		argv[i] = _free(argv[i]);
-/*@=boundswrite@*/
 	    }
 	    argv = _free(argv);
 	} else {
-	    rpmError(RPMERR_BADSPEC, _("File not found by glob: %s\n"),
-			diskURL);
-	    rc = 1;
+	    if (fl->currentFlags & RPMFILE_OPTIONAL) {
+		rpmlog(RPMLOG_WARNING, _("Optional file not found by glob: %s\n"),
+			    diskURL);
+		rc = RPMRC_OK;
+	    } else {
+		rpmlog(RPMLOG_ERR, _("File not found by glob: %s\n"),
+			    diskURL);
+		rc = RPMRC_FAIL;
+	    }
 	    goto exit;
 	}
-	/*@=branchstate@*/
-    } else {
+    } else
 	rc = addFile(fl, diskURL, NULL);
-    }
 
 exit:
     diskURL = _free(diskURL);
-    if (rc) {
+    if (rc != RPMRC_OK)
 	fl->processingFailed = 1;
-	rc = RPMERR_BADSPEC;
-    }
     return rc;
 }
 
 /**
  */
-/*@-boundswrite@*/
-static int processPackageFiles(Spec spec, Package pkg,
+static rpmRC processPackageFiles(Spec spec, Package pkg,
 			       int installSpecialDoc, int test)
 	/*@globals rpmGlobalMacroContext, h_errno,
 		fileSystem, internalState@*/
@@ -2129,7 +2202,7 @@ static int processPackageFiles(Spec spec, Package pkg,
 		pkg->cpioList, pkg->fileList, pkg->specialDoc, pkg->header,
 		rpmGlobalMacroContext, fileSystem, internalState @*/
 {
-    HGE_t hge = (HGE_t)headerGetEntryMinMemory;
+    HE_t he = memset(alloca(sizeof(*he)), 0, sizeof(*he));
     struct FileList_s fl;
     char *s, **files, **fp;
     const char *fileName;
@@ -2137,45 +2210,56 @@ static int processPackageFiles(Spec spec, Package pkg,
     struct AttrRec_s arbuf;
     AttrRec specialDocAttrRec = &arbuf;
     char *specialDoc = NULL;
+    int xx;
 
     nullAttrRec(specialDocAttrRec);
     pkg->cpioList = NULL;
 
     if (pkg->fileFile) {
-	const char *ffn;
-	FILE * f;
-	FD_t fd;
+	char *saveptr;
+	char *filesFiles = xstrdup(pkg->fileFile);
+/*@-unrecog@*/
+	char *token = strtok_r(filesFiles, ",", &saveptr);
+/*@=unrecog@*/
+	do {
+	    const char *ffn;
+	    FILE * f;
+	    FD_t fd;
 
-	/* XXX W2DO? urlPath might be useful here. */
-	if (*pkg->fileFile == '/') {
-	    ffn = rpmGetPath(pkg->fileFile, NULL);
-	} else {
-	    /* XXX FIXME: add %{buildsubdir} */
-	    ffn = rpmGetPath("%{_builddir}/",
-		(spec->buildSubdir ? spec->buildSubdir : "") ,
-		"/", pkg->fileFile, NULL);
-	}
-	fd = Fopen(ffn, "r.fpio");
-
-	if (fd == NULL || Ferror(fd)) {
-	    rpmError(RPMERR_BADFILENAME,
-		_("Could not open %%files file %s: %s\n"),
-		ffn, Fstrerror(fd));
-	    return RPMERR_BADFILENAME;
-	}
-	ffn = _free(ffn);
-
-	/*@+voidabstract@*/ f = fdGetFp(fd); /*@=voidabstract@*/
-	if (f != NULL)
-	while (fgets(buf, sizeof(buf), f)) {
-	    handleComments(buf);
-	    if (expandMacros(spec, spec->macros, buf, sizeof(buf))) {
-		rpmError(RPMERR_BADSPEC, _("line: %s\n"), buf);
-		return RPMERR_BADSPEC;
+	    /* XXX W2DO? urlPath might be useful here. */
+	    if (*token == '/') {
+		ffn = rpmGetPath(token, NULL);
+	    } else {
+		/* XXX FIXME: add %{buildsubdir} */
+		ffn = rpmGetPath("%{_builddir}/",
+		    (spec->buildSubdir ? spec->buildSubdir : "") ,
+		    "/", token, NULL);
 	    }
-	    appendStringBuf(pkg->fileList, buf);
-	}
-	(void) Fclose(fd);
+
+	    fd = Fopen(ffn, "r.fpio");
+
+	    if (fd == NULL || Ferror(fd)) {
+		rpmlog(RPMLOG_ERR,
+		    _("Could not open %%files file %s: %s\n"),
+		    ffn, Fstrerror(fd));
+	        return RPMRC_FAIL;
+	    }
+	    ffn = _free(ffn);
+
+	    /*@+voidabstract@*/ f = fdGetFp(fd); /*@=voidabstract@*/
+	    if (f != NULL) {
+		while (fgets(buf, sizeof(buf), f)) {
+		    handleComments(buf);
+		    if (expandMacros(spec, spec->macros, buf, sizeof(buf))) {
+			rpmlog(RPMLOG_ERR, _("line: %s\n"), buf);
+			return RPMRC_FAIL;
+	    	    }
+	    	    appendStringBuf(pkg->fileList, buf);
+		}
+	    }
+	    (void) Fclose(fd);
+	} while((token = strtok_r(NULL, ",", &saveptr)) != NULL);
+	filesFiles = _free(filesFiles);
     }
     
     /* Init the file list structure */
@@ -2183,10 +2267,9 @@ static int processPackageFiles(Spec spec, Package pkg,
 
     fl.buildRootURL = rpmGenPath(spec->rootURL, "%{?buildroot}", NULL);
 
-    if (hge(pkg->header, RPMTAG_DEFAULTPREFIX, NULL, &fl.prefix, NULL))
-	fl.prefix = xstrdup(fl.prefix);
-    else
-	fl.prefix = NULL;
+    he->tag = RPMTAG_DEFAULTPREFIX;
+    xx = headerGet(pkg->header, he, 0);
+    fl.prefix = he->p.str;
 
     fl.fileCount = 0;
     fl.totalFileSize = 0;
@@ -2217,6 +2300,9 @@ static int processPackageFiles(Spec spec, Package pkg,
     fl.defSpecdFlags = 0;
 
     fl.docDirCount = 0;
+#if defined(RPM_VENDOR_OPENPKG) /* no-default-doc-files */
+    /* do not declare any files as %doc files by default. */
+#else
     fl.docDirs[fl.docDirCount++] = xstrdup("/usr/doc");
     fl.docDirs[fl.docDirCount++] = xstrdup("/usr/man");
     fl.docDirs[fl.docDirCount++] = xstrdup("/usr/info");
@@ -2230,6 +2316,7 @@ static int processPackageFiles(Spec spec, Package pkg,
     fl.docDirs[fl.docDirCount++] = rpmGetPath("%{_infodir}", NULL);
     fl.docDirs[fl.docDirCount++] = rpmGetPath("%{_javadocdir}", NULL);
     fl.docDirs[fl.docDirCount++] = rpmGetPath("%{_examplesdir}", NULL);
+#endif
     
     fl.fileList = NULL;
     fl.fileListRecsAlloced = 0;
@@ -2276,25 +2363,24 @@ static int processPackageFiles(Spec spec, Package pkg,
 	dupAttrRec(&fl.def_ar, &fl.cur_ar);
 
 	/*@-nullpass@*/	/* LCL: buf is NULL ?!? */
-	if (parseForVerify(buf, &fl))
+	if (parseForVerify(buf, &fl) != RPMRC_OK)
 	    continue;
-	if (parseForAttr(buf, &fl))
+	if (parseForAttr(buf, &fl) != RPMRC_OK)
 	    continue;
-	if (parseForDev(buf, &fl))
+	if (parseForDev(buf, &fl) != RPMRC_OK)
 	    continue;
-	if (parseForConfig(buf, &fl))
+	if (parseForConfig(buf, &fl) != RPMRC_OK)
 	    continue;
-	if (parseForLang(buf, &fl))
+	if (parseForLang(buf, &fl) != RPMRC_OK)
 	    continue;
 	/*@-nullstate@*/	/* FIX: pkg->fileFile might be NULL */
-	if (parseForSimple(spec, pkg, buf, &fl, &fileName))
+	if (parseForSimple(spec, pkg, buf, &fl, &fileName) != RPMRC_OK)
 	/*@=nullstate@*/
 	    continue;
 	/*@=nullpass@*/
 	if (fileName == NULL)
 	    continue;
 
-	/*@-branchstate@*/
 	if (fl.isSpecialDoc) {
 	    /* Save this stuff for last */
 	    specialDoc = _free(specialDoc);
@@ -2313,7 +2399,6 @@ static int processPackageFiles(Spec spec, Package pkg,
 	    (void) processBinaryFile(pkg, &fl, fileName);
 /*@=nullstate@*/
 	}
-	/*@=branchstate@*/
     }
 
     /* Now process special doc, if there is one */
@@ -2321,11 +2406,11 @@ static int processPackageFiles(Spec spec, Package pkg,
 	if (installSpecialDoc) {
 	    int _missing_doc_files_terminate_build =
 		    rpmExpandNumeric("%{?_missing_doc_files_terminate_build}");
-	    int rc;
+	    rpmRC rc;
 
 	    rc = doScript(spec, RPMBUILD_STRINGBUF, "%doc", pkg->specialDoc, test);
-	    if (rc && _missing_doc_files_terminate_build)
-		fl.processingFailed = rc;
+	    if (rc != RPMRC_OK && _missing_doc_files_terminate_build)
+		fl.processingFailed = 1;
 	}
 
 	/* Reset for %doc */
@@ -2394,26 +2479,29 @@ exit:
     fl.fileList = freeFileList(fl.fileList, fl.fileListRecsUsed);
     while (fl.docDirCount--)
 	fl.docDirs[fl.docDirCount] = _free(fl.docDirs[fl.docDirCount]);
-    return fl.processingFailed;
+    return (fl.processingFailed ? RPMRC_FAIL : RPMRC_OK);
 }
-/*@=boundswrite@*/
 
 int initSourceHeader(Spec spec, StringBuf *sfp)
 {
+    HE_t he = memset(alloca(sizeof(*he)), 0, sizeof(*he));
     HeaderIterator hi;
-    int_32 tag, type, count;
-    const void * ptr;
     StringBuf sourceFiles;
     struct Source *srcPtr;
+    static rpmTag classTag = 0xffffffff;
+    int xx;
+    int i;
+
+    if (classTag == 0xffffffff)
+	classTag = tagValue("Class");
 
     /* Only specific tags are added to the source package header */
-    /*@-branchstate@*/
   if (!spec->sourceHdrInit) {
-    for (hi = headerInitIterator(spec->packages->header);
-	headerNextIterator(hi, &tag, &type, &ptr, &count);
-	ptr = headerFreeData(ptr, type))
+    for (hi = headerInit(spec->packages->header);
+	headerNext(hi, he, 0);
+	he->p.ptr = _free(he->p.ptr))
     {
-	switch (tag) {
+	switch (he->tag) {
 	case RPMTAG_NAME:
 	case RPMTAG_VERSION:
 	case RPMTAG_RELEASE:
@@ -2436,21 +2524,70 @@ int initSourceHeader(Spec spec, StringBuf *sfp)
 	case RPMTAG_GIF:
 	case RPMTAG_XPM:
 	case HEADER_I18NTABLE:
-	    if (ptr)
-		(void)headerAddEntry(spec->sourceHeader, tag, type, ptr, count);
+#if defined(RPM_VENDOR_OPENPKG) /* propagate-provides-to-srpms */
+	/* make sure the "Provides" headers are available for querying from the .src.rpm files. */
+	case RPMTAG_PROVIDENAME:
+	case RPMTAG_PROVIDEVERSION:
+	case RPMTAG_PROVIDEFLAGS:
+#endif
+	    if (he->p.ptr)
+		xx = headerPut(spec->sourceHeader, he, 0);
 	    /*@switchbreak@*/ break;
 	default:
-	    /* do not copy */
+	    if (classTag == he->tag && he->p.ptr != NULL)
+		xx = headerPut(spec->sourceHeader, he, 0);
 	    /*@switchbreak@*/ break;
 	}
     }
-    hi = headerFreeIterator(hi);
-    /*@=branchstate@*/
+    hi = headerFini(hi);
 
     if (spec->BANames && spec->BACount > 0) {
-	(void) headerAddEntry(spec->sourceHeader, RPMTAG_BUILDARCHS,
-		       RPM_STRING_ARRAY_TYPE,
-		       spec->BANames, spec->BACount);
+	he->tag = RPMTAG_BUILDARCHS;
+	he->t = RPM_STRING_ARRAY_TYPE;
+	he->p.argv = spec->BANames;
+	he->c = spec->BACount;
+	xx = headerPut(spec->sourceHeader, he, 0);
+    }
+
+    /* Load arbitrary tags into srpm header. */
+    if (spec->foo)
+    for (i = 0; i < spec->nfoo; i++) {
+	const char * str = spec->foo[i].str;
+	rpmTag tag = spec->foo[i].tag;
+	StringBuf sb = spec->foo[i].val;
+	char * s;
+
+	if (str == NULL || sb == NULL)
+	    continue;
+
+	/* XXX Special case %track interpreter for now. */
+	if (!xstrcasecmp(str, "track")) {
+	    he->p.str = rpmExpand("%{?__vcheck}", NULL);
+	    if (!(he->p.str != NULL && he->p.str[0] != '\0')) {
+		he->p.str = _free(he->p.str);
+		continue;
+	    }
+	    he->tag = tagValue("Trackprog");
+	    he->t = RPM_STRING_TYPE;
+	    he->c = 1;
+	    xx = headerPut(spec->sourceHeader, he, 0);
+	    he->p.str = _free(he->p.str);
+	}
+
+	s = getStringBuf(sb);
+	he->tag = tag;
+	he->append = headerIsEntry(spec->sourceHeader, tag);
+	if (he->append) {
+	    he->t = RPM_STRING_ARRAY_TYPE;
+	    he->p.argv = (const char **) &s;
+	    he->c = 1;
+	} else {
+	    he->t = RPM_STRING_TYPE;
+	    he->p.str = s;
+	    he->c = 1;
+	}
+	xx = headerPut(spec->sourceHeader, he, 0);
+	he->append = 0;
     }
   }
 
@@ -2464,8 +2601,14 @@ int initSourceHeader(Spec spec, StringBuf *sfp)
     if (spec->sourceHeader != NULL)
     for (srcPtr = spec->sources; srcPtr != NULL; srcPtr = srcPtr->next) {
       {	const char * sfn;
+/*@-nullpass@*/		/* XXX getSourceDir returns NULL with bad flags. */
 	sfn = rpmGetPath( ((srcPtr->flags & RPMFILE_GHOST) ? "!" : ""),
+#if defined(RPM_VENDOR_OPENPKG) /* splitted-source-directory */
+		getSourceDir(srcPtr->flags, srcPtr->source), srcPtr->source, NULL);
+#else
 		getSourceDir(srcPtr->flags), srcPtr->source, NULL);
+#endif
+/*@=nullpass@*/
 	appendLineStringBuf(sourceFiles, sfn);
 	sfn = _free(sfn);
       }
@@ -2474,19 +2617,39 @@ int initSourceHeader(Spec spec, StringBuf *sfp)
 	    continue;
 
 	if (srcPtr->flags & RPMFILE_SOURCE) {
-	    (void) headerAddOrAppendEntry(spec->sourceHeader, RPMTAG_SOURCE,
-				   RPM_STRING_ARRAY_TYPE, &srcPtr->source, 1);
+	    he->tag = RPMTAG_SOURCE;
+	    he->t = RPM_STRING_ARRAY_TYPE;
+	    he->p.argv = &srcPtr->source;
+	    he->c = 1;
+	    he->append = 1;
+	    xx = headerPut(spec->sourceHeader, he, 0);
+	    he->append = 0;
 	    if (srcPtr->flags & RPMFILE_GHOST) {
-		(void) headerAddOrAppendEntry(spec->sourceHeader, RPMTAG_NOSOURCE,
-				       RPM_INT32_TYPE, &srcPtr->num, 1);
+		he->tag = RPMTAG_NOSOURCE;
+		he->t = RPM_UINT32_TYPE;
+		he->p.ui32p = &srcPtr->num;
+		he->c = 1;
+		he->append = 1;
+		xx = headerPut(spec->sourceHeader, he, 0);
+		he->append = 0;
 	    }
 	}
 	if (srcPtr->flags & RPMFILE_PATCH) {
-	    (void) headerAddOrAppendEntry(spec->sourceHeader, RPMTAG_PATCH,
-				   RPM_STRING_ARRAY_TYPE, &srcPtr->source, 1);
+	    he->tag = RPMTAG_PATCH;
+	    he->t = RPM_STRING_ARRAY_TYPE;
+	    he->p.argv = &srcPtr->source;
+	    he->c = 1;
+	    he->append = 1;
+	    xx = headerPut(spec->sourceHeader, he, 0);
+	    he->append = 0;
 	    if (srcPtr->flags & RPMFILE_GHOST) {
-		(void) headerAddOrAppendEntry(spec->sourceHeader, RPMTAG_NOPATCH,
-				       RPM_INT32_TYPE, &srcPtr->num, 1);
+		he->tag = RPMTAG_NOPATCH;
+		he->t = RPM_UINT32_TYPE;
+		he->p.ui32p = &srcPtr->num;
+		he->c = 1;
+		he->append = 1;
+		xx = headerPut(spec->sourceHeader, he, 0);
+		he->append = 0;
 	    }
 	}
     }
@@ -2506,9 +2669,27 @@ int processSourceFiles(Spec spec)
     struct FileList_s fl;
     char **files, **fp;
     int rc;
+#if defined(RPM_VENDOR_OPENPKG) /* support-srcdefattr */
+    /* srcdefattr: needed variables */
+    char _srcdefattr_buf[BUFSIZ];
+    char *_srcdefattr;
+#endif
+
+#if defined(RPM_VENDOR_OPENPKG) /* support-srcdefattr */
+    _srcdefattr = rpmExpand("%{?_srcdefattr}", NULL);
+#endif
 
     *sfp = newStringBuf();
     x = initSourceHeader(spec, sfp);
+
+#if defined(RPM_VENDOR_OPENPKG) /* support-srcdefattr */
+    /* srcdefattr: initialize file list structure */
+    memset(&fl, 0, sizeof(fl));
+    if (_srcdefattr && *_srcdefattr) {
+        snprintf(_srcdefattr_buf, sizeof(_srcdefattr_buf), "%%defattr %s", _srcdefattr);
+        parseForAttr(_srcdefattr_buf, &fl);
+    }
+#endif
 
     /* Construct the SRPM file list. */
     fl.fileList = xcalloc((spec->numSources + 1), sizeof(*fl.fileList));
@@ -2555,19 +2736,29 @@ int processSourceFiles(Spec spec)
 	flp->verifyFlags = RPMVERIFY_ALL;
 
 	if (Stat(diskURL, &flp->fl_st)) {
-	    rpmError(RPMERR_BADSPEC, _("Bad file: %s: %s\n"),
+	    rpmlog(RPMLOG_ERR, _("Bad file: %s: %s\n"),
 		diskURL, strerror(errno));
 	    rc = fl.processingFailed = 1;
 	}
 
+#if defined(RPM_VENDOR_OPENPKG) /* support-srcdefattr */
+	/* srcdefattr: allow to set SRPM file attributes via %{_srcdefattr} macro */
+	if (fl.def_ar.ar_fmodestr) {
+	    flp->fl_mode &= S_IFMT;
+	    flp->fl_mode |= fl.def_ar.ar_fmode;
+	}
+        flp->uname = fl.def_ar.ar_user  ? getUnameS(fl.def_ar.ar_user)  : getUname(flp->fl_uid);
+	flp->gname = fl.def_ar.ar_group ? getGnameS(fl.def_ar.ar_group) : getGname(flp->fl_gid);
+#else
 	flp->uname = getUname(flp->fl_uid);
 	flp->gname = getGname(flp->fl_gid);
+#endif
 	flp->langs = xstrdup("");
 	
 	fl.totalFileSize += flp->fl_size;
 	
 	if (! (flp->uname && flp->gname)) {
-	    rpmError(RPMERR_BADSPEC, _("Bad owner/group: %s\n"), diskURL);
+	    rpmlog(RPMLOG_ERR, _("Bad owner/group: %s\n"), diskURL);
 	    rc = fl.processingFailed = 1;
 	}
 
@@ -2612,11 +2803,9 @@ static int checkFiles(StringBuf fileList)
     }
     rc = 0;
 
-    rpmMessage(RPMMESS_NORMAL, _("Checking for unpackaged file(s): %s\n"), s);
+    rpmlog(RPMLOG_NOTICE, _("Checking for unpackaged file(s): %s\n"), s);
 
-/*@-boundswrite@*/
     rc = rpmfcExec(av_ckfile, fileList, &sb_stdout, 0);
-/*@=boundswrite@*/
     if (rc < 0)
 	goto exit;
     
@@ -2628,7 +2817,7 @@ static int checkFiles(StringBuf fileList)
 	t = getStringBuf(sb_stdout);
 	if ((*t != '\0') && (*t != '\n')) {
 	    rc = (_unpackaged_files_terminate_build) ? 1 : 0;
-	    rpmMessage((rc ? RPMMESS_ERROR : RPMMESS_WARNING),
+	    rpmlog((rc ? RPMLOG_ERR : RPMLOG_WARNING),
 		_("Installed (but unpackaged) file(s) found:\n%s"), t);
 	}
     }
@@ -2640,17 +2829,18 @@ exit:
 }
 
 /*@-incondefs@*/
-int processBinaryFiles(Spec spec, int installSpecialDoc, int test)
+rpmRC processBinaryFiles(Spec spec, int installSpecialDoc, int test)
 	/*@globals check_fileList @*/
 	/*@modifies check_fileList @*/
 {
+    HE_t he = memset(alloca(sizeof(*he)), 0, sizeof(*he));
     Package pkg;
-    int res = 0;
+    rpmRC res = RPMRC_OK;
+    int xx;
     
     check_fileList = newStringBuf();
     
     for (pkg = spec->packages; pkg != NULL; pkg = pkg->next) {
-	const char *NVRA = NULL;
 	int rc;
 
 	if (pkg->fileList == NULL)
@@ -2658,19 +2848,20 @@ int processBinaryFiles(Spec spec, int installSpecialDoc, int test)
 
 	(void) headerMacrosLoad(pkg->header);
 
-	(void) headerGetExtension(pkg->header, RPMTAG_NVRA, NULL, &NVRA, NULL);
-	rpmMessage(RPMMESS_NORMAL, _("Processing files: %s\n"), NVRA);
-	NVRA = _free(NVRA);
+	he->tag = RPMTAG_NVRA;
+	xx = headerGet(pkg->header, he, 0);
+	rpmlog(RPMLOG_NOTICE, _("Processing files: %s\n"), he->p.str);
+	he->p.ptr = _free(he->p.ptr);
 		   
-	if ((rc = processPackageFiles(spec, pkg, installSpecialDoc, test)))
-	    res = rc;
+	if ((xx = processPackageFiles(spec, pkg, installSpecialDoc, test)))
+	    res = RPMRC_FAIL;
 
 	/* Finalize package scriptlets before extracting dependencies. */
 	if ((rc = processScriptFiles(spec, pkg)))
 	    res = rc;
 
-	if ((rc = rpmfcGenerateDepends(spec, pkg)))
-	    res = rc;
+	if ((xx = rpmfcGenerateDepends(spec, pkg)))
+	    res = RPMRC_FAIL;
 
 	/* XXX this should be earlier for deps to be entirely sorted. */
 	providePackageNVR(pkg->header);
@@ -2684,8 +2875,8 @@ int processBinaryFiles(Spec spec, int installSpecialDoc, int test)
      */
     
     if (checkFiles(check_fileList) > 0) {
-	if (res == 0)
-	    res = 1;
+	if (res == RPMRC_OK)
+	    res = RPMRC_FAIL;
     }
     
     check_fileList = freeStringBuf(check_fileList);

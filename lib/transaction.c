@@ -5,12 +5,16 @@
 #include "system.h"
 
 #include <rpmio.h>
-#include "rpmcli.h"	/* IDTX prototypes */
-#include <rpmlib.h>
-
 #include <rpmmacro.h>	/* XXX for rpmExpand */
+#include <rpmtag.h>
+
+#define	_RPMFI_INTERNAL
+#define	_RPMTE_INTERNAL
+#define	_RPMTS_INTERNAL
+#include "rpmcli.h"	/* IDTX prototypes */
 
 #include "fsm.h"
+#define	_RPMSQ_INTERNAL
 #include "psm.h"
 
 #define	_RPMDB_INTERNAL	/* XXX for dbiIndexFoo() */
@@ -20,19 +24,10 @@
 
 #include "rpmlock.h"
 
-#define	_RPMFI_INTERNAL
-#include "rpmfi.h"
-
-#define	_RPMTE_INTERNAL
-#include "rpmte.h"
-
-#define	_RPMTS_INTERNAL
-#include "rpmts.h"
-
 #include "cpio.h"
 #include "fprint.h"
 #include "legacy.h"	/* XXX dodigest */
-#include "misc.h" /* XXX stripTrailingChar, splitString, currentDirectory */
+#include "misc.h" /* XXX (free)splitString, currentDirectory */
 
 #include "debug.h"
 
@@ -54,18 +49,6 @@
 /*@access IDT @*/
 /*@access IDTX @*/
 /*@access FD_t @*/
-
-/* XXX: This is a hack.  I needed a to setup a notify callback
- * for the rollback transaction, but I did not want to create
- * a header for rpminstall.c.
- */
-extern void * rpmShowProgress(/*@null@*/ const void * arg,
-                        const rpmCallbackType what,
-                        const unsigned long long amount,
-                        const unsigned long long total,
-                        /*@null@*/ fnpyKey key,
-                        /*@null@*/ void * data)
-	/*@*/;
 
 /**
  */
@@ -100,12 +83,13 @@ static int handleInstInstalledFiles(const rpmts ts,
 	/*@globals rpmGlobalMacroContext, h_errno, fileSystem, internalState @*/
 	/*@modifies ts, p, fi, rpmGlobalMacroContext, fileSystem, internalState @*/
 {
-    uint_32 tscolor = rpmtsColor(ts);
-    uint_32 prefcolor = rpmtsPrefColor(ts);
-    uint_32 otecolor, tecolor;
-    uint_32 oFColor, FColor;
-    uint_32 oFFlags, FFlags;
-    const char * altNEVRA = NULL;
+    HE_t he = memset(alloca(sizeof(*he)), 0, sizeof(*he));
+    const char * altNVRA = NULL;
+    uint32_t tscolor = rpmtsColor(ts);
+    uint32_t prefcolor = rpmtsPrefColor(ts);
+    uint32_t otecolor, tecolor;
+    uint32_t oFColor, FColor;
+    uint32_t oFFlags, FFlags;
     rpmfi otherFi = NULL;
     rpmps ps;
     int xx;
@@ -118,8 +102,10 @@ static int handleInstInstalledFiles(const rpmts ts,
 	mi = rpmtsInitIterator(ts, RPMDBI_PACKAGES,
 			&shared->otherPkg, sizeof(shared->otherPkg));
 	while ((h = rpmdbNextIterator(mi)) != NULL) {
-	    xx = headerGetExtension(h, RPMTAG_NVRA, NULL, &altNEVRA, NULL);
-assert(altNEVRA != NULL);
+	    he->tag = RPMTAG_NVRA;
+	    xx = headerGet(h, he, 0);
+assert(he->p.str != NULL);
+	    altNVRA = he->p.str;
 	    otherFi = rpmfiNew(ts, h, RPMTAG_BASENAMES, scareMem);
 	    break;
 	}
@@ -171,7 +157,7 @@ assert(altNEVRA != NULL);
 
 	/* Remove setuid/setgid bits on other (possibly hardlinked) files. */
 	if (!(fi->mapflags & CPIO_SBIT_CHECK)) {
-	    int_16 omode = rpmfiFMode(otherFi);
+	    uint16_t omode = rpmfiFMode(otherFi);
 	    if (S_ISREG(omode) && (omode & 06000) != 0)
 		fi->mapflags |= CPIO_SBIT_CHECK;
 	}
@@ -200,7 +186,7 @@ assert(altNEVRA != NULL);
 		rpmpsAppend(ps, RPMPROB_FILE_CONFLICT,
 			rpmteNEVRA(p), rpmteKey(p),
 			rpmfiDN(fi), rpmfiBN(fi),
-			altNEVRA,
+			altNVRA,
 			0);
 	    }
 
@@ -224,7 +210,7 @@ assert(altNEVRA != NULL);
     }
     ps = rpmpsFree(ps);
 
-    altNEVRA = _free(altNEVRA);
+    altNVRA = _free(altNVRA);
     otherFi = rpmfiFree(otherFi);
 
     p->replaced = xrealloc(p->replaced,
@@ -242,9 +228,9 @@ static int handleRmvdInstalledFiles(const rpmts ts, rpmfi fi,
 	/*@globals rpmGlobalMacroContext, h_errno, fileSystem, internalState @*/
 	/*@modifies ts, fi, rpmGlobalMacroContext, fileSystem, internalState @*/
 {
-    HGE_t hge = fi->hge;
+    HE_t he = memset(alloca(sizeof(*he)), 0, sizeof(*he));
     Header h;
-    const char * otherStates;
+    const unsigned char * otherStates;
     int i, xx;
 
     rpmdbMatchIterator mi;
@@ -257,7 +243,9 @@ static int handleRmvdInstalledFiles(const rpmts ts, rpmfi fi,
 	return 1;
     }
 
-    xx = hge(h, RPMTAG_FILESTATES, NULL, &otherStates, NULL);
+    he->tag = RPMTAG_FILESTATES;
+    xx = headerGet(h, he, 0);
+    otherStates = he->p.ptr;
 
     /* XXX there's an obscure segfault here w/o NULL check ... */
     if (otherStates != NULL)
@@ -271,7 +259,7 @@ static int handleRmvdInstalledFiles(const rpmts ts, rpmfi fi,
 
 	fi->actions[fileNum] = FA_SKIP;
     }
-
+    he->p.ptr = _free(he->p.ptr);
     mi = rpmdbFreeIterator(mi);
 
     return 0;
@@ -287,12 +275,12 @@ static int fpsCompare (const void * one, const void * two)
 {
     const struct fingerPrint_s * a = (const struct fingerPrint_s *)one;
     const struct fingerPrint_s * b = (const struct fingerPrint_s *)two;
-    int adnlen = strlen(a->entry->dirName);
-    int asnlen = (a->subDir ? strlen(a->subDir) : 0);
-    int abnlen = strlen(a->baseName);
-    int bdnlen = strlen(b->entry->dirName);
-    int bsnlen = (b->subDir ? strlen(b->subDir) : 0);
-    int bbnlen = strlen(b->baseName);
+    size_t adnlen = strlen(a->entry->dirName);
+    size_t asnlen = (a->subDir ? strlen(a->subDir) : 0);
+    size_t abnlen = strlen(a->baseName);
+    size_t bdnlen = strlen(b->entry->dirName);
+    size_t bsnlen = (b->subDir ? strlen(b->subDir) : 0);
+    size_t bbnlen = strlen(b->baseName);
     char * afn, * bfn, * t;
     int rc = 0;
 
@@ -374,7 +362,7 @@ static void handleOverlappedFiles(const rpmts ts,
 	/*@globals h_errno, fileSystem, internalState @*/
 	/*@modifies ts, fi, fileSystem, internalState @*/
 {
-    uint_32 fixupSize = 0;
+    uint32_t fixupSize = 0;
     rpmps ps;
     const char * fn;
     int i, j;
@@ -383,14 +371,14 @@ static void handleOverlappedFiles(const rpmts ts,
     fi = rpmfiInit(fi, 0);
     if (fi != NULL)
     while ((i = rpmfiNext(fi)) >= 0) {
-	uint_32 tscolor = rpmtsColor(ts);
-	uint_32 prefcolor = rpmtsPrefColor(ts);
-	uint_32 oFColor, FColor;
+	uint32_t tscolor = rpmtsColor(ts);
+	uint32_t prefcolor = rpmtsPrefColor(ts);
+	uint32_t oFColor, FColor;
 	struct fingerPrint_s * fiFps;
 	int otherPkgNum, otherFileNum;
 	rpmfi otherFi;
-	int_32 FFlags;
-	int_16 FMode;
+	uint32_t FFlags;
+	uint16_t FMode;
 	const rpmfi * recs;
 	int numRecs;
 
@@ -603,7 +591,8 @@ static int ensureOlder(rpmts ts,
 		const rpmte p, const Header h)
 	/*@modifies ts @*/
 {
-    int_32 reqFlags = (RPMSENSE_LESS | RPMSENSE_EQUAL);
+    HE_t he = memset(alloca(sizeof(*he)), 0, sizeof(*he));
+    uint32_t reqFlags = (RPMSENSE_LESS | RPMSENSE_EQUAL);
     const char * reqEVR;
     rpmds req;
     char * t;
@@ -628,15 +617,15 @@ static int ensureOlder(rpmts ts,
 
     if (rc == 0) {
 	rpmps ps = rpmtsProblems(ts);
-	const char * altNVRA = NULL;
-	rc = headerGetExtension(h, RPMTAG_NVRA, NULL, &altNVRA, NULL);
-assert(altNVRA != NULL);
+	he->tag = RPMTAG_NVRA;
+	rc = headerGet(h, he, 0);
+assert(he->p.str != NULL);
 	rpmpsAppend(ps, RPMPROB_OLDPACKAGE,
 		rpmteNEVR(p), rpmteKey(p),
 		NULL, NULL,
-		altNVRA,
+		he->p.str,
 		0);
-	altNVRA = _free(altNVRA);
+	he->p.ptr = _free(he->p.ptr);
 	ps = rpmpsFree(ps);
 	rc = 1;
     } else
@@ -654,11 +643,11 @@ assert(altNVRA != NULL);
 /*@-mustmod@*/ /* FIX: fi->actions is modified. */
 /*@-nullpass@*/
 static void skipFiles(const rpmts ts, rpmfi fi)
-	/*@globals rpmGlobalMacroContext, h_errno @*/
-	/*@modifies fi, rpmGlobalMacroContext @*/
+	/*@globals rpmGlobalMacroContext, h_errno, internalState @*/
+	/*@modifies fi, rpmGlobalMacroContext, internalState @*/
 {
-    uint_32 tscolor = rpmtsColor(ts);
-    uint_32 FColor;
+    uint32_t tscolor = rpmtsColor(ts);
+    uint32_t FColor;
     int noConfigs = (rpmtsFlags(ts) & RPMTRANS_FLAG_NOCONFIGS);
     int noDocs = (rpmtsFlags(ts) & RPMTRANS_FLAG_NODOCS);
     char ** netsharedPaths = NULL;
@@ -671,8 +660,16 @@ static void skipFiles(const rpmts ts, rpmfi fi)
     int dc;
     int i, j;
 
+#if defined(RPM_VENDOR_OPENPKG) /* allow-excludedocs-default */
+    /* The "%_excludedocs" macro is intended to set the _default_ if
+       both --excludedocs and --includedocs are not specified and it
+       is evaluated already before. So, do not override it here again,
+       because it would not allow us to make "%_excludedocs 1" the
+       default. */
+#else
     if (!noDocs)
 	noDocs = rpmExpandNumeric("%{_excludedocs}");
+#endif
 
     {	const char *tmpPath = rpmExpand("%{_netsharedpath}", NULL);
 	if (tmpPath && *tmpPath != '%')
@@ -837,7 +834,7 @@ static void skipFiles(const rpmts ts, rpmfi fi)
 	if (fi != NULL)		/* XXX lclint */
 	while ((i = rpmfiNext(fi)) >= 0) {
 	    const char * fdn, * fbn;
-	    int_16 fFMode;
+	    uint16_t fFMode;
 
 	    if (XFA_SKIPPING(fi->actions[i]))
 		/*@innercontinue@*/ continue;
@@ -856,7 +853,7 @@ static void skipFiles(const rpmts ts, rpmfi fi)
 		/*@innercontinue@*/ continue;
 	    if (strncmp(fbn, bn, bnlen))
 		/*@innercontinue@*/ continue;
-	    rpmMessage(RPMMESS_DEBUG, D_("excluding directory %s\n"), dn);
+	    rpmlog(RPMLOG_DEBUG, D_("excluding directory %s\n"), dn);
 	    fi->actions[i] = FA_SKIPNSTATE;
 	    /*@innerbreak@*/ break;
 	}
@@ -942,7 +939,7 @@ rpmRC rpmtsRollback(rpmts rbts, rpmprobFilterFlags ignoreSet, int running, rpmte
 {
     const char * semfn = NULL;
     rpmRC rc = 0;
-    uint_32 arbgoal = rpmtsARBGoal(rbts);
+    uint32_t arbgoal = rpmtsARBGoal(rbts);
     QVA_t ia = memset(alloca(sizeof(*ia)), 0, sizeof(*ia));
     time_t ttid;
     int xx;
@@ -979,7 +976,7 @@ rpmRC rpmtsRollback(rpmts rbts, rpmprobFilterFlags ignoreSet, int running, rpmte
 			rpmtsGetTid(rbts),
 			te->u.removed.dboffset, NULL);
 	    if (rc != RPMRC_OK) {
-		rpmMessage(RPMMESS_ERROR, _("rpmdb erase failed. NEVRA: %s\n"),
+		rpmlog(RPMLOG_ERR, _("rpmdb erase failed. NEVRA: %s\n"),
 			rpmteNEVRA(te));
 		break;
 	    }
@@ -997,7 +994,7 @@ rpmRC rpmtsRollback(rpmts rbts, rpmprobFilterFlags ignoreSet, int running, rpmte
     rpmtsEmpty(rbts);
 
     ttid = (time_t)arbgoal;
-    rpmMessage(RPMMESS_NORMAL, _("Rollback to %-24.24s (0x%08x)\n"),
+    rpmlog(RPMLOG_NOTICE, _("Rollback to %-24.24s (0x%08x)\n"),
 	ctime(&ttid), arbgoal);
 
     /* Set the verify signature flags:
@@ -1122,7 +1119,7 @@ static int markLinkedFailed(rpmts ts, rpmte p)
 
 int rpmtsRun(rpmts ts, rpmps okProbs, rpmprobFilterFlags ignoreSet)
 {
-    uint_32 tscolor = rpmtsColor(ts);
+    uint32_t tscolor = rpmtsColor(ts);
     int i, j;
     int ourrc = 0;
     int totalFileCount = 0;
@@ -1143,7 +1140,7 @@ int rpmtsRun(rpmts ts, rpmps okProbs, rpmprobFilterFlags ignoreSet)
 
     /* XXX programmer error segfault avoidance. */
     if (rpmtsNElements(ts) <= 0) {
-	rpmMessage(RPMMESS_ERROR,
+	rpmlog(RPMLOG_ERR,
 	    _("Invalid number of transaction elements.\n"));
 	return -1;
     }
@@ -1209,7 +1206,7 @@ int rpmtsRun(rpmts ts, rpmps okProbs, rpmprobFilterFlags ignoreSet)
     (void) rpmtsSetChrootDone(ts, 0);
 
     /* XXX rpmtsCreate() sets the transaction id, but apps may not honor. */
-    {	int_32 tid = (int_32) time(NULL);
+    {	uint32_t tid = (uint32_t) time(NULL);
 	(void) rpmtsSetTid(ts, tid);
     }
 
@@ -1224,7 +1221,7 @@ int rpmtsRun(rpmts ts, rpmps okProbs, rpmprobFilterFlags ignoreSet)
      * - count files.
      */
 
-rpmMessage(RPMMESS_DEBUG, D_("sanity checking %d elements\n"), rpmtsNElements(ts));
+rpmlog(RPMLOG_DEBUG, D_("sanity checking %d elements\n"), rpmtsNElements(ts));
     ps = rpmtsProblems(ts);
     /* The ordering doesn't matter here */
     pi = rpmtsiInit(ts);
@@ -1299,7 +1296,7 @@ rpmMessage(RPMMESS_DEBUG, D_("sanity checking %d elements\n"), rpmtsNElements(ts
      	  || (rpmpsNumProblems(ts->probs) &&
 		(okProbs == NULL || rpmpsTrim(ts->probs, okProbs)))))
     {
-	rpmMessage(RPMMESS_DEBUG, D_("running pre-transaction scripts\n"));
+	rpmlog(RPMLOG_DEBUG, D_("running pre-transaction scripts\n"));
 	pi = rpmtsiInit(ts);
 	while ((p = rpmtsiNext(pi, TR_ADDED)) != NULL) {
 	    if (p->isSource) continue;
@@ -1373,7 +1370,7 @@ assert(psm != NULL);
      * calling fpLookupList only once. I'm not sure that the speedup is
      * worth the trouble though.
      */
-rpmMessage(RPMMESS_DEBUG, D_("computing %d file fingerprints\n"), totalFileCount);
+rpmlog(RPMLOG_DEBUG, D_("computing %d file fingerprints\n"), totalFileCount);
 
     numAdded = numRemoved = 0;
     pi = rpmtsiInit(ts);
@@ -1460,7 +1457,7 @@ rpmMessage(RPMMESS_DEBUG, D_("computing %d file fingerprints\n"), totalFileCount
     /* ===============================================
      * Compute file disposition for each package in transaction set.
      */
-rpmMessage(RPMMESS_DEBUG, D_("computing file dispositions\n"));
+rpmlog(RPMLOG_DEBUG, D_("computing file dispositions\n"));
     ps = rpmtsProblems(ts);
     pi = rpmtsiInit(ts);
 /*@-nullpass@*/
@@ -1504,7 +1501,7 @@ rpmMessage(RPMMESS_DEBUG, D_("computing file dispositions\n"));
  	fi = rpmfiInit(fi, 0);
 	while ((i = rpmfiNext(fi)) >= 0) {
 	    struct stat sb, *st = &sb;
-	    uint_32 FFlags = rpmfiFFlags(fi);
+	    uint32_t FFlags = rpmfiFFlags(fi);
 	    numShared += dbiIndexSetCount(matches[i]);
 	    if (!(FFlags & RPMFILE_CONFIG))
 		/*@innercontinue@*/ continue;
@@ -1736,7 +1733,7 @@ assert(psm != NULL);
 
 	    pkgKey = rpmteAddedKey(p);
 
-	    rpmMessage(RPMMESS_DEBUG, "========== +++ %s %s-%s 0x%x\n",
+	    rpmlog(RPMLOG_DEBUG, "========== +++ %s %s-%s 0x%x\n",
 		rpmteNEVR(p), rpmteA(p), rpmteO(p), rpmteColor(p));
 
 	    p->h = NULL;
@@ -1783,11 +1780,11 @@ assert(psm != NULL);
 		 */
 		psm->fi = rpmfiFree(psm->fi);
 		{
-		    char * fstates = fi->fstates;
+		    uint8_t * fstates = fi->fstates;
 		    fileAction * actions = fi->actions;
 		    int mapflags = fi->mapflags;
 		    rpmte savep;
-		    int scareMem = 1;	/* XXX rpmpsmStage needs fi->h */
+		    int scareMem = 0;
 
 		    fi->fstates = NULL;
 		    fi->actions = NULL;
@@ -1839,7 +1836,7 @@ assert(psm != NULL);
 	case TR_REMOVED:
 	    (void) rpmswEnter(rpmtsOp(ts, RPMTS_OP_ERASE), 0);
 
-	    rpmMessage(RPMMESS_DEBUG, "========== --- %s %s-%s 0x%x\n",
+	    rpmlog(RPMLOG_DEBUG, "========== --- %s %s-%s 0x%x\n",
 		rpmteNEVR(p), rpmteA(p), rpmteO(p), rpmteColor(p));
 
 	    /* If linked element install failed, then don't erase. */
@@ -1880,7 +1877,7 @@ assert(psm != NULL);
     pi = rpmtsiFree(pi);
 
     if (!(rpmtsFlags(ts) & RPMTRANS_FLAG_TEST)) {
-	rpmMessage(RPMMESS_DEBUG, D_("running post-transaction scripts\n"));
+	rpmlog(RPMLOG_DEBUG, D_("running post-transaction scripts\n"));
 	pi = rpmtsiInit(ts);
 	while ((p = rpmtsiNext(pi, TR_ADDED)) != NULL) {
 	    int haspostscript;

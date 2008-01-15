@@ -4,16 +4,18 @@
  */
 #include "system.h"
 
-#include <rpmlib.h>
 #include <rpmio.h>
+#include <rpmcb.h>		/* XXX fnpyKey */
+#include <rpmmacro.h>		/* XXX rpmExpand */
+#include <rpmlib.h>
 #include <rpmte.h>		/* XXX rpmElementType */
+#include <pkgio.h>		/* XXX rpmElementType */
 
 #define	_RPMGI_INTERNAL
 #define	_RPMTS_INTERNAL		/* XXX ts->probs et al */
 #include <rpmgi.h>
 
 #include <rpmdb.h>
-#include <rpmmacro.h>		/* XXX rpmExpand */
 #include "manifest.h"
 
 #include "debug.h"
@@ -94,7 +96,7 @@ static FD_t rpmgiOpen(const char * path, const char * fmode)
     fd = Fopen(fn, fmode);
 
     if (fd == NULL || Ferror(fd)) {
-	rpmError(RPMERR_OPEN, _("open of %s failed: %s\n"), fn, Fstrerror(fd));
+	rpmlog(RPMLOG_ERR, _("open of %s failed: %s\n"), fn, Fstrerror(fd));
 	if (fd != NULL) (void) Fclose(fd);
 	fd = NULL;
     }
@@ -113,7 +115,7 @@ static rpmRC rpmgiLoadManifest(rpmgi gi, const char * path)
 	/*@globals rpmGlobalMacroContext, h_errno, internalState @*/
 	/*@modifies gi, rpmGlobalMacroContext, h_errno, internalState @*/
 {
-    FD_t fd = rpmgiOpen(path, "r.fdio");
+    FD_t fd = rpmgiOpen(path, "r%{?_rpmgio}");
     rpmRC rpmrc = RPMRC_FAIL;
 
     if (fd != NULL) {
@@ -134,7 +136,7 @@ static Header rpmgiReadHeader(rpmgi gi, const char * path)
 	/*@globals rpmGlobalMacroContext, h_errno, internalState @*/
 	/*@modifies gi, rpmGlobalMacroContext, h_errno, internalState @*/
 {
-    FD_t fd = rpmgiOpen(path, "r.fdio");
+    FD_t fd = rpmgiOpen(path, "r%{?_rpmgio}");
     Header h = NULL;
 
     if (fd != NULL) {
@@ -245,7 +247,7 @@ static rpmRC rpmgiWalkPathFilter(rpmgi gi)
     const char * s;
 
 if (_rpmgi_debug < 0)
-rpmMessage(RPMMESS_DEBUG, "FTS_%s\t%*s %s%s\n", ftsInfoStr(fts->fts_info),
+rpmlog(RPMLOG_DEBUG, "FTS_%s\t%*s %s%s\n", ftsInfoStr(fts->fts_info),
 		indent * (fts->fts_level < 0 ? 0 : fts->fts_level), "",
 		fts->fts_name,
 	((fts->fts_info == FTS_D || fts->fts_info == FTS_DP) ? "/" : ""));
@@ -425,7 +427,7 @@ fprintf(stderr, "*** gi %p key %p[%d]\tmi %p\n", gi, gi->keyp, (int)gi->keylen, 
 		if (*a != '\0') {	/* XXX HACK: permit '=foo' */
 		    tag = tagValue(a);
 		    if (tag < 0) {
-			rpmError(RPMERR_QUERYINFO, _("unknown tag: \"%s\"\n"), a);
+			rpmlog(RPMLOG_NOTICE, _("unknown tag: \"%s\"\n"), a);
 			res = 1;
 		    }
 		}
@@ -663,12 +665,22 @@ nextkey:
 		path = _free(path);
 		path = rpmExpand(_query_hdlist_path, NULL);
 	    }
-	    gi->fd = rpmgiOpen(path, "rm.fdio");
+	    gi->fd = rpmgiOpen(path, "rm%{?_rpmgio}");
 	    gi->active = 1;
 	    path = _free(path);
 	}
 	if (gi->fd != NULL) {
-	    Header h = headerRead(gi->fd);
+	    Header h = NULL;
+	    const char item[] = "Header";
+	    const char * msg = NULL;
+/*@+voidabstract@*/
+	    rpmrc = rpmpkgRead(item, gi->fd, &h, &msg);
+/*@=voidabstract@*/
+	    if (rpmrc != RPMRC_OK) {
+		rpmlog(RPMLOG_ERR, "%s: %s: %s\n", "rpmpkgRead", item, msg);
+		h = NULL;
+	    }
+	    msg = _free(msg);
 	    if (h != NULL) {
 		if (!(gi->flags & RPMGI_NOHEADER))
 		    gi->h = headerLink(h);
@@ -762,20 +774,20 @@ enditer:
 	/* XXX query/verify will need the glop added to a buffer instead. */
 	ps = rpmtsProblems(ts);
 	if (rpmpsNumProblems(ps) > 0) {
-	    /* XXX rpminstall will need RPMMESS_ERROR */
-	    rpmMessage(RPMMESS_VERBOSE, _("Failed dependencies:\n"));
+	    /* XXX rpminstall will need RPMLOG_ERR */
+	    rpmlog(RPMLOG_INFO, _("Failed dependencies:\n"));
 	    if (rpmIsVerbose())
 		rpmpsPrint(NULL, ps);
 
 	    if (ts->suggests != NULL && ts->nsuggests > 0) {
-		rpmMessage(RPMMESS_VERBOSE, _("    Suggested resolutions:\n"));
+		rpmlog(RPMLOG_INFO, _("    Suggested resolutions:\n"));
 		for (i = 0; i < ts->nsuggests; i++) {
 		    const char * str = ts->suggests[i];
 
 		    if (str == NULL)
 			break;
 
-		    rpmMessage(RPMMESS_VERBOSE, "\t%s\n", str);
+		    rpmlog(RPMLOG_INFO, "\t%s\n", str);
 		
 		    ts->suggests[i] = NULL;
 		    str = _free(str);
