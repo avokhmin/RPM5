@@ -22,6 +22,26 @@ typedef /*@abstract@*/ struct rpmProblem_s * rpmProblem;
 typedef /*@abstract@*/ /*@refcounted@*/ struct rpmps_s * rpmps;
 
 /**
+*/
+typedef /*@abstract@*/ struct rpmpsi_s * rpmpsi;
+
+/**
+ * @todo Generalize filter mechanism.
+ */
+typedef enum rpmprobFilterFlags_e {
+    RPMPROB_FILTER_NONE		= 0,
+    RPMPROB_FILTER_IGNOREOS	= (1 << 0),	/*!< from --ignoreos */
+    RPMPROB_FILTER_IGNOREARCH	= (1 << 1),	/*!< from --ignorearch */
+    RPMPROB_FILTER_REPLACEPKG	= (1 << 2),	/*!< from --replacepkgs */
+    RPMPROB_FILTER_FORCERELOCATE= (1 << 3),	/*!< from --badreloc */
+    RPMPROB_FILTER_REPLACENEWFILES= (1 << 4),	/*!< from --replacefiles */
+    RPMPROB_FILTER_REPLACEOLDFILES= (1 << 5),	/*!< from --replacefiles */
+    RPMPROB_FILTER_OLDPACKAGE	= (1 << 6),	/*!< from --oldpackage */
+    RPMPROB_FILTER_DISKSPACE	= (1 << 7),	/*!< from --ignoresize */
+    RPMPROB_FILTER_DISKNODES	= (1 << 8)	/*!< from --ignoresize */
+} rpmprobFilterFlags;
+
+/**
  * Enumerate transaction set problem types.
  */
 typedef enum rpmProblemType_e {
@@ -68,6 +88,14 @@ struct rpmps_s {
 /*@refs@*/
     int nrefs;			/*!< Reference count. */
 };
+
+/**
+ */
+struct rpmpsi_s {
+    int ix;
+    rpmps ps;
+};
+
 #endif
 
 #ifdef __cplusplus
@@ -131,6 +159,38 @@ int rpmpsNumProblems(/*@null@*/ rpmps ps)
 	/*@*/;
 
 /**
+ * Initialize problem set iterator.
+ * @param ps		problem set
+ * @return		problem set iterator
+ */
+rpmpsi rpmpsInitIterator(rpmps ps)
+	/*@*/;
+
+/**
+ * Destroy problem set iterator.
+ * @param psi		problem set iterator
+ * @return		problem set iterator (NULL)
+ */
+rpmpsi rpmpsFreeIterator(rpmpsi psi)
+	/*@*/;
+
+/**
+ * Return next problem set iterator index
+ * @param psi		problem set iterator
+ * @return		iterator index, -1 on termination
+ */
+int rpmpsNextIterator(rpmpsi psi)
+	/*@*/;
+
+/**
+ * Return current problem from problem set
+ * @param psi		problem set iterator
+ * @return		current rpmProblem 
+ */
+rpmProblem rpmpsProblem(rpmpsi psi)
+	/*@*/;
+
+/**
  * Create a problem set.
  * @return		new problem set
  */
@@ -173,7 +233,7 @@ void rpmpsAppend(/*@null@*/ rpmps ps, rpmProblemType type,
 		/*@exposed@*/ /*@null@*/ fnpyKey key,
 		/*@null@*/ const char * dn, /*@null@*/ const char * bn,
 		/*@null@*/ const char * altNEVR,
-		unsigned long long ulong1)
+		uint64_t ulong1)
 	/*@modifies ps @*/;
 
 /**
@@ -223,6 +283,24 @@ char * rpmProblemGetPkgNEVR(rpmProblem prob)
  */
 /*@null@*/ /*@exposed@*/
 char * rpmProblemGetAltNEVR(rpmProblem prob)
+	/*@*/;
+
+/**
+ * Return a generic data string from a problem
+ * @param prob		rpm problem
+ * @return		a generic data string
+ * @todo		needs a better name
+ */
+char * rpmProblemGetStr(rpmProblem prob)
+	/*@*/;
+
+/**
+ * Return generic pointer/long attribute from a problem
+ * @param prob		rpm problem
+ * @return		a generic pointer/long attribute
+ * @todo		needs a better name
+ */
+unsigned long long rpmProblemGetLong(rpmProblem prob)
 	/*@*/;
 
 /**

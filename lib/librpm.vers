@@ -1,7 +1,6 @@
 LIBRPM_0
 {
   global:
-    appendStringBufAux;
     __assert_program_name;
     _cacheDependsRC;
     cpioStrerror;
@@ -17,7 +16,6 @@ LIBRPM_0
     _fps_debug;
     freeFSM;
     freeSplitString;
-    freeStringBuf;
     _fsm_debug;
     fsmGetFi;
     fsmGetTs;
@@ -30,7 +28,6 @@ LIBRPM_0
     _fsm_threads;
     ftsOpts;
     get_date;
-    getStringBuf;
     giFlags;
     global_depFlags;
     IDTXfree;
@@ -42,7 +39,6 @@ LIBRPM_0
     _init;
     makeTempFile;
     newFSM;
-    newStringBuf;
     _nosigh;
     nplatpat;
     platpat;
@@ -87,7 +83,6 @@ LIBRPM_0
     rpmcliSign;
     rpmcliTargets;
     rpmcliVerify;
-    rpmDisplayQueryTags;
     rpmdsAnyMatchesDep;
     rpmdsBT;
     rpmdsColor;
@@ -218,11 +213,16 @@ LIBRPM_0
     rpmInstallPoptTable;
     rpmInstallSource;
     rpmInstallSourcePackage;
+    rpmlibVersion;
+    rpmlibTimestamp;
+    rpmlibVendor;
+    rpmluaextActivate;
     rpmMkdirPath;
     rpmNAME;
     _rpmns_debug;
     rpmnsClassify;
     rpmnsParse;
+    rpmnsProbeSignature;
     rpmPermsString;
     rpmPlatformScore;
     rpmProblemString;
@@ -230,27 +230,31 @@ LIBRPM_0
     rpmpsCreate;
     _rpmps_debug;
     rpmpsFree;
+    rpmpsFreeIterator;
+    rpmpsInitIterator;
+    rpmpsNextIterator;
     rpmpsmFree;
     rpmpsmNew;
     rpmpsmStage;
     rpmpsNumProblems;
     rpmpsPrint;
+    rpmpsProblem;
     rpmpsTrim;
-    rpmProblemGetAltNEVR;
-    rpmProblemGetType;
-    rpmProblemKey;
-    rpmProblemGetPkgNEVR;
     rpmpsGetProblem;
+    rpmProblemGetAltNEVR;
+    rpmProblemGetLong;
+    rpmProblemGetStr;
+    rpmProblemGetType;
+    rpmProblemGetPkgNEVR;
+    rpmProblemKey;
     rpmQueryPoptTable;
     rpmQueryVerify;
     rpmQVKArgs;
     rpmQVSourcePoptTable;
     rpmReadConfigFiles;
-    rpmReadHeader;
     rpmReadPackageFile;
     rpmReadPackageManifest;
     rpmRollback;
-    rpmSetMachine;
     rpmSetTables;
     rpmShowProgress;
     rpmShowRC;
@@ -333,8 +337,7 @@ LIBRPM_0
     rpmtsColor;
     rpmtsCreate;
     rpmtsCurrDir;
-    _rpmts_debug;
-    rpmtsDbmode;
+    rpmtsDBMode;
     rpmtsDFlags;
     rpmtsDoARBGoal;
     rpmtsElement;
@@ -370,7 +373,7 @@ LIBRPM_0
     rpmtsSetChrootDone;
     rpmtsSetColor;
     rpmtsSetCurrDir;
-    rpmtsSetDbmode;
+    rpmtsSetDBMode;
     rpmtsSetDFlags;
     rpmtsSetFlags;
     rpmtsSetGoal;
@@ -379,7 +382,6 @@ LIBRPM_0
     rpmtsSetRelocateElement;
     rpmtsSetRootDir;
     rpmtsSetScriptFd;
-    rpmtsSetSig;
     rpmtsSetSolveCallback;
     rpmtsSetSpec;
     rpmtsSetTid;
@@ -387,6 +389,8 @@ LIBRPM_0
     rpmtsSetVSFlags;
     rpmtsSolve;
     rpmtsSpec;
+    _rpmts_debug;
+    _rpmts_macros;
     _rpmts_stats;
     rpmtsUnorderedSuccessors;
     rpmtsUpdateDSI;
@@ -404,8 +408,6 @@ LIBRPM_0
     specedit;
     splitString;
     strict_erasures;
-    stripTrailingBlanksStringBuf;
-    truncStringBuf;
     XrpmdsLink;
     XrpmdsUnlink;
     XrpmfiLink;

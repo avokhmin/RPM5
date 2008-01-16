@@ -4,13 +4,13 @@
 
 #include "system.h"
 
-#include <rpmlib.h>
 #include <rpmio.h>
+#include <rpmcb.h>		/* XXX fnpyKey */
+#include <rpmlib.h>
 
 #define	_RPMPS_INTERNAL
 #include "rpmps.h"
 
-#include "misc.h"
 #include "debug.h"
 
 /*@access fnpyKey @*/
@@ -53,6 +53,49 @@ int rpmpsNumProblems(rpmps ps)
     return numProblems;
 }
 
+rpmpsi rpmpsInitIterator(rpmps ps)
+{
+    rpmpsi psi = NULL;
+    if (ps != NULL) {
+	psi = xcalloc(1, sizeof(*psi));
+	psi->ps = rpmpsLink(ps, "iter ref");
+	psi->ix = -1;
+    }
+    return psi;
+}
+
+rpmpsi rpmpsFreeIterator(rpmpsi psi)
+{
+    if (psi != NULL) {
+	psi->ps = rpmpsUnlink(psi->ps, "iter unref");
+	psi = _free(psi);
+    }
+    return NULL;
+}
+
+int rpmpsNextIterator(rpmpsi psi)
+{
+    int i = -1;
+
+    if (psi != NULL && ++psi->ix >= 0) {
+	if (psi->ix < rpmpsNumProblems(psi->ps)) {
+	    i = psi->ix;
+	} else {
+	    psi->ix = -1;
+	}	     
+    }
+    return i;
+}
+
+rpmProblem rpmpsProblem(rpmpsi psi)
+{
+    rpmProblem p = NULL;
+    if (psi != NULL && psi->ix >= 0 && psi->ix < rpmpsNumProblems(psi->ps)) {
+	p = psi->ps->probs + psi->ix;
+    } 
+    return p;
+}
+
 rpmps rpmpsCreate(void)
 {
     rpmps ps = xcalloc(1, sizeof(*ps));
@@ -83,7 +126,7 @@ rpmps rpmpsFree(rpmps ps)
 void rpmpsAppend(rpmps ps, rpmProblemType type,
 		const char * pkgNEVR, fnpyKey key,
 		const char * dn, const char * bn,
-		const char * altNEVR, unsigned long long ulong1)
+		const char * altNEVR, uint64_t ulong1)
 {
     rpmProblem p;
     char *t;
@@ -196,7 +239,7 @@ const char * rpmProblemString(const rpmProblem prob)
     const char * altNEVR = (prob->altNEVR ? prob->altNEVR : "? ?altNEVR?");
 /*@observer@*/
     const char * str1 = (prob->str1 ? prob->str1 : N_("different"));
-    int nb =	strlen(pkgNEVR) + strlen(str1) + strlen(altNEVR) + 100;
+    size_t nb =	strlen(pkgNEVR) + strlen(str1) + strlen(altNEVR) + 1024;
     char * buf = xmalloc(nb+1);
     int rc;
 
@@ -306,6 +349,7 @@ static int sameProblem(const rpmProblem ap, const rpmProblem bp)
 void rpmpsPrint(FILE *fp, rpmps ps)
 {
     const char * msg;
+    rpmpsi psi;
     int i;
 
     if (ps == NULL || ps->probs == NULL || ps->numProblems <= 0)
@@ -314,20 +358,23 @@ void rpmpsPrint(FILE *fp, rpmps ps)
     if (fp == NULL)
 	fp = stderr;
 
-    for (i = 0; i < ps->numProblems; i++) {
-	rpmProblem p;
+    psi = rpmpsInitIterator(ps);
+    while ((i = rpmpsNextIterator(psi)) >= 0) {
+	rpmProblem p = rpmpsProblem(psi);
+	rpmpsi psif;
 	int j;
-
-	p = ps->probs + i;
 
 	if (p->ignoreProblem)
 	    continue;
 
 	/* Filter already displayed problems. */
-	for (j = 0; j < i; j++) {
-	    if (!sameProblem(p, ps->probs + j))
+	psif = rpmpsInitIterator(ps);
+	while ((j = rpmpsNextIterator(psif)) < i) {
+	    if (!sameProblem(p, rpmpsProblem(psif)))
 		/*@innerbreak@*/ break;
 	}
+	psif = rpmpsFreeIterator(psif);
+
 	if (j < i)
 	    continue;
 
@@ -336,6 +383,7 @@ void rpmpsPrint(FILE *fp, rpmps ps)
 	msg = _free(msg);
 
     }
+    psi = rpmpsFreeIterator(psi);
 }
 
 rpmProblem rpmpsGetProblem(rpmps ps, int num)
@@ -353,6 +401,16 @@ char * rpmProblemGetPkgNEVR(rpmProblem prob)
 char * rpmProblemGetAltNEVR(rpmProblem prob)
 {
     return(prob->altNEVR);
+}
+
+char * rpmProblemGetStr(rpmProblem prob)
+{
+    return(prob->str1);
+}
+
+unsigned long long rpmProblemGetLong(rpmProblem prob)
+{
+    return(prob->ulong1);
 }
 
 rpmProblemType rpmProblemGetType(rpmProblem prob)
