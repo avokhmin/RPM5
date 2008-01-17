@@ -5,11 +5,15 @@
  * \file lib/rpmcli.h
  */
 
-#include "rpmlib.h"
-#include "rpmurl.h"
-#include "rpmmacro.h"
-#include "rpmps.h"
+#include "popt.h"
 #include "argv.h"
+#include "rpmcb.h"
+#include "rpmmacro.h"
+#include "rpmurl.h"
+#include "rpmlib.h"
+#include "rpmps.h"
+#include "rpmte.h"
+#include "rpmts.h"
 
 /** \ingroup rpmcli
  * Should version 3 packages be produced?
@@ -308,14 +312,6 @@ int rpmcliShowMatches(QVA_t qva, rpmts ts)
 	/*@modifies qva, rpmGlobalMacroContext, fileSystem, internalState @*/;
 
 /** \ingroup rpmcli
- * Display list of tags that can be used in --queryformat.
- * @param fp	file handle to use for display
- */
-void rpmDisplayQueryTags(FILE * fp)
-	/*@globals fileSystem, internalState @*/
-	/*@modifies *fp, fileSystem, internalState @*/;
-
-/** \ingroup rpmcli
  * Common query/verify source interface, called once for each CLI arg.
  *
  * This routine uses:
@@ -450,16 +446,18 @@ typedef enum rpmInstallInterfaceFlags_e {
     INSTALL_ALLMATCHES	= (1 <<  9)	/*!< from --allmatches (erase) */
 } rpmInstallInterfaceFlags;
 
+/*@-redecl@*/
 /*@unchecked@*/
 extern int rpmcliPackagesTotal;
+/*@=redecl@*/
 /*@unchecked@*/
 extern int rpmcliHashesCurrent;
 /*@unchecked@*/
 extern int rpmcliHashesTotal;
 /*@unchecked@*/
-extern unsigned long long rpmcliProgressCurrent;
+extern uint64_t rpmcliProgressCurrent;
 /*@unchecked@*/
-extern unsigned long long rpmcliProgressTotal;
+extern uint64_t rpmcliProgressTotal;
 
 /** \ingroup rpmcli
  * The rpm CLI generic transaction callback handler.
@@ -480,8 +478,8 @@ extern unsigned long long rpmcliProgressTotal;
 /*@null@*/
 void * rpmShowProgress(/*@null@*/ const void * arg,
 		const rpmCallbackType what,
-		const unsigned long long amount,
-		const unsigned long long total,
+		const uint64_t amount,
+		const uint64_t total,
 		/*@null@*/ fnpyKey key,
 		/*@null@*/ void * data)
 	/*@globals rpmcliHashesCurrent,
@@ -595,7 +593,7 @@ struct IDT_s {
     const char * key;		/*! removed package file name. */
     Header h;			/*!< removed package header. */
     union {
-	uint_32 u32;		/*!< install/remove transaction id */
+	uint32_t u32;		/*!< install/remove transaction id */
     } val;
 };
 #endif
@@ -660,7 +658,7 @@ IDTX IDTXsort(/*@only@*/ /*@null@*/ IDTX idtx)
  * @return 		id index
  */
 /*@only@*/ /*@null@*/
-IDTX IDTXload(rpmts ts, rpmTag tag, uint_32 rbtid)
+IDTX IDTXload(rpmts ts, rpmTag tag, uint32_t rbtid)
 	/*@globals rpmGlobalMacroContext, h_errno, fileSystem, internalState @*/
 	/*@modifies ts, rpmGlobalMacroContext, fileSystem, internalState  @*/;
 
@@ -673,7 +671,7 @@ IDTX IDTXload(rpmts ts, rpmTag tag, uint_32 rbtid)
  * @return 		id index
  */
 /*@only@*/ /*@null@*/
-IDTX IDTXglob(rpmts ts, const char * globstr, rpmTag tag, uint_32 rbtid)
+IDTX IDTXglob(rpmts ts, const char * globstr, rpmTag tag, uint32_t rbtid)
 	/*@globals rpmGlobalMacroContext, h_errno, fileSystem, internalState @*/
 	/*@modifies ts, rpmGlobalMacroContext, fileSystem, internalState @*/;
 
@@ -709,21 +707,6 @@ extern struct poptOption rpmDatabasePoptTable[];
 /* ==================================================================== */
 /** \name RPMK */
 /*@{*/
-
-/** \ingroup rpmcli
- * Import public key packet(s).
- * @todo Implicit --update policy for gpg-pubkey headers.
- * @param ts		transaction set
- * @param pkt		pgp pubkey packet(s)
- * @param pktlen	pgp pubkey length
- * @return		RPMRC_OK/RPMRC_FAIL
- */
-rpmRC rpmcliImportPubkey(const rpmts ts,
-		const unsigned char * pkt, ssize_t pktlen)
-	/*@globals RPMVERSION, rpmGlobalMacroContext, h_errno,
-		fileSystem, internalState @*/
-	/*@modifies ts, rpmGlobalMacroContext,
-		fileSystem, internalState @*/;
 
 /** \ingroup rpmcli
  * Bit(s) to control rpmReSign() operation.
@@ -809,9 +792,9 @@ struct rpmQVKArguments_s {
     rpmtransFlags transFlags;
     rpmprobFilterFlags probFilter;
     rpmInstallInterfaceFlags installInterfaceFlags;
-    uint_32 arbtid;		/*!< from --arbgoal */
-    uint_32 rbtid;		/*!< from --rollback */
-    uint_32 *rbtidExcludes;	/*!< from --rollback */
+    uint32_t arbtid;		/*!< from --arbgoal */
+    uint32_t rbtid;		/*!< from --rollback */
+    uint32_t *rbtidExcludes;	/*!< from --rollback */
     int numrbtidExcludes;	/*!< from --rollback */
     int numRelocations;
     int noDeps;

@@ -4,12 +4,18 @@
  */
 #include "system.h"
 
-#include "rpmio_internal.h"	/* XXX for pgp and beecrypt */
-#include <rpmlib.h>
+#include <rpmio.h>
+#include <rpmurl.h>
+#include <rpmpgp.h>
+#include <rpmcb.h>		/* XXX fnpyKey */
 #include <rpmmacro.h>		/* XXX rpmtsOpenDB() needs rpmGetPath */
+#include <rpmlib.h>
 
 #define	_RPMDB_INTERNAL		/* XXX almost opaque sigh */
 #include "rpmdb.h"		/* XXX stealing db->db_mode. */
+
+#define	_RPMEVR_INTERNAL	/* XXX RPMSENSE_KEYRING */
+#include "rpmevr.h"
 
 #include "rpmal.h"
 #include "rpmds.h"
@@ -73,6 +79,9 @@ int _rpmts_debug = 0;
 /*@unchecked@*/
 int _rpmts_stats = 0;
 
+/*@unchecked@*/
+int _rpmts_macros = 0;
+
 rpmts XrpmtsUnlink(rpmts ts, const char * msg, const char * fn, unsigned ln)
 {
 /*@-modfilesys@*/
@@ -116,14 +125,14 @@ int rpmtsOpenDB(rpmts ts, int dbmode)
 
     (void) rpmtsCloseDB(ts);
 
-    /* XXX there's a potential db lock race here. */
+    /* XXX there's a db lock race here that is the callers responsibility. */
 
     ts->dbmode = dbmode;
     rc = rpmdbOpen(ts->rootDir, &ts->rdb, ts->dbmode, 0644);
     if (rc) {
 	const char * dn;
 	dn = rpmGetPath(ts->rootDir, "%{_dbpath}", NULL);
-	rpmMessage(RPMMESS_ERROR,
+	rpmlog(RPMLOG_ERR,
 			_("cannot open Packages database in %s\n"), dn);
 	dn = _free(dn);
     }
@@ -132,30 +141,38 @@ int rpmtsOpenDB(rpmts ts, int dbmode)
 
 int rpmtsInitDB(rpmts ts, int dbmode)
 {
+#if defined(SUPPORT_INITDB)
     void *lock = rpmtsAcquireLock(ts);
     int rc = rpmdbInit(ts->rootDir, dbmode);
     lock = rpmtsFreeLock(lock);
     return rc;
+#else
+    return -1;
+#endif
 }
 
 int rpmtsRebuildDB(rpmts ts)
 {
-    void *lock = rpmtsAcquireLock(ts);
-    int rc;
-    if (!(rpmtsVSFlags(ts) & RPMVSF_NOHDRCHK))
-	rc = rpmdbRebuild(ts->rootDir, ts);
-    else
-	rc = rpmdbRebuild(ts->rootDir, NULL);
+    void * lock = rpmtsAcquireLock(ts);
+    int rc = rpmtsOpenDB(ts, ts->dbmode);
+
+    if (rc == 0)
+	rc = rpmdbRebuild(ts->rootDir,
+    		(!(rpmtsVSFlags(ts) & RPMVSF_NOHDRCHK) ? ts : NULL));
     lock = rpmtsFreeLock(lock);
     return rc;
 }
 
 int rpmtsVerifyDB(rpmts ts)
 {
+#if defined(SUPPORT_VERIFYDB)
     return rpmdbVerify(ts->rootDir);
+#else
+    return -1;
+#endif
 }
 
-/*@-compdef@*/ /* keyp might no be defined. */
+/*@-compdef@*/ /* keyp might not be defined. */
 rpmdbMatchIterator rpmtsInitIterator(const rpmts ts, rpmTag rpmtag,
 			const void * keyp, size_t keylen)
 {
@@ -184,7 +201,7 @@ rpmdbMatchIterator rpmtsInitIterator(const rpmts ts, rpmTag rpmtag,
 	    case '(':
 		/* XXX Fail if nested parens. */
 		if (level++ != 0) {
-		    rpmError(RPMERR_QFMT, _("extra '(' in package label: %s\n"), keyp);
+		    rpmlog(RPMLOG_ERR, _("extra '(' in package label: %s\n"), keyp);
 		    return NULL;
 		}
 		/* Parse explicit epoch. */
@@ -202,7 +219,7 @@ rpmdbMatchIterator rpmtsInitIterator(const rpmts ts, rpmTag rpmtag,
 	    case ')':
 		/* XXX Fail if nested parens. */
 		if (--level != 0) {
-		    rpmError(RPMERR_QFMT, _("missing '(' in package label: %s\n"), keyp);
+		    rpmlog(RPMLOG_ERR, _("missing '(' in package label: %s\n"), keyp);
 		    return NULL;
 		}
 		/* Don't copy trailing ')' */
@@ -210,7 +227,7 @@ rpmdbMatchIterator rpmtsInitIterator(const rpmts ts, rpmTag rpmtag,
 	    }
 	}
 	if (level) {
-	    rpmError(RPMERR_QFMT, _("missing ')' in package label: %s\n"), keyp);
+	    rpmlog(RPMLOG_ERR, _("missing ')' in package label: %s\n"), keyp);
 	    return NULL;
 	}
 	*t = '\0';
@@ -235,6 +252,236 @@ rpmdbMatchIterator rpmtsInitIterator(const rpmts ts, rpmTag rpmtag,
     return mi;
 }
 /*@=compdef@*/
+
+rpmRC rpmtsImportPubkey(const rpmts ts, const unsigned char * pkt, ssize_t pktlen)
+{
+    HE_t he = memset(alloca(sizeof(*he)), 0, sizeof(*he));
+    static unsigned char zeros[] =
+	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+    const char * afmt = "%{pubkeys:armor}";
+    const char * group = "Public Keys";
+    const char * license = "pubkey";
+    const char * buildhost = "localhost";
+    uint32_t pflags = (RPMSENSE_KEYRING|RPMSENSE_EQUAL);
+    uint32_t zero = 0;
+    pgpDig dig = NULL;
+    pgpDigParams pubp = NULL;
+    const char * d = NULL;
+    const char * enc = NULL;
+    const char * n = NULL;
+    const char * u = NULL;
+    const char * v = NULL;
+    const char * r = NULL;
+    const char * evr = NULL;
+    Header h = NULL;
+    rpmRC rc = RPMRC_FAIL;		/* assume failure */
+    char * t;
+    int xx;
+
+    if (pkt == NULL || pktlen <= 0)
+	return RPMRC_FAIL;
+    if (rpmtsOpenDB(ts, (O_RDWR|O_CREAT)))
+	return RPMRC_FAIL;
+
+/*@-moduncon@*/
+    if ((enc = b64encode(pkt, pktlen)) == NULL)
+	goto exit;
+/*@=moduncon@*/
+
+    dig = pgpDigNew(0);
+
+    /* Build header elements. */
+    (void) pgpPrtPkts(pkt, pktlen, dig, 0);
+    pubp = pgpGetPubkey(dig);
+
+    if (!memcmp(pubp->signid, zeros, sizeof(pubp->signid))
+     || !memcmp(pubp->time, zeros, sizeof(pubp->time))
+     || pubp->userid == NULL)
+	goto exit;
+
+    v = t = xmalloc(16+1);
+    t = stpcpy(t, pgpHexStr(pubp->signid, sizeof(pubp->signid)));
+
+    r = t = xmalloc(8+1);
+    t = stpcpy(t, pgpHexStr(pubp->time, sizeof(pubp->time)));
+
+    n = t = xmalloc(sizeof("gpg()")+8);
+    t = stpcpy( stpcpy( stpcpy(t, "gpg("), v+8), ")");
+
+    /*@-nullpass@*/ /* FIX: pubp->userid may be NULL */
+    u = t = xmalloc(sizeof("gpg()")+strlen(pubp->userid));
+    t = stpcpy( stpcpy( stpcpy(t, "gpg("), pubp->userid), ")");
+    /*@=nullpass@*/
+
+    evr = t = xmalloc(sizeof("4X:-")+strlen(v)+strlen(r));
+    t = stpcpy(t, (pubp->version == 4 ? "4:" : "3:"));
+    t = stpcpy( stpcpy( stpcpy(t, v), "-"), r);
+
+    /* Check for pre-existing header. */
+
+    /* Build pubkey header. */
+    h = headerNew();
+
+    he->append = 1;
+
+    he->tag = RPMTAG_PUBKEYS;
+    he->t = RPM_STRING_ARRAY_TYPE;
+    he->p.argv = &enc;
+    he->c = 1;
+    xx = headerPut(h, he, 0);
+
+    he->append = 0;
+
+    d = headerSprintf(h, afmt, NULL, rpmHeaderFormats, NULL);
+    if (d == NULL)
+	goto exit;
+
+    he->t = RPM_STRING_TYPE;
+    he->c = 1;
+    he->tag = RPMTAG_NAME;
+    he->p.str = "gpg-pubkey";
+    xx = headerPut(h, he, 0);
+    he->tag = RPMTAG_VERSION;
+    he->p.str = v+8;
+    xx = headerPut(h, he, 0);
+    he->tag = RPMTAG_RELEASE;
+    he->p.str = r;
+    xx = headerPut(h, he, 0);
+
+    /* Add Summary/Description/Group. */
+    he->tag = RPMTAG_DESCRIPTION;
+    he->p.str = d;
+#if defined(SUPPORT_IMPLICIT_TAG_DATA_TYPES)
+    xx = headerAddI18NString(h, he->tag, he->p.ptr, "C");
+#else
+    xx = headerPut(h, he, 0);
+#endif
+    he->tag = RPMTAG_GROUP;
+    he->p.str = group;
+#if defined(SUPPORT_IMPLICIT_TAG_DATA_TYPES)
+    xx = headerAddI18NString(h, he->tag, he->p.ptr, "C");
+#else
+    xx = headerPut(h, he, 0);
+#endif
+    he->tag = RPMTAG_SUMMARY;
+    he->p.str = u;
+#if defined(SUPPORT_IMPLICIT_TAG_DATA_TYPES)
+    xx = headerAddI18NString(h, he->tag, he->p.ptr, "C");
+#else
+    xx = headerPut(h, he, 0);
+#endif
+
+#ifdef	NOTYET	/* XXX can't erase pubkeys with "pubkey" arch. */
+    /* Add a "pubkey" arch/os to avoid missing value NULL ptrs. */
+    he->tag = RPMTAG_ARCH;
+    he->p.str = "pubkey";
+    xx = headerPut(h, he, 0);
+    he->tag = RPMTAG_OS;
+    he->p.str = "pubkey";
+    xx = headerPut(h, he, 0);
+#endif
+
+    he->tag = RPMTAG_LICENSE;
+    he->p.str = license;
+    xx = headerPut(h, he, 0);
+
+    he->tag = RPMTAG_SIZE;
+    he->t = RPM_UINT32_TYPE;
+    he->p.ui32p = &zero;
+    he->c = 1;
+    xx = headerPut(h, he, 0);
+
+    he->append = 1;
+
+    he->tag = RPMTAG_PROVIDENAME;
+    he->t = RPM_STRING_ARRAY_TYPE;
+    he->p.argv = &u;
+    he->c = 1;
+    xx = headerPut(h, he, 0);
+    he->tag = RPMTAG_PROVIDEVERSION;
+    he->t = RPM_STRING_ARRAY_TYPE;
+    he->p.argv = &evr;
+    he->c = 1;
+    xx = headerPut(h, he, 0);
+    he->tag = RPMTAG_PROVIDEFLAGS;
+    he->t = RPM_UINT32_TYPE;
+    he->p.ui32p = &pflags;
+    he->c = 1;
+    xx = headerPut(h, he, 0);
+
+    he->tag = RPMTAG_PROVIDENAME;
+    he->t = RPM_STRING_ARRAY_TYPE;
+    he->p.argv = &n;
+    he->c = 1;
+    xx = headerPut(h, he, 0);
+    he->tag = RPMTAG_PROVIDEVERSION;
+    he->t = RPM_STRING_ARRAY_TYPE;
+    he->p.argv = &evr;
+    he->c = 1;
+    xx = headerPut(h, he, 0);
+    he->tag = RPMTAG_PROVIDEFLAGS;
+    he->t = RPM_UINT32_TYPE;
+    he->p.ui32p = &pflags;
+    he->c = 1;
+    xx = headerPut(h, he, 0);
+
+    he->append = 0;
+
+    he->tag = RPMTAG_RPMVERSION;
+    he->t = RPM_STRING_TYPE;
+    he->p.str = RPMVERSION;
+    he->c = 1;
+    xx = headerPut(h, he, 0);
+
+    /* XXX W2DO: tag value inheirited from parent? */
+    he->tag = RPMTAG_BUILDHOST;
+    he->t = RPM_STRING_TYPE;
+    he->p.str = buildhost;
+    he->c = 1;
+    xx = headerPut(h, he, 0);
+    {   uint32_t tid = rpmtsGetTid(ts);
+	he->tag = RPMTAG_INSTALLTIME;
+	he->t = RPM_UINT32_TYPE;
+	he->p.ui32p = &tid;
+	he->c = 1;
+	xx = headerPut(h, he, 0);
+	/* XXX W2DO: tag value inheirited from parent? */
+	he->tag = RPMTAG_BUILDTIME;
+	he->t = RPM_UINT32_TYPE;
+	he->p.ui32p = &tid;
+	he->c = 1;
+	xx = headerPut(h, he, 0);
+    }
+
+#ifdef	NOTYET
+    /* XXX W2DO: tag value inheirited from parent? */
+    he->tag = RPMTAG_SOURCERPM;
+    he->t = RPM_STRING_TYPE;
+    he->p.str = fn;
+    he->c = 1;
+    xx = headerPut(h, he, 0);
+#endif
+
+    /* Add header to database. */
+    xx = rpmdbAdd(rpmtsGetRdb(ts), rpmtsGetTid(ts), h, NULL);
+    if (xx != 0)
+	goto exit;
+    rc = RPMRC_OK;
+
+exit:
+    /* Clean up. */
+    h = headerFree(h);
+    dig = pgpDigFree(dig);
+    n = _free(n);
+    u = _free(u);
+    v = _free(v);
+    r = _free(r);
+    evr = _free(evr);
+    enc = _free(enc);
+    d = _free(d);
+    
+    return rc;
+}
 
 int rpmtsCloseSDB(rpmts ts)
 {
@@ -271,7 +518,7 @@ int rpmtsOpenSDB(rpmts ts, int dbmode)
     if (rc) {
 	const char * dn;
 	dn = rpmGetPath(ts->rootDir, "%{_dbpath}", NULL);
-	rpmMessage(RPMMESS_WARNING,
+	rpmlog(RPMLOG_WARNING,
 			_("cannot open Solve database in %s\n"), dn);
 	dn = _free(dn);
 	/* XXX only try to open the solvedb once. */
@@ -298,6 +545,7 @@ static int sugcmp(const void * a, const void * b)
 
 int rpmtsSolve(rpmts ts, rpmds ds, /*@unused@*/ const void * data)
 {
+    HE_t he = memset(alloca(sizeof(*he)), 0, sizeof(*he));
     const char * errstr;
     const char * str = NULL;
     const char * qfmt;
@@ -340,30 +588,26 @@ int rpmtsSolve(rpmts ts, rpmds ds, /*@unused@*/ const void * data)
     rpmtag = (*keyp == '/' ? RPMTAG_BASENAMES : RPMTAG_PROVIDENAME);
     mi = rpmdbInitIterator(ts->sdb, rpmtag, keyp, keylen);
     while ((h = rpmdbNextIterator(mi)) != NULL) {
-	const char * hname;
 	size_t hnamelen;
 	time_t htime;
-	int_32 * ip;
 
 	if (rpmtag == RPMTAG_PROVIDENAME && !rpmdsAnyMatchesDep(h, ds, 1))
 	    continue;
 
-	hname = NULL;
-	hnamelen = 0;
-	if (headerGetEntry(h, RPMTAG_NAME, NULL, &hname, NULL)) {
-	    if (hname)
-		hnamelen = strlen(hname);
-	}
+	he->tag = RPMTAG_NAME;
+	xx = headerGet(h, he, 0);
+	hnamelen = ((xx && he->p.str) ? strlen(he->p.str) : 0);
+	he->p.ptr = _free(he->p.ptr);
 
 	/* XXX Prefer the shortest pkg N for basenames/provides resp. */
-	if (bhnamelen > 0)
-	    if (hnamelen > bhnamelen)
-		continue;
+	if (bhnamelen > 0 && hnamelen > bhnamelen)
+	    continue;
 
 	/* XXX Prefer the newest build if given alternatives. */
-	htime = 0;
-	if (headerGetEntry(h, RPMTAG_BUILDTIME, NULL, &ip, NULL))
-	    htime = (time_t)*ip;
+	he->tag = RPMTAG_BUILDTIME;
+	xx = headerGet(h, he, 0);
+	htime = (xx && he->p.ui32p ? he->p.ui32p[0] : 0);
+	he->p.ptr = _free(he->p.ptr);
 
 	if (htime <= bhtime)
 	    continue;
@@ -384,11 +628,11 @@ int rpmtsSolve(rpmts ts, rpmds ds, /*@unused@*/ const void * data)
     qfmt = rpmExpand("%{?_solve_name_fmt}", NULL);
     if (qfmt == NULL || *qfmt == '\0')
 	goto exit;
-    str = headerSprintf(bh, qfmt, rpmTagTable, rpmHeaderFormats, &errstr);
+    str = headerSprintf(bh, qfmt, NULL, rpmHeaderFormats, &errstr);
     bh = headerFree(bh);
     qfmt = _free(qfmt);
     if (str == NULL) {
-	rpmError(RPMERR_QFMT, _("incorrect solve path format: %s\n"), errstr);
+	rpmlog(RPMLOG_ERR, _("incorrect solve path format: %s\n"), errstr);
 	goto exit;
     }
 
@@ -398,7 +642,7 @@ int rpmtsSolve(rpmts ts, rpmds ds, /*@unused@*/ const void * data)
 
 	fd = Fopen(str, "r.fdio");
 	if (fd == NULL || Ferror(fd)) {
-	    rpmError(RPMERR_OPEN, _("open of %s failed: %s\n"), str,
+	    rpmlog(RPMLOG_ERR, _("open of %s failed: %s\n"), str,
 			Fstrerror(fd));
             if (fd != NULL) {
                 xx = Fclose(fd);
@@ -418,7 +662,7 @@ int rpmtsSolve(rpmts ts, rpmds ds, /*@unused@*/ const void * data)
 	    if (h != NULL &&
 	        !rpmtsAddInstallElement(ts, h, (fnpyKey)str, 1, NULL))
 	    {
-		rpmMessage(RPMMESS_DEBUG, D_("Adding: %s\n"), str);
+		rpmlog(RPMLOG_DEBUG, D_("Adding: %s\n"), str);
 		rc = -1;	/* XXX restart unsatisfiedDepends() */
 		break;
 	    }
@@ -429,7 +673,7 @@ int rpmtsSolve(rpmts ts, rpmds ds, /*@unused@*/ const void * data)
 	goto exit;
     }
 
-    rpmMessage(RPMMESS_DEBUG, D_("Suggesting: %s\n"), str);
+    rpmlog(RPMLOG_DEBUG, D_("Suggesting: %s\n"), str);
     /* If suggestion is already present, don't bother. */
     if (ts->suggests != NULL && ts->nsuggests > 0) {
 	if (bsearch(&str, ts->suggests, ts->nsuggests,
@@ -655,13 +899,19 @@ rpmts rpmtsFree(rpmts ts)
 /*@=type =voidabstract @*/
     ts->orderAlloced = 0;
 
-    if (ts->pkpkt != NULL)
-	ts->pkpkt = _free(ts->pkpkt);
+    ts->pkpkt = _free(ts->pkpkt);
     ts->pkpktlen = 0;
     memset(ts->pksignid, 0, sizeof(ts->pksignid));
 
     if (_rpmts_stats)
 	rpmtsPrintStats(ts);
+
+    if (_rpmts_macros) {
+	const char ** av = NULL;
+	(void)rpmGetMacroEntries(NULL, NULL, 1, &av);
+	argvPrint("macros used", av, NULL);
+	av = argvFree(av);
+    }
 
     (void) rpmtsUnlink(ts, "tsCreate");
 
@@ -672,14 +922,17 @@ rpmts rpmtsFree(rpmts ts)
     return NULL;
 }
 
-rpmVSFlags rpmtsVSFlags(rpmts ts)
+rpmVSFlags rpmtsVSFlags(/*@unused@*/rpmts ts)
 {
-    return pgpGetVSFlags(rpmtsDig(ts));
+    return pgpDigVSFlags;
 }
 
-rpmVSFlags rpmtsSetVSFlags(rpmts ts, rpmVSFlags vsflags)
+rpmVSFlags rpmtsSetVSFlags(/*@unused@*/rpmts ts, rpmVSFlags vsflags)
 {
-    return pgpSetVSFlags(rpmtsDig(ts), vsflags);
+    rpmVSFlags ovsflags;
+    ovsflags = pgpDigVSFlags;
+    pgpDigVSFlags = vsflags;
+    return ovsflags;
 }
 
 /*
@@ -708,12 +961,12 @@ void rpmtsSetType(rpmts ts, rpmTSType type)
 	ts->type = type;
 }
 
-uint_32 rpmtsARBGoal(rpmts ts)
+uint32_t rpmtsARBGoal(rpmts ts)
 {
     return ((ts != NULL) ?  ts->arbgoal : 0);
 }
 
-void rpmtsSetARBGoal(rpmts ts, uint_32 goal)
+void rpmtsSetARBGoal(rpmts ts, uint32_t goal)
 {
     if (ts != NULL)
 	ts->arbgoal = goal;
@@ -862,18 +1115,18 @@ int rpmtsSetREContext(rpmts ts, rpmsx sx)
     return rc;
 }
 
-int_32 rpmtsGetTid(rpmts ts)
+uint32_t rpmtsGetTid(rpmts ts)
 {
-    int_32 tid = -1;	/* XXX -1 is time(2) error return. */
+    uint32_t tid = 0;	/* XXX -1 is time(2) error return. */
     if (ts != NULL) {
 	tid = ts->tid;
     }
     return tid;
 }
 
-int_32 rpmtsSetTid(rpmts ts, int_32 tid)
+uint32_t rpmtsSetTid(rpmts ts, uint32_t tid)
 {
-    int_32 otid = -1;	/* XXX -1 is time(2) error return. */
+    uint32_t otid = 0;	/* XXX -1 is time(2) error return. */
     if (ts != NULL) {
 	otid = ts->tid;
 	ts->tid = tid;
@@ -900,12 +1153,12 @@ int rpmtsInitDSI(const rpmts ts)
     if (ts->filesystems != NULL)
 	return 0;
 
-    rpmMessage(RPMMESS_DEBUG, D_("mounted filesystems:\n"));
-    rpmMessage(RPMMESS_DEBUG,
+    rpmlog(RPMLOG_DEBUG, D_("mounted filesystems:\n"));
+    rpmlog(RPMLOG_DEBUG,
 	D_("    i        dev    bsize       bavail       iavail mount point\n"));
 
     rc = rpmGetFilesystemList(&ts->filesystems, &ts->filesystemCount);
-    if (rc || ts->filesystems == NULL || ts->filesystemCount <= 0)
+    if (rc || ts->filesystems == NULL || ts->filesystemCount == 0)
 	return rc;
 
     /* Get available space on mounted file systems. */
@@ -990,7 +1243,7 @@ int rpmtsInitDSI(const rpmts ts)
 #if !defined(ST_RDONLY)
 #define	ST_RDONLY	1
 #endif
-	rpmMessage(RPMMESS_DEBUG, "%5d 0x%08x %8u %12ld %12ld %s %s\n",
+	rpmlog(RPMLOG_DEBUG, "%5d 0x%08x %8u %12ld %12ld %s %s\n",
 		i, (unsigned) dsi->dev, (unsigned) dsi->f_bsize,
 		(signed long) dsi->f_bavail, (signed long) dsi->f_favail,
 		((dsi->f_flag & ST_RDONLY) ? "ro" : "rw"),
@@ -1000,11 +1253,11 @@ int rpmtsInitDSI(const rpmts ts)
 }
 
 void rpmtsUpdateDSI(const rpmts ts, dev_t dev,
-		uint_32 fileSize, uint_32 prevSize, uint_32 fixupSize,
+		uint32_t fileSize, uint32_t prevSize, uint32_t fixupSize,
 		fileAction action)
 {
     rpmDiskSpaceInfo dsi;
-    unsigned long long bneeded;
+    uint64_t bneeded;
 
     dsi = ts->dsi;
     if (dsi) {
@@ -1056,7 +1309,7 @@ void rpmtsCheckDSIProblems(const rpmts ts, const rpmte te)
     int fc;
     int i;
 
-    if (ts->filesystems == NULL || ts->filesystemCount <= 0)
+    if (ts->filesystems == NULL || ts->filesystemCount == 0)
 	return;
 
     dsi = ts->dsi;
@@ -1093,7 +1346,7 @@ void rpmtsCheckDSIProblems(const rpmts ts, const rpmte te)
 }
 
 void * rpmtsNotify(rpmts ts, rpmte te,
-		rpmCallbackType what, unsigned long long amount, unsigned long long total)
+		rpmCallbackType what, uint64_t amount, uint64_t total)
 {
     void * ptr = NULL;
     if (ts && ts->notify && te) {
@@ -1211,12 +1464,12 @@ tsmStage rpmtsSetGoal(rpmts ts, tsmStage goal)
     return ogoal;
 }
 
-int rpmtsDbmode(rpmts ts)
+int rpmtsDBMode(rpmts ts)
 {
     return (ts != NULL ? ts->dbmode : 0);
 }
 
-int rpmtsSetDbmode(rpmts ts, int dbmode)
+int rpmtsSetDBMode(rpmts ts, int dbmode)
 {
     int odbmode = 0;
     if (ts != NULL) {
@@ -1226,14 +1479,14 @@ int rpmtsSetDbmode(rpmts ts, int dbmode)
     return odbmode;
 }
 
-uint_32 rpmtsColor(rpmts ts)
+uint32_t rpmtsColor(rpmts ts)
 {
     return (ts != NULL ? ts->color : 0);
 }
 
-uint_32 rpmtsSetColor(rpmts ts, uint_32 color)
+uint32_t rpmtsSetColor(rpmts ts, uint32_t color)
 {
-    uint_32 ocolor = 0;
+    uint32_t ocolor = 0;
     if (ts != NULL) {
 	ocolor = ts->color;
 	ts->color = color;
@@ -1241,7 +1494,7 @@ uint_32 rpmtsSetColor(rpmts ts, uint_32 color)
     return ocolor;
 }
 
-uint_32 rpmtsPrefColor(rpmts ts)
+uint32_t rpmtsPrefColor(rpmts ts)
 {
     return (ts != NULL ? ts->prefcolor : 0);
 }
@@ -1289,7 +1542,7 @@ rpmts rpmtsCreate(void)
     ts->dbmode = O_RDONLY;
 
     ts->scriptFd = NULL;
-    ts->tid = (int_32) time(NULL);
+    ts->tid = (uint32_t) time(NULL);
     ts->delta = 5;
 
     ts->color = rpmExpandNumeric("%{?_transaction_color}");

@@ -7,6 +7,7 @@
  */
 
 #include "rpmps.h"
+#include "rpmfi.h"
 #include "rpmsw.h"
 #include "rpmsx.h"
 #include <rpmpgp.h>		/* XXX pgpVSFlags */
@@ -14,6 +15,8 @@
 /*@-exportlocal@*/
 /*@unchecked@*/
 extern int _rpmts_debug;
+/*@unchecked@*/
+extern int _rpmts_macros;
 /*@unchecked@*/
 extern int _rpmts_stats;
 /*@unchecked@*/
@@ -24,6 +27,88 @@ extern int _fps_debug;
  * Bit(s) to control digest and signature verification.
  */
 typedef pgpVSFlags rpmVSFlags;
+
+/** \ingroup rpmts
+ * Bit(s) to control rpmtsCheck() and rpmtsOrder() operation.
+ * @todo Move to rpmts.h.
+ */
+typedef enum rpmdepFlags_e {
+    RPMDEPS_FLAG_NONE		= 0,
+    RPMDEPS_FLAG_NOUPGRADE	= (1 <<  0),	/*!< from --noupgrade */
+    RPMDEPS_FLAG_NOREQUIRES	= (1 <<  1),	/*!< from --norequires */
+    RPMDEPS_FLAG_NOCONFLICTS	= (1 <<  2),	/*!< from --noconflicts */
+    RPMDEPS_FLAG_NOOBSOLETES	= (1 <<  3),	/*!< from --noobsoletes */
+    RPMDEPS_FLAG_NOPARENTDIRS	= (1 <<  4),	/*!< from --noparentdirs */
+    RPMDEPS_FLAG_NOLINKTOS	= (1 <<  5),	/*!< from --nolinktos */
+    RPMDEPS_FLAG_ANACONDA	= (1 <<  6),	/*!< from --anaconda */
+    RPMDEPS_FLAG_NOSUGGEST	= (1 <<  7),	/*!< from --nosuggest */
+    RPMDEPS_FLAG_ADDINDEPS	= (1 <<  8),	/*!< from --aid */
+    RPMDEPS_FLAG_DEPLOOPS	= (1 <<  9)	/*!< from --deploops */
+} rpmdepFlags;
+
+/** \ingroup rpmts
+ * Bit(s) to control rpmtsRun() operation.
+ * @todo Move to rpmts.h.
+ */
+typedef enum rpmtransFlags_e {
+    RPMTRANS_FLAG_NONE		= 0,
+    RPMTRANS_FLAG_TEST		= (1 <<  0),	/*!< from --test */
+    RPMTRANS_FLAG_BUILD_PROBS	= (1 <<  1),	/*!< don't process payload */
+    RPMTRANS_FLAG_NOSCRIPTS	= (1 <<  2),	/*!< from --noscripts */
+    RPMTRANS_FLAG_JUSTDB	= (1 <<  3),	/*!< from --justdb */
+    RPMTRANS_FLAG_NOTRIGGERS	= (1 <<  4),	/*!< from --notriggers */
+    RPMTRANS_FLAG_NODOCS	= (1 <<  5),	/*!< from --excludedocs */
+    RPMTRANS_FLAG_ALLFILES	= (1 <<  6),	/*!< from --allfiles */
+/*@-enummemuse@*/
+    RPMTRANS_FLAG_KEEPOBSOLETE	= (1 <<  7),	/*!< @todo Document. */
+/*@=enummemuse@*/
+    RPMTRANS_FLAG_NOCONTEXTS	= (1 <<  8),	/*!< from --nocontexts */
+    RPMTRANS_FLAG_DIRSTASH	= (1 <<  9),	/*!< from --dirstash */
+    RPMTRANS_FLAG_REPACKAGE	= (1 << 10),	/*!< from --repackage */
+
+    RPMTRANS_FLAG_PKGCOMMIT	= (1 << 11),
+/*@-enummemuse@*/
+    RPMTRANS_FLAG_PKGUNDO	= (1 << 12),
+/*@=enummemuse@*/
+    RPMTRANS_FLAG_COMMIT	= (1 << 13),
+/*@-enummemuse@*/
+    RPMTRANS_FLAG_UNDO		= (1 << 14),
+/*@=enummemuse@*/
+    /* 15 unused */
+
+    RPMTRANS_FLAG_NOTRIGGERPREIN= (1 << 16),	/*!< from --notriggerprein */
+    RPMTRANS_FLAG_NOPRE		= (1 << 17),	/*!< from --nopre */
+    RPMTRANS_FLAG_NOPOST	= (1 << 18),	/*!< from --nopost */
+    RPMTRANS_FLAG_NOTRIGGERIN	= (1 << 19),	/*!< from --notriggerin */
+    RPMTRANS_FLAG_NOTRIGGERUN	= (1 << 20),	/*!< from --notriggerun */
+    RPMTRANS_FLAG_NOPREUN	= (1 << 21),	/*!< from --nopreun */
+    RPMTRANS_FLAG_NOPOSTUN	= (1 << 22),	/*!< from --nopostun */
+    RPMTRANS_FLAG_NOTRIGGERPOSTUN = (1 << 23),	/*!< from --notriggerpostun */
+/*@-enummemuse@*/
+    RPMTRANS_FLAG_NOPAYLOAD	= (1 << 24),
+/*@=enummemuse@*/
+    RPMTRANS_FLAG_APPLYONLY	= (1 << 25),
+
+    /* 26 unused */
+    RPMTRANS_FLAG_NOFDIGESTS	= (1 << 27),	/*!< from --nofdigests */
+    /* 28-29 unused */
+    RPMTRANS_FLAG_NOCONFIGS	= (1 << 30),	/*!< from --noconfigs */
+    /* 31 unused */
+} rpmtransFlags;
+
+#define	_noTransScripts		\
+  ( RPMTRANS_FLAG_NOPRE |	\
+    RPMTRANS_FLAG_NOPOST |	\
+    RPMTRANS_FLAG_NOPREUN |	\
+    RPMTRANS_FLAG_NOPOSTUN	\
+  )
+
+#define	_noTransTriggers	\
+  ( RPMTRANS_FLAG_NOTRIGGERPREIN | \
+    RPMTRANS_FLAG_NOTRIGGERIN |	\
+    RPMTRANS_FLAG_NOTRIGGERUN |	\
+    RPMTRANS_FLAG_NOTRIGGERPOSTUN \
+  )
 
 /** \ingroup rpmts
  * Indices for timestamps.
@@ -146,7 +231,7 @@ struct rpmts_s {
     rpmprobFilterFlags ignoreSet;
 				/*!< Bits to filter current problems. */
 
-    int filesystemCount;	/*!< No. of mounted filesystems. */
+    uint32_t filesystemCount;	/*!< No. of mounted filesystems. */
 /*@dependent@*/ /*@null@*/
     const char ** filesystems;	/*!< Mounted filesystem names. */
 /*@only@*/ /*@relnull@*/
@@ -205,10 +290,10 @@ struct rpmts_s {
 /*@null@*/
     FD_t scriptFd;		/*!< Scriptlet stdout/stderr. */
     int delta;			/*!< Delta for reallocation. */
-    int_32 tid;			/*!< Transaction id. */
+    uint32_t tid;			/*!< Transaction id. */
 
-    uint_32 color;		/*!< Transaction color bits. */
-    uint_32 prefcolor;		/*!< Preferred file color. */
+    uint32_t color;		/*!< Transaction color bits. */
+    uint32_t prefcolor;		/*!< Preferred file color. */
 
 /*@observer@*/ /*@dependent@*/ /*@null@*/
     const char * fn;		/*!< Current package fn. */
@@ -220,13 +305,13 @@ struct rpmts_s {
 
     struct rpmop_s ops[RPMTS_OP_MAX];
 
-/*@relnull@*/
+/*@refcounted@*/ /*@relnull@*/
     pgpDig dig;			/*!< Current signature/pubkey parameters. */
 
 /*@null@*/
     Spec spec;			/*!< Spec file control structure. */
 
-    uint_32 arbgoal;		/*!< Autorollback goal */
+    uint32_t arbgoal;		/*!< Autorollback goal */
 
 /*@refs@*/
     int nrefs;			/*!< Reference count. */
@@ -238,7 +323,12 @@ extern "C" {
 #endif
 
 /** \ingroup rpmts
- * Check that all dependencies can be resolved.
+ * Perform dependency resolution on the transaction set.
+ *
+ * Any problems found by rpmtsCheck() can be examined by retrieving the 
+ * problem set with rpmtsProblems(), success here only means that
+ * the resolution was successfully attempted for all packages in the set.
+ *
  * @param ts		transaction set
  * @return		0 on success
  */
@@ -398,7 +488,7 @@ rpmdbMatchIterator rpmtsInitIterator(const rpmts ts, rpmTag rpmtag,
 	/*@globals rpmGlobalMacroContext, h_errno, fileSystem, internalState @*/
 	/*@modifies ts, rpmGlobalMacroContext, fileSystem, internalState @*/;
 
-/**
+/** \ingroup rpmts
  * Retrieve pubkey from rpm database.
  * @param ts		rpm transaction
  * @param _dig		container (NULL uses rpmtsDig(ts) instead).
@@ -409,6 +499,21 @@ rpmRC rpmtsFindPubkey(rpmts ts, /*@null@*/ void * _dig)
 	/*@globals rpmGlobalMacroContext, h_errno, fileSystem, internalState @*/
 	/*@modifies ts, _dig, rpmGlobalMacroContext, fileSystem, internalState */;
 /*@=exportlocal@*/
+
+/** \ingroup rpmcli
+ * Import public key packet(s).
+ * @todo Implicit --update policy for gpg-pubkey headers.
+ * @param ts		transaction set
+ * @param pkt		pgp pubkey packet(s)
+ * @param pktlen	pgp pubkey length
+ * @return		RPMRC_OK/RPMRC_FAIL
+ */
+rpmRC rpmtsImportPubkey(const rpmts ts,
+		const unsigned char * pkt, ssize_t pktlen)
+	/*@globals RPMVERSION, rpmGlobalMacroContext, h_errno,
+		fileSystem, internalState @*/
+	/*@modifies ts, rpmGlobalMacroContext,
+		fileSystem, internalState @*/;
 
 /** \ingroup rpmts
  * Close the database used by the transaction to solve dependencies.
@@ -433,7 +538,7 @@ int rpmtsOpenSDB(rpmts ts, int dbmode)
 	/*@modifies ts, rpmGlobalMacroContext, fileSystem, internalState @*/;
 /*@=exportlocal@*/
 
-/**
+/** \ingroup rpmts
  * Attempt to solve a needed dependency using the solve database.
  * @param ts		transaction set
  * @param ds		dependency set
@@ -446,7 +551,7 @@ int rpmtsSolve(rpmts ts, rpmds ds, const void * data)
 	/*@modifies ts, rpmGlobalMacroContext, fileSystem, internalState @*/;
 /*@=exportlocal@*/
 
-/**
+/** \ingroup rpmts
  * Attempt to solve a needed dependency using memory resident tables.
  * @deprecated This function will move from rpmlib to the python bindings.
  * @param ts		transaction set
@@ -455,10 +560,10 @@ int rpmtsSolve(rpmts ts, rpmds ds, const void * data)
  */
 /*@unused@*/
 int rpmtsAvailable(rpmts ts, const rpmds ds)
-	/*@globals fileSystem @*/
-	/*@modifies ts, fileSystem @*/;
+	/*@globals fileSystem, internalState @*/
+	/*@modifies ts, fileSystem, internalState @*/;
 
-/**
+/** \ingroup rpmts
  * Set dependency solver callback.
  * @param ts		transaction set
  * @param (*solve)	dependency solver callback
@@ -470,7 +575,7 @@ int rpmtsSetSolveCallback(rpmts ts,
 		const void * solveData)
 	/*@modifies ts @*/;
 
-/**
+/** \ingroup rpmts
  * Return the type of a transaction.
  * @param ts		transaction set
  * @return		transaction type, 0 on unknown
@@ -478,7 +583,7 @@ int rpmtsSetSolveCallback(rpmts ts,
 rpmTSType rpmtsType(rpmts ts)
 	/*@*/;
 
-/**
+/** \ingroup rpmts
  * Set transaction type.
  *   Allowed types are:
  * 	RPMTRANS_TYPE_NORMAL
@@ -491,23 +596,23 @@ rpmTSType rpmtsType(rpmts ts)
 void rpmtsSetType(rpmts ts, rpmTSType type)
 	/*@modifies ts @*/;
 
-/**
+/** \ingroup rpmts
  * Return the autorollback goal. 
  * @param ts		transaction set
  * @return		autorollback goal
  */
-uint_32 rpmtsARBGoal(rpmts ts)
+uint32_t rpmtsARBGoal(rpmts ts)
 	/*@*/;
 
-/**
+/** \ingroup rpmts
  * Set autorollback goal.   
  * @param ts		transaction set
  * @param goal		autorollback goal
  */
-void rpmtsSetARBGoal(rpmts ts, uint_32 goal)
+void rpmtsSetARBGoal(rpmts ts, uint32_t goal)
 	/*@modifies ts @*/;
 
-/**
+/** \ingroup rpmts
  * Return current transaction set problems.
  * @param ts		transaction set
  * @return		current problem set (or NULL)
@@ -674,7 +779,7 @@ int rpmtsSetREContext(rpmts ts, rpmsx sx)
  * @param ts		transaction set
  * @return		transaction id
  */
-int_32 rpmtsGetTid(rpmts ts)
+uint32_t rpmtsGetTid(rpmts ts)
 	/*@*/;
 
 /** \ingroup rpmts
@@ -683,21 +788,7 @@ int_32 rpmtsGetTid(rpmts ts)
  * @param tid		new transaction id
  * @return		previous transaction id
  */
-int_32 rpmtsSetTid(rpmts ts, int_32 tid)
-	/*@modifies ts @*/;
-
-/** \ingroup rpmts
- * Set signature tag info, i.e. from header.
- * @param ts		transaction set
- * @param sigtag	signature tag
- * @param sigtype	signature tag type
- * @param sig		signature tag data
- * @param siglen	signature tag data length
- * @return		0 always
- */
-int rpmtsSetSig(rpmts ts,
-		int_32 sigtag, int_32 sigtype,
-		/*@kept@*/ /*@null@*/ const void * sig, int_32 siglen)
+uint32_t rpmtsSetTid(rpmts ts, uint32_t tid)
 	/*@modifies ts @*/;
 
 /** \ingroup rpmts
@@ -705,7 +796,6 @@ int rpmtsSetSig(rpmts ts,
  * @param ts		transaction set
  * @return		signature/pubkey constants.
  */
-/*@exposed@*/
 pgpDig rpmtsDig(rpmts ts)
 	/*@*/;
 
@@ -757,7 +847,7 @@ int rpmtsInitDSI(const rpmts ts)
  * @param action	file disposition
  */
 void rpmtsUpdateDSI(const rpmts ts, dev_t dev,
-		uint_32 fileSize, uint_32 prevSize, uint_32 fixupSize,
+		uint32_t fileSize, uint32_t prevSize, uint32_t fixupSize,
 		fileAction action)
 	/*@modifies ts @*/;
 
@@ -769,7 +859,7 @@ void rpmtsUpdateDSI(const rpmts ts, dev_t dev,
 void rpmtsCheckDSIProblems(const rpmts ts, const rpmte te)
 	/*@modifies ts @*/;
 
-/**
+/** \ingroup rpmts
  * Perform transaction progress notify callback.
  * @warning This function's args have changed, so the function cannot be
  * used portably
@@ -782,10 +872,10 @@ void rpmtsCheckDSIProblems(const rpmts ts, const rpmte te)
  */
 /*@null@*/
 void * rpmtsNotify(rpmts ts, rpmte te,
-                rpmCallbackType what, unsigned long long amount, unsigned long long total)
+                rpmCallbackType what, uint64_t amount, uint64_t total)
 	/*@*/;
 
-/**
+/** \ingroup rpmts
  * Return number of (ordered) transaction set elements.
  * @param ts		transaction set
  * @return		no. of transaction set elements
@@ -793,7 +883,7 @@ void * rpmtsNotify(rpmts ts, rpmte te,
 int rpmtsNElements(rpmts ts)
 	/*@*/;
 
-/**
+/** \ingroup rpmts
  * Return (ordered) transaction set element.
  * @param ts		transaction set
  * @param ix		transaction element index
@@ -883,7 +973,7 @@ rpmte rpmtsRelocateElement(rpmts ts)
 rpmte rpmtsSetRelocateElement(rpmts ts, /*@null@*/ rpmte relocateElement)
 	/*@modifies ts @*/;
 
-/**
+/** \ingroup rpmts
  * Retrieve goal of transaction set.
  * @param ts		transaction set
  * @return		goal
@@ -891,7 +981,7 @@ rpmte rpmtsSetRelocateElement(rpmts ts, /*@null@*/ rpmte relocateElement)
 tsmStage rpmtsGoal(rpmts ts)
 	/*@*/;
 
-/**
+/** \ingroup rpmts
  * Set goal of transaction set.
  * @param ts		transaction set
  * @param goal		new goal
@@ -900,49 +990,49 @@ tsmStage rpmtsGoal(rpmts ts)
 tsmStage rpmtsSetGoal(rpmts ts, tsmStage goal)
 	/*@modifies ts @*/;
 
-/**
+/** \ingroup rpmts
  * Retrieve dbmode of transaction set.
  * @param ts		transaction set
  * @return		dbmode
  */
-int rpmtsDbmode(rpmts ts)
+int rpmtsDBMode(rpmts ts)
 	/*@*/;
 
-/**
+/** \ingroup rpmts
  * Set dbmode of transaction set.
  * @param ts		transaction set
  * @param dbmode	new dbmode
  * @return		previous dbmode
  */
-int rpmtsSetDbmode(rpmts ts, int dbmode)
+int rpmtsSetDBMode(rpmts ts, int dbmode)
 	/*@modifies ts @*/;
 
-/**
+/** \ingroup rpmts
  * Retrieve color bits of transaction set.
  * @param ts		transaction set
  * @return		color bits
  */
-uint_32 rpmtsColor(rpmts ts)
+uint32_t rpmtsColor(rpmts ts)
 	/*@*/;
 
-/**
+/** \ingroup rpmts
  * Retrieve prefered file color
  * @param ts		transaction set
  * @return		color bits
  */
-uint_32 rpmtsPrefColor(rpmts ts)
+uint32_t rpmtsPrefColor(rpmts ts)
 	/*@*/;
 
-/**
+/** \ingroup rpmts
  * Set color bits of transaction set.
  * @param ts		transaction set
  * @param color		new color bits
  * @return		previous color bits
  */
-uint_32 rpmtsSetColor(rpmts ts, uint_32 color)
+uint32_t rpmtsSetColor(rpmts ts, uint32_t color)
 	/*@modifies ts @*/;
 
-/**
+/** \ingroup rpmts
  * Retrieve operation timestamp from a transaction set.
  * @param ts		transaction set
  * @param opx		operation timestamp index
@@ -976,6 +1066,11 @@ int rpmtsSetNotifyCallback(rpmts ts,
 rpmts rpmtsCreate(void)
 	/*@globals rpmGlobalMacroContext, h_errno, fileSystem, internalState @*/
 	/*@modifies rpmGlobalMacroContext, fileSystem, internalState @*/;
+
+/*@-redecl@*/
+/*@unchecked@*/
+extern int rpmcliPackagesTotal;
+/*@=redecl@*/
 
 /** \ingroup rpmts
  * Add package to be installed to transaction set.
@@ -1011,7 +1106,7 @@ int rpmtsAddEraseElement(rpmts ts, Header h, int dboffset)
 
 #if !defined(SWIG)
 #if defined(_RPMTS_PRINT)
-/**
+/** \ingroup rpmts
  * Print current transaction set contents.
  * @param ts		transaction set
  * @param fp		file handle (NULL uses stderr)
