@@ -9,13 +9,12 @@
 
 #include "system.h"
 
-#include <rpmio_internal.h>
+#include <rpmio.h>
 #include <rpmlib.h>
 
 #include "cpio.h"
 #include "fsm.h"
 
-#include "rpmerr.h"
 #include "debug.h"
 
 /*@access FSM_t @*/
@@ -31,7 +30,7 @@ int _cpio_debug = 0;
  * @param num		max no. of bytes to read
  * @return		converted integer
  */
-static int strntoul(const char *str, /*@out@*/char **endptr, int base, int num)
+static int strntoul(const char *str, /*@out@*/char **endptr, int base, size_t num)
 	/*@modifies *endptr @*/
 	/*@requires maxSet(endptr) >= 0 @*/
 {
@@ -232,7 +231,7 @@ const char * cpioStrerror(int rc)
 	s = NULL;
 	break;
     case CPIOERR_BAD_MAGIC:	s = _("Bad magic");		break;
-    case CPIOERR_BAD_HEADER:	s = _("Bad/unreadable  header");break;
+    case CPIOERR_BAD_HEADER:	s = _("Bad/unreadable header");	break;
 
     case CPIOERR_OPEN_FAILED:	s = "open";	break;
     case CPIOERR_CHMOD_FAILED:	s = "chmod";	break;

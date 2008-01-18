@@ -13,9 +13,20 @@ extern const char *__progname;
 #define	IAM_RPMK
 #endif
 
+#if defined(RPM_VENDOR_OPENPKG) /* integrity-checking */
+#include "rpmio_internal.h"
+#endif
+
 #include <rpmio.h>
 #include <rpmcli.h>
 #include <rpmbuild.h>
+
+#if defined(RPM_VENDOR_OPENPKG) /* integrity-checking */
+#include "rpmns.h"
+#define _RPMLUA_INTERNAL
+#include "rpmlua.h"
+#include "rpmluaext.h"
+#endif
 
 #include "rpmdb.h"
 #include "rpmps.h"
@@ -149,7 +160,10 @@ static void printVersion(FILE * fp)
 	/*@globals rpmEVR, fileSystem @*/
 	/*@modifies *fp, fileSystem @*/
 {
-    fprintf(fp, _("RPM version %s\n"), rpmEVR);
+    fprintf(fp, _("%s (" RPM_NAME ") %s\n"), __progname, rpmEVR);
+    if (rpmIsVerbose())
+	fprintf(fp, "rpmlib 0x%08x,0x%08x,0x%08x\n",
+	    rpmlibVersion(), rpmlibTimestamp(), rpmlibVendor());
 }
 
 static void printUsage(poptContext con, FILE * fp, int flags)
@@ -164,6 +178,187 @@ static void printUsage(poptContext con, FILE * fp, int flags)
     else
 	poptPrintUsage(con, fp, flags);
 }
+
+#if defined(RPM_VENDOR_OPENPKG) /* integrity-checking */
+
+#if !defined(RPM_INTEGRITY_FP)
+#error required RPM_INTEGRITY_FP (fingerprint of public key of integrity authority) not defined!
+#endif
+
+enum {
+    INTEGRITY_OK      = 0,
+    INTEGRITY_WARNING = 1,
+    INTEGRITY_ERROR   = 2
+};
+
+static void integrity_check_message(const char *fmt, ...)
+{
+    va_list ap;
+
+    va_start(ap, fmt);
+    fprintf(stderr, "rpm: ATTENTION: INTEGRITY CHECKING DETECTED AN ENVIRONMENT ANOMALY!\nrpm: ");
+    vfprintf(stderr, fmt, ap);
+    va_end(ap);
+    return;
+}
+
+static void integrity_check(const char *progname, enum modes progmode_num)
+{
+    rpmts ts = NULL;
+    rpmlua lua = NULL;
+    char *spec_fn = NULL;
+    char *proc_fn = NULL;
+    char *pkey_fn = NULL;
+    char *spec = NULL;
+    char *proc = NULL;
+    const char *result = NULL;
+    const char *error = NULL;
+    int xx;
+    const char *progmode;
+    int rc = INTEGRITY_ERROR;
+
+    /* determine paths of integrity checking related files */
+    spec_fn = rpmExpand("%{?_integrity_spec_cfg}%{!?_integrity_spec_cfg:scripts/integrity.cfg}", NULL);
+    if (spec_fn == NULL || spec_fn[0] == '\0') {
+        integrity_check_message("ERROR: Integrity Configuration Specification file not configured.\n"
+            "rpm: HINT: macro %%{_integrity_spec_cfg} not configured correctly.\n");
+        goto failure;
+    }
+    proc_fn = rpmExpand("%{?_integrity_proc_lua}%{!?_integrity_proc_lua:scripts/integrity.lua}", NULL);
+    if (proc_fn == NULL || proc_fn[0] == '\0') {
+        integrity_check_message("ERROR: Integrity Validation Processor file not configured.\n"
+            "rpm: HINT: macro %%{_integrity_proc_lua} not configured correctly.\n");
+        goto failure;
+    }
+    pkey_fn = rpmExpand("%{?_integrity_pkey_pgp}%{!?_integrity_pkey_pgp:scripts/integrity.pgp}", NULL);
+    if (pkey_fn == NULL || pkey_fn[0] == '\0') {
+        integrity_check_message("ERROR: Integrity Autority Public-Key file not configured.\n"
+            "rpm: HINT: macro %%{_integrity_pkey_pgp} not configured correctly.\n");
+        goto failure;
+    }
+
+    /* create RPM transaction environment and open RPM database */
+    ts = rpmtsCreate();
+    (void)rpmtsOpenDB(ts, O_RDONLY);
+
+    /* check signature on integrity configuration specification file */
+    if (rpmnsProbeSignature(ts, spec_fn, NULL, pkey_fn, RPM_INTEGRITY_FP, 0) != RPMRC_OK) {
+        integrity_check_message("ERROR: Integrity Configuration Specification file contains invalid signature.\n"
+            "rpm: HINT: Check file \"%s\".\n", spec_fn);
+        goto failure;
+    }
+
+    /* check signature on integrity validation processor file */
+    if (rpmnsProbeSignature(ts, proc_fn, NULL, pkey_fn, RPM_INTEGRITY_FP, 0) != RPMRC_OK) {
+        integrity_check_message("ERROR: Integrity Validation Processor file contains invalid signature.\n"
+            "rpm: HINT: Check file \"%s\".\n", proc_fn);
+        goto failure;
+    }
+
+    /* load integrity configuration specification file */
+    spec = NULL;
+	xx = rpmioSlurp(spec_fn, (uint8_t **)&spec, NULL);
+	if (!(xx == 0 && spec != NULL)) {
+        integrity_check_message("ERROR: Unable to load Integrity Configuration Specification file.\n"
+            "rpm: HINT: Check file \"%s\".\n", spec_fn);
+        goto failure;
+    }
+
+    /* load integrity validation processor file */
+    proc = NULL;
+	xx = rpmioSlurp(proc_fn, (uint8_t **)&proc, NULL);
+	if (!(xx == 0 && proc != NULL)) {
+        integrity_check_message("ERROR: Unable to load Integrity Validation Processor file.\n"
+            "rpm: HINT: Check file \"%s\".\n", proc_fn);
+        goto failure;
+    }
+
+    /* provision program name and mode */
+    if (progname == NULL || progname[0] == '\0')
+        progname = "rpm";
+    switch (progmode_num) {
+        case MODE_QUERY:     progmode = "query";     break;
+        case MODE_VERIFY:    progmode = "verify";    break;
+        case MODE_CHECKSIG:  progmode = "checksig";  break;
+        case MODE_RESIGN:    progmode = "resign";    break;
+        case MODE_INSTALL:   progmode = "install";   break;
+        case MODE_ERASE:     progmode = "erase";     break;
+        case MODE_BUILD:     progmode = "build";     break;
+        case MODE_REBUILD:   progmode = "rebuild";   break;
+        case MODE_RECOMPILE: progmode = "recompile"; break;
+        case MODE_TARBUILD:  progmode = "tarbuild";  break;
+        case MODE_INITDB:    progmode = "initdb";    break;
+        case MODE_REBUILDDB: progmode = "rebuilddb"; break;
+        case MODE_VERIFYDB:  progmode = "verifydb";  break;
+        case MODE_UNKNOWN:   progmode = "unknown";   break;
+        default:             progmode = "unknown";   break;
+    }
+
+    /* execute Integrity Validation Processor via Lua glue code */
+    lua = rpmluaNew();
+    rpmluaSetPrintBuffer(lua, 1);
+    rpmluaextActivate(lua);
+    lua_getfield(lua->L, LUA_GLOBALSINDEX, "integrity");
+    lua_getfield(lua->L, -1, "processor");
+    lua_remove(lua->L, -2);
+    lua_pushstring(lua->L, progname);
+    lua_pushstring(lua->L, progmode);
+    lua_pushstring(lua->L, spec_fn);
+    lua_pushstring(lua->L, spec);
+    lua_pushstring(lua->L, proc_fn);
+    lua_pushstring(lua->L, proc);
+#ifdef RPM_INTEGRITY_MV
+    lua_pushstring(lua->L, RPM_INTEGRITY_MV);
+#else
+    lua_pushstring(lua->L, "0");
+#endif
+    if (lua_pcall(lua->L, 7, 1, 0) != 0) {
+        error = lua_isstring(lua->L, -1) ? lua_tostring(lua->L, -1) : "unknown error";
+        lua_pop(lua->L, 1);
+        integrity_check_message("ERROR: Failed to execute Integrity Validation Processor.\n"
+            "rpm: ERROR: Lua: %s.\n"
+            "rpm: HINT: Check file \"%s\".\n", error, proc_fn);
+        goto failure;
+    }
+
+    /* check Integrity Validation Processor results */
+    if (!lua_isstring(lua->L, -1)) {
+        integrity_check_message("ERROR: Failed to fetch Integrity Validation Processor results.\n"
+            "rpm: HINT: Check file \"%s\".\n", proc_fn);
+        goto failure;
+    }
+    result = lua_tostring(lua->L, -1);
+    if (strcmp(result, "OK") == 0)
+        rc = INTEGRITY_OK;
+    else if (strncmp(result, "WARNING:", 8) == 0) {
+        rc = INTEGRITY_WARNING;
+        integrity_check_message("%s\n", result);
+    }
+    else {
+        rc = INTEGRITY_ERROR;
+        integrity_check_message("%s\n", result);
+    }
+
+    /* cleanup processing */
+    failure:
+    if (lua != NULL)
+        rpmluaFree(lua);
+    if (ts != NULL)
+        ts = rpmtsFree(ts);
+    if (spec != NULL)
+        spec = _free(spec);
+    if (proc != NULL)
+        proc = _free(proc);
+
+    /* final result handling */
+    if (rc != INTEGRITY_OK) {
+        sleep(4);
+        if (rc == INTEGRITY_ERROR)
+            exit(42);
+    }
+    return;
+}
+#endif
 
 /*@-bounds@*/ /* LCL: segfault */
 /*@-mods@*/ /* FIX: shrug */
@@ -413,11 +608,6 @@ int main(int argc, const char ** argv)
 	argerror(_("--ignoreos may only be specified during package "
 		   "installation"));
 
-    if (bigMode != MODE_INSTALL &&
-	(ia->probFilter & (RPMPROB_FILTER_DISKSPACE|RPMPROB_FILTER_DISKNODES)))
-	argerror(_("--ignoresize may only be specified during package "
-		   "installation"));
-
     if ((ia->installInterfaceFlags & INSTALL_ALLMATCHES) && bigMode != MODE_ERASE)
 	argerror(_("--allmatches may only be specified during package "
 		   "erasure"));
@@ -443,7 +633,7 @@ int main(int argc, const char ** argv)
 
     if (ia->noDeps & (bigMode & ~MODES_FOR_NODEPS))
 	argerror(_("--nodeps may only be specified during package "
-		   "building, rebuilding, recompilation, installation,"
+		   "building, rebuilding, recompilation, installation, "
 		   "erasure, and verification"));
 
     if ((ia->transFlags & RPMTRANS_FLAG_TEST) && (bigMode & ~MODES_FOR_TEST))
@@ -468,6 +658,10 @@ int main(int argc, const char ** argv)
 	    break;
 	}
     }
+
+#if defined(RPM_VENDOR_OPENPKG) /* integrity-checking */
+    integrity_check(__progname, bigMode);
+#endif
 
 #if defined(IAM_RPMBT) || defined(IAM_RPMK)
     if (0
@@ -541,7 +735,11 @@ int main(int argc, const char ** argv)
     switch (bigMode) {
 #ifdef	IAM_RPMDB
     case MODE_INITDB:
+#if defined(SUPPORT_INITDB)
 	ec = rpmtsInitDB(ts, 0644);
+#else
+	ec = -1;
+#endif
 	break;
 
     case MODE_REBUILDDB:
@@ -551,7 +749,11 @@ int main(int argc, const char ** argv)
 	vsflags = rpmtsSetVSFlags(ts, ovsflags);
     }	break;
     case MODE_VERIFYDB:
+#if defined(SUPPORT_VERIFYDB)
 	ec = rpmtsVerifyDB(ts);
+#else
+	ec = -1;
+#endif
 	break;
 #endif	/* IAM_RPMDB */
 
@@ -598,6 +800,9 @@ int main(int argc, const char ** argv)
     case MODE_BUILD:
     case MODE_TARBUILD:
     {	const char * pkg;
+#if defined(RPM_VENDOR_OPENPKG) /* no-auto-verbose-increase-for-track-and-fetch */
+	if (ba->buildChar != 't' && ba->buildChar != 'f')
+#endif
         while (!rpmIsVerbose())
 	    rpmIncreaseVerbosity();
        
@@ -631,7 +836,25 @@ int main(int argc, const char ** argv)
 	    /*@innerbreak@*/ break;
 	case 's':
 	    ba->buildAmount |= RPMBUILD_PACKAGESOURCE;
+#if defined(RPM_VENDOR_OPENPKG) /* no-deps-on-building-srpms */
+	    /* enforce no dependency checking when rolling a source RPM */
+	    ba->noDeps = 1;
+#endif
 	    /*@innerbreak@*/ break;
+	case 't':	/* support extracting the "%track" script/section */
+	    ba->buildAmount |= RPMBUILD_TRACK;
+	    /* enforce no dependency checking and expansion of %setup, %patch and %prep macros */
+	    ba->noDeps = 1;
+	    rpmDefineMacro(NULL, "setup #", RMIL_CMDLINE);
+	    rpmDefineMacro(NULL, "patch #", RMIL_CMDLINE);
+	    rpmDefineMacro(NULL, "prep %%prep", RMIL_CMDLINE);
+	    /*@innerbreak@*/ break;
+#if defined(RPM_VENDOR_OPENPKG) /* explicit-source-fetch-cli-option */
+	case 'f':
+	    ba->buildAmount |= RPMBUILD_FETCHSOURCE;
+	    ba->noDeps = 1;
+	    /*@innerbreak@*/ break;
+#endif
 	}
 
 	if (!poptPeekArg(optCon)) {
