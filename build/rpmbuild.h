@@ -6,7 +6,7 @@
  *  This is the *only* module users of librpmbuild should need to include.
  */
 
-#include "rpmcli.h"
+#include <rpmcli.h>
 
 /* and it shouldn't need these :-( */
 #include "stringbuf.h"
@@ -34,11 +34,11 @@ typedef enum rpmBuildFlags_e {
     RPMBUILD_RMSOURCE	= (1 <<  8),	/*!< Remove source(s) and patch(s). */
     RPMBUILD_RMBUILD	= (1 <<  9),	/*!< Remove build sub-tree. */
     RPMBUILD_STRINGBUF	= (1 << 10),	/*!< only for doScript() */
-    RPMBUILD_RMSPEC	= (1 << 11)	/*!< Remove spec file. */
+    RPMBUILD_TRACK	= (1 << 11),	/*!< Execute %%track. */
+    RPMBUILD_RMSPEC	= (1 << 12),	/*!< Remove spec file. */
+    RPMBUILD_FETCHSOURCE= (1 << 13)	/*!< Fetch source(s) and patch(s). */
 } rpmBuildFlags;
 /*@=typeuse@*/
-
-#include <ctype.h>
 
 #define SKIPSPACE(s) { while (*(s) && xisspace(*(s))) (s)++; }
 #define SKIPNONSPACE(s) { while (*(s) && !xisspace(*(s))) (s)++; }
@@ -49,35 +49,43 @@ typedef enum rpmBuildFlags_e {
 /** \ingroup rpmbuild
  * Spec file parser states.
  */
+#define	PART_BASE	100
 typedef enum rpmParseState_e {
-    PART_NONE		=  0,	/*!< */
-    PART_PREAMBLE	=  1,	/*!< */
-    PART_PREP		=  2,	/*!< */
-    PART_BUILD		=  3,	/*!< */
-    PART_INSTALL	=  4,	/*!< */
-    PART_CHECK		=  5,	/*!< */
-    PART_CLEAN		=  6,	/*!< */
-    PART_FILES		=  7,	/*!< */
-    PART_PRE		=  8,	/*!< */
-    PART_POST		=  9,	/*!< */
-    PART_PREUN		= 10,	/*!< */
-    PART_POSTUN		= 11,	/*!< */
-    PART_PRETRANS	= 12,	/*!< */
-    PART_POSTTRANS	= 13,	/*!< */
-    PART_DESCRIPTION	= 14,	/*!< */
-    PART_CHANGELOG	= 15,	/*!< */
-    PART_TRIGGERIN	= 16,	/*!< */
-    PART_TRIGGERUN	= 17,	/*!< */
-    PART_VERIFYSCRIPT	= 18,	/*!< */
-    PART_BUILDARCHITECTURES= 19,/*!< */
-    PART_TRIGGERPOSTUN	= 20,	/*!< */
-    PART_TRIGGERPREIN	= 21,	/*!< */
-    PART_LAST		= 22	/*!< */
+    PART_NONE		=  0+PART_BASE,	/*!< */
+    /* leave room for RPMRC_NOTFOUND returns. */
+    PART_PREAMBLE	= 11+PART_BASE,	/*!< */
+    PART_PREP		= 12+PART_BASE,	/*!< */
+    PART_BUILD		= 13+PART_BASE,	/*!< */
+    PART_INSTALL	= 14+PART_BASE,	/*!< */
+    PART_CHECK		= 15+PART_BASE,	/*!< */
+    PART_CLEAN		= 16+PART_BASE,	/*!< */
+    PART_FILES		= 17+PART_BASE,	/*!< */
+    PART_PRE		= 18+PART_BASE,	/*!< */
+    PART_POST		= 19+PART_BASE,	/*!< */
+    PART_PREUN		= 20+PART_BASE,	/*!< */
+    PART_POSTUN		= 21+PART_BASE,	/*!< */
+    PART_PRETRANS	= 22+PART_BASE,	/*!< */
+    PART_POSTTRANS	= 23+PART_BASE,	/*!< */
+    PART_DESCRIPTION	= 24+PART_BASE,	/*!< */
+    PART_CHANGELOG	= 25+PART_BASE,	/*!< */
+    PART_TRIGGERIN	= 26+PART_BASE,	/*!< */
+    PART_TRIGGERUN	= 27+PART_BASE,	/*!< */
+    PART_VERIFYSCRIPT	= 28+PART_BASE,	/*!< */
+    PART_BUILDARCHITECTURES= 29+PART_BASE,/*!< */
+    PART_TRIGGERPOSTUN	= 30+PART_BASE,	/*!< */
+    PART_TRIGGERPREIN	= 31+PART_BASE,	/*!< */
+    /* support "%sanitycheck" script */
+    PART_SANITYCHECK	= 32+PART_BASE, /*!< */
+    PART_ARBITRARY	= 33+PART_BASE, /*!< */
+    PART_LAST		= 34+PART_BASE  /*!< */
 } rpmParseState;
 
 #define STRIP_NOTHING             0
 #define STRIP_TRAILINGSPACE (1 << 0)
 #define STRIP_COMMENTS      (1 << 1)
+
+/*@unchecked@*/
+extern int _rpmbuildFlags;
 
 #ifdef __cplusplus
 extern "C" {
@@ -164,7 +172,7 @@ extern const char * buildHost(void)
  * @return		build time stamp
  */
 /*@observer@*/
-extern int_32 * getBuildTime(void)
+extern uint32_t * getBuildTime(void)
 	/*@*/;
 
 /** \ingroup rpmbuild
@@ -196,10 +204,11 @@ void handleComments(char * s)
 
 /** \ingroup rpmbuild
  * Check line for section separator, return next parser state.
- * @param		line from spec file
+ * @param spec		spec file control structure
  * @return		next parser state
  */
-rpmParseState isPart(const char * line)	/*@*/;
+rpmParseState isPart(Spec spec)
+	/*@*/;
 
 /** \ingroup rpmbuild
  * Parse a number.
@@ -207,7 +216,7 @@ rpmParseState isPart(const char * line)	/*@*/;
  * @retval res		pointer to int
  * @return		0 on success, 1 on failure
  */
-int parseNum(/*@null@*/ const char * line, /*@null@*/ /*@out@*/int * res)
+int parseNum(/*@null@*/ const char * line, /*@null@*/ /*@out@*/uint32_t * res)
 	/*@modifies *res @*/;
 
 /** \ingroup rpmbuild
@@ -302,6 +311,7 @@ int parsePrep(Spec spec, int verify)
 	/*@modifies spec->prep, spec->buildSubdir, spec->macros,
 		spec->fileStack, spec->readStack, spec->line, spec->lineNum,
 		spec->nextline, spec->nextpeekc, spec->lbuf, spec->sl,
+		spec->packages->header,
 		rpmGlobalMacroContext, fileSystem, internalState @*/;
 
 /** \ingroup rpmbuild
@@ -312,12 +322,11 @@ int parsePrep(Spec spec, int verify)
  * @param tagN		tag, identifies type of dependency
  * @param index		(0 always)
  * @param tagflags	dependency flags already known from context
- * @return		0 on success, RPMERR_BADSPEC on failure
+ * @return		RPMRC_OK on success
  */
-int parseRCPOT(Spec spec, Package pkg, const char * field, rpmTag tagN,
-		int index, rpmsenseFlags tagflags)
-	/*@globals rpmGlobalMacroContext, h_errno @*/
-	/*@modifies rpmGlobalMacroContext @*/;
+rpmRC parseRCPOT(Spec spec, Package pkg, const char * field, rpmTag tagN,
+		uint32_t index, rpmsenseFlags tagflags)
+	/*@*/;
 
 /** \ingroup rpmbuild
  * Parse %%pre et al scriptlets from a spec file.
@@ -361,9 +370,9 @@ char * parseExpressionString(Spec spec, const char * expr)
  * @param name		name of scriptlet section
  * @param sb		lines that compose script body
  * @param test		don't execute scripts or package if testing
- * @return		0 on success, RPMERR_SCRIPT on failure
+ * @return		RPMRC_OK on success, RPMRC_FAIL on failure
  */
-int doScript(Spec spec, int what, /*@null@*/ const char * name,
+rpmRC doScript(Spec spec, int what, /*@null@*/ const char * name,
 		/*@null@*/ StringBuf sb, int test)
 	/*@globals rpmGlobalMacroContext, h_errno,
 		fileSystem, internalState @*/
@@ -376,9 +385,9 @@ int doScript(Spec spec, int what, /*@null@*/ const char * name,
  * @param name		(sub-)package name
  * @param flag		if PART_SUBNAME, then 1st package name is prepended
  * @retval pkg		package control structure
- * @return		0 on success, 1 on failure
+ * @return		RPMRC_OK on success
  */
-int lookupPackage(Spec spec, /*@null@*/ const char * name, int flag,
+rpmRC lookupPackage(Spec spec, /*@null@*/ const char * name, int flag,
 		/*@out@*/ Package * pkg)
 	/*@modifies spec->packages, *pkg @*/;
 
@@ -424,16 +433,16 @@ Package  freePackage(/*@only@*/ /*@null@*/ Package pkg)
  */
 int addReqProv(/*@unused@*/Spec spec, Header h, rpmTag tagN,
 		const char * N, const char * EVR, rpmsenseFlags Flags,
-		int index)
+		uint32_t index)
 	/*@modifies h @*/;
 
 /**
  * Append files (if any) to scriptlet tags.
  * @param spec		spec file control structure
  * @param pkg		package control structure
- * @return		0 on success
+ * @return		RPMRC_OK on success
  */
-int processScriptFiles(Spec spec, Package pkg)
+rpmRC processScriptFiles(Spec spec, Package pkg)
 	/*@globals rpmGlobalMacroContext, h_errno, fileSystem, internalState @*/
 	/*@modifies pkg->header, rpmGlobalMacroContext,
 		fileSystem, internalState @*/;
@@ -461,9 +470,9 @@ int rpmlibNeedsFeature(Header h, const char * feature, const char * featureEVR)
  * @param spec		spec file control structure
  * @param installSpecialDoc
  * @param test		don't execute scripts or package if testing
- * @return		0 on success
+ * @return		RPMRC_OK on success
  */
-int processBinaryFiles(Spec spec, int installSpecialDoc, int test)
+rpmRC processBinaryFiles(Spec spec, int installSpecialDoc, int test)
 	/*@globals rpmGlobalMacroContext, h_errno, fileSystem, internalState @*/
 	/*@modifies spec->macros, *spec->packages,
 		spec->packages->cpioList, spec->packages->fileList,
@@ -477,9 +486,11 @@ int processBinaryFiles(Spec spec, int installSpecialDoc, int test)
  * @return		0 always
  */
 int initSourceHeader(Spec spec, /*@null@*/ StringBuf *sfp)
-	/*@modifies spec->sourceHeader,
+	/*@globals rpmGlobalMacroContext, h_errno @*/
+	/*@modifies spec->sourceHeader, spec->sourceHdrInit,
 		spec->BANames, *sfp,
-		spec->packages->header @*/;
+		spec->packages->header,
+		rpmGlobalMacroContext @*/;
 
 /** \ingroup rpmbuild
  * Post-build processing for source package.
@@ -489,7 +500,7 @@ int initSourceHeader(Spec spec, /*@null@*/ StringBuf *sfp)
 int processSourceFiles(Spec spec)
 	/*@globals rpmGlobalMacroContext, h_errno, fileSystem, internalState @*/
 	/*@modifies spec->sourceHeader, spec->sourceCpioList,
-		spec->BANames,
+		spec->BANames, spec->sourceHdrInit,
 		spec->packages->header,
 		rpmGlobalMacroContext, fileSystem, internalState @*/;
 
@@ -521,12 +532,12 @@ int parseSpec(rpmts ts, const char * specFile,
  * @param spec		spec file control structure
  * @param what		bit(s) to enable stages of build
  * @param test		don't execute scripts or package if testing
- * @return		0 on success
+ * @return		RPMRC_OK on success
  */
-int buildSpec(rpmts ts, Spec spec, int what, int test)
+rpmRC buildSpec(rpmts ts, Spec spec, int what, int test)
 	/*@globals rpmGlobalMacroContext, h_errno, fileSystem, internalState @*/
 	/*@modifies spec->sourceHeader, spec->sourceCpioList, spec->cookie,
-		spec->sourceRpmName, spec->sourcePkgId,
+		spec->sourceRpmName, spec->sourcePkgId, spec->sourceHdrInit,
 		spec->macros, spec->BASpecs,
 		spec->BANames, *spec->packages,
 		spec->packages->cpioList, spec->packages->fileList,
@@ -536,23 +547,23 @@ int buildSpec(rpmts ts, Spec spec, int what, int test)
 /** \ingroup rpmbuild
  * Generate binary package(s).
  * @param spec		spec file control structure
- * @return		0 on success
+ * @return		rpmRC on success
  */
-int packageBinaries(Spec spec)
+rpmRC packageBinaries(Spec spec)
 	/*@globals rpmGlobalMacroContext, h_errno, fileSystem, internalState @*/
 	/*@modifies spec->packages->header, spec->packages->cpioList,
-		spec->sourceRpmName,
+		spec->sourceRpmName, spec->cookie, spec->sourcePkgId,
 		rpmGlobalMacroContext, fileSystem, internalState @*/;
 
 /** \ingroup rpmbuild
  * Generate source package.
  * @param spec		spec file control structure
- * @return		0 on success
+ * @return		RPMRC_OK on success
  */
-int packageSources(Spec spec)
+rpmRC packageSources(Spec spec)
 	/*@globals rpmGlobalMacroContext, h_errno, fileSystem, internalState @*/
 	/*@modifies spec->sourceHeader, spec->cookie, spec->sourceCpioList,
-		spec->sourceRpmName, spec->sourcePkgId,
+		spec->sourceRpmName, spec->sourcePkgId, spec->packages->header,
 		rpmGlobalMacroContext, fileSystem, internalState @*/;
 
 /*@=redecl@*/

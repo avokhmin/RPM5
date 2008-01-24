@@ -64,28 +64,30 @@ static inline
     return NULL;
 }
 
-/*@-boundswrite@*/
-int lookupPackage(Spec spec, const char *name, int flag, /*@out@*/Package *pkg)
+rpmRC lookupPackage(Spec spec, const char *name, int flag, /*@out@*/Package *pkg)
 {
-    const char *pname;
+    HE_t he = memset(alloca(sizeof(*he)), 0, sizeof(*he));
     const char *fullName;
     Package p;
+    int xx;
     
     /* "main" package */
     if (name == NULL) {
 	if (pkg)
 	    *pkg = spec->packages;
-	return 0;
+	return RPMRC_OK;
     }
 
     /* Construct package name */
   { char *n;
     if (flag == PART_SUBNAME) {
-	(void) headerGetEntry(spec->packages->header, RPMTAG_NAME,
-		NULL, &pname, NULL);
-	fullName = n = alloca(strlen(pname) + 1 + strlen(name) + 1);
-	while (*pname != '\0') *n++ = *pname++;
+	he->tag = RPMTAG_NAME;
+	xx = headerGet(spec->packages->header, he, 0);
+	fullName = n = alloca(strlen(he->p.str) + 1 + strlen(name) + 1);
+	n = stpcpy(n, he->p.str);
+	he->p.ptr = _free(he->p.ptr);
 	*n++ = '-';
+	*n = '\0';
     } else {
 	fullName = n = alloca(strlen(name)+1);
     }
@@ -96,18 +98,19 @@ int lookupPackage(Spec spec, const char *name, int flag, /*@out@*/Package *pkg)
 
     /* Locate package with fullName */
     for (p = spec->packages; p != NULL; p = p->next) {
-	(void) headerGetEntry(p->header, RPMTAG_NAME,
-		NULL, &pname, NULL);
-	if (pname && (! strcmp(fullName, pname))) {
+	he->tag = RPMTAG_NAME;
+	xx = headerGet(p->header, he, 0);
+	if (he->p.str && !strcmp(fullName, he->p.str)) {
+	    he->p.ptr = _free(he->p.ptr);
 	    break;
 	}
+	he->p.ptr = _free(he->p.ptr);
     }
 
     if (pkg)
 	/*@-dependenttrans@*/ *pkg = p; /*@=dependenttrans@*/
-    return ((p == NULL) ? 1 : 0);
+    return ((p == NULL) ? RPMRC_FAIL : RPMRC_OK);
 }
-/*@=boundswrite@*/
 
 Package newPackage(Spec spec)
 {
@@ -119,8 +122,8 @@ Package newPackage(Spec spec)
     p->header = headerNew();
     p->ds = NULL;
 
-    p->autoProv = 1;
-    p->autoReq = 1;
+    p->autoProv = ((_rpmbuildFlags & 0x1) != 0);
+    p->autoReq = ((_rpmbuildFlags & 0x2) != 0);
     
 #if 0    
     p->reqProv = NULL;
@@ -140,6 +143,7 @@ Package newPackage(Spec spec)
     p->preUnFile = NULL;
     p->postUnFile = NULL;
     p->verifyFile = NULL;
+    p->sanityCheckFile = NULL;
 
     p->specialDoc = NULL;
 
@@ -165,6 +169,7 @@ Package freePackage(Package pkg)
     pkg->preUnFile = _free(pkg->preUnFile);
     pkg->postUnFile = _free(pkg->postUnFile);
     pkg->verifyFile = _free(pkg->verifyFile);
+    pkg->sanityCheckFile = _free(pkg->sanityCheckFile);
 
     pkg->header = headerFree(pkg->header);
     pkg->ds = rpmdsFree(pkg->ds);
@@ -224,7 +229,7 @@ SpecSource getSource(Spec spec, int num)
     int i;
 
     for (i = 0; i < num; i++)
-    if (!(p = p->next)) return NULL;
+	if ((p = p->next) == NULL) return NULL;
 
     return p;
 }
@@ -233,14 +238,14 @@ SpecSource getSource(Spec spec, int num)
  */
 const char * specSourceName(SpecSource source)
 {
-    return(source->source);
+    return source->source;
 }
 
 /**
  */
 const char * specFullSourceName(SpecSource source)
 {
-    return(source->fullSource);
+    return source->fullSource;
 }
 
 /**
@@ -257,12 +262,11 @@ int specSourceFlags(SpecSource source)
     return source->flags;
 }
 
-/*@-boundsread@*/
 int parseNoSource(Spec spec, const char * field, int tag)
 {
     const char *f, *fe;
     const char *name;
-    int num, flag;
+    uint32_t num, flag;
 
     if (tag == RPMTAG_NOSOURCE) {
 	flag = RPMFILE_SOURCE;
@@ -284,15 +288,15 @@ int parseNoSource(Spec spec, const char * field, int tag)
 	if (*fe != '\0') fe++;
 
 	if (parseNum(f, &num)) {
-	    rpmError(RPMERR_BADSPEC, _("line %d: Bad number: %s\n"),
+	    rpmlog(RPMLOG_ERR, _("line %d: Bad number: %s\n"),
 		     spec->lineNum, f);
-	    return RPMERR_BADSPEC;
+	    return RPMRC_FAIL;
 	}
 
 	if (! (p = findSource(spec, num, flag))) {
-	    rpmError(RPMERR_BADSPEC, _("line %d: Bad no%s number: %d\n"),
+	    rpmlog(RPMLOG_ERR, _("line %d: Bad no%s number: %d\n"),
 		     spec->lineNum, name, num);
-	    return RPMERR_BADSPEC;
+	    return RPMRC_FAIL;
 	}
 
 	p->flags |= RPMFILE_GHOST;
@@ -301,10 +305,8 @@ int parseNoSource(Spec spec, const char * field, int tag)
 
     return 0;
 }
-/*@=boundsread@*/
 
-/*@-boundswrite@*/
-int addSource(Spec spec, Package pkg, const char *field, int tag)
+int addSource(Spec spec, /*@unused@*/ Package pkg, const char *field, int tag)
 {
     struct Source *p;
     int flag = 0;
@@ -313,10 +315,9 @@ int addSource(Spec spec, Package pkg, const char *field, int tag)
     char *nump;
     const char *fieldp = NULL;
     char buf[BUFSIZ];
-    int num = 0;
+    uint32_t num = 0;
 
     buf[0] = '\0';
-    /*@-branchstate@*/
     switch (tag) {
     case RPMTAG_SOURCE:
 	flag = RPMFILE_SOURCE;
@@ -337,9 +338,10 @@ int addSource(Spec spec, Package pkg, const char *field, int tag)
 assert(0);
 	/*@notreached@*/ break;
     }
+#if !defined(RPM_VENDOR_OPENPKG) /* splitted-source-directory */
     mdir = getSourceDir(flag);
 assert(mdir != NULL);
-    /*@=branchstate@*/
+#endif
 
     /* Get the number */
     if (fieldp != NULL) {
@@ -358,9 +360,9 @@ assert(mdir != NULL);
 	if (nump == NULL || *nump == '\0')
 	    num = 0;
 	else if (parseNum(buf, &num)) {
-	    rpmError(RPMERR_BADSPEC, _("line %d: Bad %s number: %s\n"),
+	    rpmlog(RPMLOG_ERR, _("line %d: Bad %s number: %s\n"),
 			 spec->lineNum, name, spec->line);
-	    return RPMERR_BADSPEC;
+	    return RPMRC_FAIL;
 	}
     }
 
@@ -381,6 +383,9 @@ assert(mdir != NULL);
     spec->numSources++;
 
     /* XXX FIXME: need to add ICON* macros. */
+#if defined(RPM_VENDOR_OPENPKG) /* splitted-source-directory */
+    mdir = getSourceDir(flag, p->source);
+#endif
     if (tag != RPMTAG_ICON) {
 	const char *body = rpmGenPath(NULL, mdir, p->source);
 
@@ -395,7 +400,6 @@ assert(mdir != NULL);
     
     return 0;
 }
-/*@=boundswrite@*/
 
 /**
  */
@@ -403,20 +407,17 @@ static inline /*@only@*/ /*@null@*/ speclines newSl(void)
 	/*@*/
 {
     speclines sl = NULL;
-    /*@-branchstate@*/
     if (specedit) {
 	sl = xmalloc(sizeof(*sl));
 	sl->sl_lines = NULL;
 	sl->sl_nalloc = 0;
 	sl->sl_nlines = 0;
     }
-    /*@=branchstate@*/
     return sl;
 }
 
 /**
  */
-/*@-boundswrite@*/
 static inline /*@null@*/ speclines freeSl(/*@only@*/ /*@null@*/ speclines sl)
 	/*@modifies sl @*/
 {
@@ -429,7 +430,6 @@ static inline /*@null@*/ speclines freeSl(/*@only@*/ /*@null@*/ speclines sl)
     sl->sl_lines = _free(sl->sl_lines);
     return _free(sl);
 }
-/*@=boundswrite@*/
 
 /**
  */
@@ -437,14 +437,12 @@ static inline /*@only@*/ /*@null@*/ spectags newSt(void)
 	/*@*/
 {
     spectags st = NULL;
-    /*@-branchstate@*/
     if (specedit) {
 	st = xmalloc(sizeof(*st));
 	st->st_t = NULL;
 	st->st_nalloc = 0;
 	st->st_ntags = 0;
     }
-    /*@=branchstate@*/
     return st;
 }
 
@@ -474,9 +472,8 @@ Spec newSpec(void)
     spec->st = newSt();
 
     spec->fileStack = NULL;
-/*@-boundswrite@*/
-    spec->lbuf[0] = '\0';
-/*@=boundswrite@*/
+    spec->lbuf_len = (size_t)rpmExpandNumeric("%{?_spec_line_buffer_size}%{!?_spec_line_buffer_size:100000}");
+    spec->lbuf = (char *)xcalloc(1, spec->lbuf_len);
     spec->line = spec->lbuf;
     spec->nextline = NULL;
     spec->nextpeekc = '\0';
@@ -491,6 +488,8 @@ Spec newSpec(void)
     spec->install = NULL;
     spec->check = NULL;
     spec->clean = NULL;
+    spec->foo = NULL;
+    spec->nfoo = 0;
 
     spec->sources = NULL;
     spec->packages = NULL;
@@ -529,6 +528,8 @@ Spec freeSpec(Spec spec)
 
     if (spec == NULL) return NULL;
 
+    spec->lbuf = _free(spec->lbuf);
+
     spec->sl = freeSl(spec->sl);
     spec->st = freeSt(spec->st);
 
@@ -537,6 +538,8 @@ Spec freeSpec(Spec spec)
     spec->install = freeStringBuf(spec->install);
     spec->check = freeStringBuf(spec->check);
     spec->clean = freeStringBuf(spec->clean);
+    spec->foo = tagStoreFree(spec->foo, spec->nfoo);
+    spec->nfoo = 0;
 
     spec->buildSubdir = _free(spec->buildSubdir);
     spec->rootURL = _free(spec->rootURL);
@@ -576,7 +579,6 @@ Spec freeSpec(Spec spec)
     }
     
     if (!spec->recursing) {
-/*@-boundswrite@*/
 	if (spec->BASpecs != NULL)
 	while (spec->BACount--) {
 	    /*@-unqualifiedtrans@*/
@@ -584,7 +586,6 @@ Spec freeSpec(Spec spec)
 			freeSpec(spec->BASpecs[spec->BACount]);
 	    /*@=unqualifiedtrans@*/
 	}
-/*@=boundswrite@*/
 	/*@-compdef@*/
 	spec->BASpecs = _free(spec->BASpecs);
 	/*@=compdef@*/
@@ -611,9 +612,7 @@ struct OpenFileInfo * newOpenFileInfo(void)
     ofi->fd = NULL;
     ofi->fileName = NULL;
     ofi->lineNum = 0;
-/*@-boundswrite@*/
     ofi->readBuf[0] = '\0';
-/*@=boundswrite@*/
     ofi->readPtr = NULL;
     ofi->next = NULL;
 
@@ -627,18 +626,19 @@ struct OpenFileInfo * newOpenFileInfo(void)
 static void
 printNewSpecfile(Spec spec)
 	/*@globals fileSystem @*/
-	/*@modifies spec->sl->sl_lines[], fileSystem @*/
+	/*@modifies spec->sl->sl_lines[], spec->packages->header, fileSystem @*/
 {
+    HE_t he = memset(alloca(sizeof(*he)), 0, sizeof(*he));
     Header h;
     speclines sl = spec->sl;
     spectags st = spec->st;
     const char * msgstr = NULL;
     int i, j;
+    int xx;
 
     if (sl == NULL || st == NULL)
 	return;
 
-    /*@-branchstate@*/
     for (i = 0; i < st->st_ntags; i++) {
 	spectag t = st->st_t + i;
 	const char * tn = tagName(t->t_tag);
@@ -652,19 +652,20 @@ printNewSpecfile(Spec spec)
 	    Package pkg;
 	    char *fe;
 
-/*@-bounds@*/
 	    strcpy(fmt, t->t_msgid);
 	    for (fe = fmt; *fe && *fe != '('; fe++)
 		{} ;
 	    if (*fe == '(') *fe = '\0';
-/*@=bounds@*/
 	    h = NULL;
 	    for (pkg = spec->packages; pkg != NULL; pkg = pkg->next) {
-		const char *pkgname;
 		h = pkg->header;
-		(void) headerGetEntry(h, RPMTAG_NAME, NULL, &pkgname, NULL);
-		if (!strcmp(pkgname, fmt))
+		he->tag = RPMTAG_NAME;
+		xx = headerGet(h, he, 0);
+		if (!strcmp(he->p.str, fmt)) {
+		    he->p.ptr = _free(he->p.ptr);
 		    /*@innerbreak@*/ break;
+		}
+		he->p.ptr = _free(he->p.ptr);
 	    }
 	    if (pkg == NULL || h == NULL)
 		h = spec->packages->header;
@@ -674,19 +675,16 @@ printNewSpecfile(Spec spec)
 	    continue;
 
 	fmt[0] = '\0';
-/*@-boundswrite@*/
 	(void) stpcpy( stpcpy( stpcpy( fmt, "%{"), tn), "}");
-/*@=boundswrite@*/
 	msgstr = _free(msgstr);
 
 	/* XXX this should use queryHeader(), but prints out tn as well. */
-	msgstr = headerSprintf(h, fmt, rpmTagTable, rpmHeaderFormats, &errstr);
+	msgstr = headerSprintf(h, fmt, NULL, rpmHeaderFormats, &errstr);
 	if (msgstr == NULL) {
-	    rpmError(RPMERR_QFMT, _("can't query %s: %s\n"), tn, errstr);
+	    rpmlog(RPMLOG_ERR, _("can't query %s: %s\n"), tn, errstr);
 	    return;
 	}
 
-/*@-boundswrite@*/
 	switch(t->t_tag) {
 	case RPMTAG_SUMMARY:
 	case RPMTAG_GROUP:
@@ -718,12 +716,9 @@ printNewSpecfile(Spec spec)
 		sl->sl_lines[t->t_startx + 2] = xstrdup("\n\n");
 	    /*@switchbreak@*/ break;
 	}
-/*@=boundswrite@*/
     }
-    /*@=branchstate@*/
     msgstr = _free(msgstr);
 
-/*@-boundsread@*/
     for (i = 0; i < sl->sl_nlines; i++) {
 	const char * s = sl->sl_lines[i];
 	if (s == NULL)
@@ -732,7 +727,6 @@ printNewSpecfile(Spec spec)
 	if (strchr(s, '\n') == NULL && s[strlen(s)-1] != '\n')
 	    printf("\n");
     }
-/*@=boundsread@*/
 }
 
 /**
@@ -758,19 +752,17 @@ static int _specQuery(rpmts ts, QVA_t qva, const char *specName,
     int verify = 0;
     int xx;
 
-/*@-branchstate@*/
     /*@-mods@*/ /* FIX: make spec abstract */
     if (parseSpec(ts, specName, "/", recursing, passPhrase,
 		cookie, anyarch, 1, verify)
       || (spec = rpmtsSetSpec(ts, NULL)) == NULL)
     {
-	rpmError(RPMERR_QUERY,
+	rpmlog(RPMLOG_ERR,
 	    _("query of specfile %s failed, can't parse\n"), 
 	    specName);
 	goto exit;
     }
     /*@=mods@*/
-/*@=branchstate@*/
 
     res = 0;
     if (specedit) {
@@ -819,7 +811,7 @@ int rpmspecQuery(rpmts ts, QVA_t qva, const char * arg)
 	goto exit;
     }
 
-    rpmMessage(RPMMESS_DEBUG, 
+    rpmlog(RPMLOG_DEBUG, 
 	_("Query specfile for platform(s): %s\n"), targets);
     for (t = targets; *t != '\0'; t = te) {
 	/* Parse out next target platform. */ 
@@ -832,7 +824,7 @@ int rpmspecQuery(rpmts ts, QVA_t qva, const char * arg)
 	    te++;
 
 	/* Query spec for this target platform. */
-	rpmMessage(RPMMESS_DEBUG, _("    target platform: %s\n"), target);
+	rpmlog(RPMLOG_DEBUG, _("    target platform: %s\n"), target);
 	/* Read in configuration for target. */
 	if (t != targets) {
 	    rpmFreeMacros(NULL);
