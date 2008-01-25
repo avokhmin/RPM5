@@ -1,4 +1,3 @@
-/*@-boundsread@*/
 /*@-sysunrecog -noeffectuncon -nullpass -sizeoftype -unrecog -usereleased @*/
 /*@-compdef -compmempass -dependenttrans -retalias @*/
 /*-
@@ -63,7 +62,27 @@ static char sccsid[] = "@(#)fts.c	8.6 (Berkeley) 8/14/94";
 #   define __fxstat64(_stat_ver, _fd, _sbp)	fstat((_fd), (_sbp))
 #endif
 #if defined(__APPLE__)
+#   include <sys/stat.h>
 #   define __errno_location()	(__error())
+#ifndef __DARWIN_STRUCT_STAT64
+#   define stat64		stat
+#endif
+#   define _STAT_VER		0
+#ifndef __DARWIN_STRUCT_STAT64
+#   define __fxstat64(_stat_ver, _fd, _sbp)	fstat((_fd), (_sbp))
+#else
+#   define __fxstat64(_stat_ver, _fd, _sbp)	fstat64((_fd), (_sbp))
+#endif
+#endif
+#if defined(__CYGWIN__) || defined(__MINGW32__)
+#   include <sys/stat.h>
+#if defined(__CYGWIN__)
+#   define __errno_location()	(__errno())
+#elif !defined(_UWIN)
+#   define __errno_location()	(_errno())
+#else
+#   define __errno_location()	(&errno)
+#endif
 #   define stat64		stat
 #   define _STAT_VER		0
 #   define __fxstat64(_stat_ver, _fd, _sbp)	fstat((_fd), (_sbp))
@@ -95,6 +114,14 @@ static char sccsid[] = "@(#)fts.c	8.6 (Berkeley) 8/14/94";
 #   define __fxstat64(_stat_ver, _fd, _sbp)     fstat((_fd), (_sbp))
 #   define _D_EXACT_NAMLEN(d) ((d)->d_namlen)
 #endif
+#if defined(RPM_OS_QNX)
+#   define __errno_location()  (&errno)
+#   define stat64              stat
+#   define _STAT_VER           0
+#   define dirfd(dirp)         -1
+#   define __fxstat64(_stat_ver, _fd, _sbp)    fstat((_fd), (_sbp))
+#endif
+
 #if !defined(_D_EXACT_NAMLEN)
 #   define _D_EXACT_NAMLEN(d) (strlen((d)->d_name))
 #endif
@@ -180,9 +207,7 @@ Fts_open(char * const * argv, int options,
 
 	/* Options check. */
 	if (options & ~FTS_OPTIONMASK) {
-/*@-boundswrite@*/
 		__set_errno (EINVAL);
-/*@=boundswrite@*/
 		return (NULL);
 	}
 
@@ -216,21 +241,17 @@ Fts_open(char * const * argv, int options,
 		goto mem1;
 
 	/* Allocate/initialize root's parent. */
-/*@-branchstate@*/
 	if (*argv != NULL) {
 		if ((parent = fts_alloc(sp, "", 0)) == NULL)
 			goto mem2;
 		parent->fts_level = FTS_ROOTPARENTLEVEL;
 	}
-/*@=branchstate@*/
 
 	/* Allocate/initialize root(s). */
 	for (root = NULL, nitems = 0; *argv != NULL; ++argv, ++nitems) {
 		/* Don't allow zero-length paths. */
 		if ((len = strlen(*argv)) == 0) {
-/*@-boundswrite@*/
 			__set_errno (ENOENT);
-/*@=boundswrite@*/
 			goto mem3;
 		}
 
@@ -238,9 +259,7 @@ Fts_open(char * const * argv, int options,
 		switch (urlIsURL(*argv)) {
 		case URL_IS_DASH:
 		case URL_IS_HKP:
-/*@-boundswrite@*/
 			__set_errno (ENOENT);
-/*@=boundswrite@*/
 			goto mem3;
 			/*@notreached@*/ /*@switchbreak@*/ break;
 		case URL_IS_HTTPS:
@@ -253,7 +272,7 @@ Fts_open(char * const * argv, int options,
 			/*@switchbreak@*/ break;
 		}
 
-		p = fts_alloc(sp, *argv, len);
+		p = fts_alloc(sp, *argv, (int)len);
 		if (p == NULL)
 			goto mem3;
 		p->fts_level = FTS_ROOTLEVEL;
@@ -283,10 +302,8 @@ Fts_open(char * const * argv, int options,
 			}
 		}
 	}
-	/*@-branchstate@*/
 	if (compar && nitems > 1)
 		root = fts_sort(sp, root, nitems);
-	/*@=branchstate@*/
 
 	/*
 	 * Allocate a dummy pointer and make fts_read think that we've just
@@ -321,7 +338,7 @@ mem1:	free(sp);
 static void
 fts_load(FTS * sp, FTSENT * p)
 {
-	register int len;
+	register size_t len;
 	register char *cp;
 
 	/*
@@ -332,16 +349,14 @@ fts_load(FTS * sp, FTSENT * p)
 	 * known that the path will fit.
 	 */
 	len = p->fts_pathlen = p->fts_namelen;
-/*@-boundswrite@*/
 	memmove(sp->fts_path, p->fts_name, len + 1);
 	if ((cp = strrchr(p->fts_name, '/')) && (cp != p->fts_name || cp[1])) {
 		len = strlen(++cp);
 		memmove(p->fts_name, cp, len + 1);
-		p->fts_namelen = len;
+		p->fts_namelen = (u_short)len;
 	}
 	p->fts_accpath = p->fts_path = sp->fts_path;
 	sp->fts_dev = p->fts_dev;
-/*@=boundswrite@*/
 }
 
 int
@@ -358,7 +373,6 @@ Fts_close(FTS * sp)
 	 * points to the root list, so we step through to the end of the root
 	 * list which has a valid parent pointer.
 	 */
-	/*@-branchstate@*/
 	if (sp->fts_cur) {
 		for (p = sp->fts_cur; p->fts_level >= FTS_ROOTLEVEL;) {
 			freep = p;
@@ -367,7 +381,6 @@ Fts_close(FTS * sp)
 		}
 		free(p);
 	}
-	/*@=branchstate@*/
 
 	/* Free up child linked list, sort array, path buffer. */
 	if (sp->fts_child)
@@ -385,9 +398,7 @@ Fts_close(FTS * sp)
 		if (saved_errno != 0) {
 			/* Free up the stream pointer. */
 			free(sp);
-/*@-boundswrite@*/
 			__set_errno (saved_errno);
-/*@=boundswrite@*/
 			return (-1);
 		}
 	}
@@ -505,7 +516,6 @@ Fts_read(FTS * sp)
 	}
 
 	/* Move to the next node on this level. */
-/*@-boundswrite@*/
 next:	tmp = p;
 	if ((p = p->fts_link) != NULL) {
 		sp->fts_cur = p;
@@ -531,7 +541,6 @@ next:	tmp = p;
 		 */
 		if (p->fts_instr == FTS_SKIP)
 			goto next;
-		/*@-branchstate@*/
 		if (p->fts_instr == FTS_FOLLOW) {
 			p->fts_info = fts_stat(sp, p, 1);
 			if (p->fts_info == FTS_D && !ISSET(FTS_NOCHDIR)) {
@@ -544,7 +553,6 @@ next:	tmp = p;
 			}
 			p->fts_instr = FTS_NOINSTR;
 		}
-		/*@=branchstate@*/
 
 name:		t = sp->fts_path + NAPPEND(p->fts_parent);
 		*t++ = '/';
@@ -569,7 +577,6 @@ name:		t = sp->fts_path + NAPPEND(p->fts_parent);
 
 	/* NUL terminate the pathname. */
 	sp->fts_path[p->fts_pathlen] = '\0';
-/*@=boundswrite@*/
 
 	/*
 	 * Return to the parent directory.  If at a root node or came through
@@ -585,9 +592,7 @@ name:		t = sp->fts_path + NAPPEND(p->fts_parent);
 		if (FCHDIR(sp, p->fts_symfd)) {
 			saved_errno = errno;
 			(void)__close(p->fts_symfd);
-/*@-boundswrite@*/
 			__set_errno (saved_errno);
-/*@=boundswrite@*/
 			SET(FTS_STOP);
 			return (NULL);
 		}
@@ -612,9 +617,7 @@ Fts_set(/*@unused@*/ FTS * sp, FTSENT * p, int instr)
 {
 	if (instr != 0 && instr != FTS_AGAIN && instr != FTS_FOLLOW &&
 	    instr != FTS_NOINSTR && instr != FTS_SKIP) {
-/*@-boundswrite@*/
 		__set_errno (EINVAL);
-/*@=boundswrite@*/
 		return (1);
 	}
 	p->fts_instr = instr;
@@ -628,9 +631,7 @@ Fts_children(FTS * sp, int instr)
 	int fd;
 
 	if (instr != 0 && instr != FTS_NAMEONLY) {
-/*@-boundswrite@*/
 		__set_errno (EINVAL);
-/*@=boundswrite@*/
 		return (NULL);
 	}
 
@@ -641,9 +642,7 @@ Fts_children(FTS * sp, int instr)
 	 * Errno set to 0 so user can distinguish empty directory from
 	 * an error.
 	 */
-/*@-boundswrite@*/
 	__set_errno (0);
-/*@=boundswrite@*/
 
 	/* Fatal errors stop here. */
 	if (ISSET(FTS_STOP))
@@ -807,9 +806,7 @@ fts_build(FTS * sp, int type)
 	len = NAPPEND(cur);
 	if (ISSET(FTS_NOCHDIR)) {
 		cp = sp->fts_path + len;
-/*@-boundswrite@*/
 		*cp++ = '/';
-/*@=boundswrite@*/
 	} else {
 		/* GCC, you're too verbose. */
 		cp = NULL;
@@ -873,7 +870,7 @@ mem1:				saved_errno = errno;
 		}
 		p->fts_level = level;
 		p->fts_parent = sp->fts_cur;
-		p->fts_pathlen = len + _D_EXACT_NAMLEN (dp);
+		p->fts_pathlen = (u_short)(len + _D_EXACT_NAMLEN (dp));
 
 #if defined FTS_WHITEOUT && 0
 		if (dp->d_type == DT_WHT)
@@ -947,10 +944,8 @@ mem1:				saved_errno = errno;
 	if (ISSET(FTS_NOCHDIR)) {
 		if (len == sp->fts_pathlen || nitems == 0)
 			--cp;
-/*@-boundswrite@*/
 		if (cp != NULL)	/* XXX can't happen */
 			*cp = '\0';
-/*@=boundswrite@*/
 	}
 
 	/*
@@ -1016,9 +1011,7 @@ fts_stat(FTS * sp, FTSENT * p, int follow)
 		if ((*sp->fts_stat) (p->fts_accpath, sbp)) {
 			saved_errno = errno;
 			if (!(*sp->fts_lstat) (p->fts_accpath, sbp)) {
-/*@-boundswrite@*/
 				__set_errno (0);
-/*@=boundswrite@*/
 				return (FTS_SLNONE);
 			}
 			p->fts_errno = saved_errno;
@@ -1026,9 +1019,7 @@ fts_stat(FTS * sp, FTSENT * p, int follow)
 		}
 	} else if ((*sp->fts_lstat) (p->fts_accpath, sbp)) {
 		p->fts_errno = errno;
-/*@-boundswrite@*/
 err:		memset(sbp, 0, sizeof(*sbp));
-/*@=boundswrite@*/
 		return (FTS_NS);
 	}
 
@@ -1094,7 +1085,6 @@ fts_sort(FTS * sp, FTSENT * head, int nitems)
 		}
 		sp->fts_array = a;
 	}
-/*@-boundswrite@*/
 	for (ap = sp->fts_array, p = head; p != NULL; p = p->fts_link)
 		*ap++ = p;
 	qsort((void *)sp->fts_array, nitems, sizeof(*sp->fts_array),
@@ -1102,7 +1092,6 @@ fts_sort(FTS * sp, FTSENT * head, int nitems)
 	for (head = *(ap = sp->fts_array); --nitems; ++ap)
 		ap[0]->fts_link = ap[1];
 	ap[0]->fts_link = NULL;
-/*@=boundswrite@*/
 	return (head);
 }
 
@@ -1127,10 +1116,8 @@ fts_alloc(FTS * sp, const char * name, int namelen)
 		return (NULL);
 
 	/* Copy the name and guarantee NUL termination. */
-/*@-boundswrite@*/
 	memmove(p->fts_name, name, namelen);
 	p->fts_name[namelen] = '\0';
-/*@=boundswrite@*/
 
 	if (!ISSET(FTS_NOSTAT))
 		p->fts_statp = (struct stat *)ALIGN(p->fts_name + namelen + 2);
@@ -1150,12 +1137,10 @@ fts_lfree(FTSENT * head)
 	register FTSENT *p;
 
 	/* Free a linked list of structures. */
-	/*@-branchstate@*/
 	while ((p = head)) {
 		head = head->fts_link;
 		free(p);
 	}
-	/*@=branchstate@*/
 }
 
 /*
@@ -1179,9 +1164,7 @@ fts_palloc(FTS * sp, size_t more)
 		if (sp->fts_path)
 			free(sp->fts_path);
 		sp->fts_path = NULL;
-/*@-boundswrite@*/
 		__set_errno (ENAMETOOLONG);
-/*@=boundswrite@*/
 		return (1);
 	}
 	p = realloc(sp->fts_path, sp->fts_pathlen);
@@ -1254,9 +1237,7 @@ fts_safe_changedir(FTS * sp, FTSENT * p, int fd, const char * path)
 		goto bail;
 	}
 	if (p->fts_dev != sb.st_dev || p->fts_ino != sb.st_ino) {
-/*@-boundswrite@*/
 		__set_errno (ENOENT);		/* disinformation */
-/*@=boundswrite@*/
 		ret = -1;
 		goto bail;
 	}
@@ -1265,11 +1246,8 @@ bail:
 	oerrno = errno;
 	if (fd < 0)
 		(void)__close(newfd);
-/*@-boundswrite@*/
 	__set_errno (oerrno);
-/*@=boundswrite@*/
 	return (ret);
 }
 /*@=compdef =compmempass =dependenttrans =retalias @*/
 /*@=sysunrecog =noeffectuncon =nullpass =sizeoftype =unrecog =usereleased @*/
-/*@=boundsread@*/
