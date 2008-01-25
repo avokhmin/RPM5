@@ -10,6 +10,12 @@
 #endif
 
 #include <sys/types.h>
+#if defined(HAVE_STDINT_H)
+#include <stdint.h>
+#endif
+#if defined(HAVE_INTTYPES_H)
+#include <inttypes.h>
+#endif
 
 #if defined(__LCLINT__)
 /*@-redef@*/
@@ -719,24 +725,19 @@ static inline const char *rcsid(const char *p) { \
 #include <search.h>
 #endif
 
-/**
- * Phase out RPMv3 header+payload signatures.
- */
-#if 0
-#define	SUPPORT_RPMV3_BROKEN	1
-#define SUPPORT_RPMV3_SIGN_RSA	1
-#define SUPPORT_RPMV3_SIGN_DSA	1
+#if defined(HAVE_PTHREAD_H) && !defined(__LCLINT__)
+#include <pthread.h>
 #endif
-#define SUPPORT_RPMV3_VERIFY_RSA	1
-#define SUPPORT_RPMV3_VERIFY_DSA	1
-
-#define	SUPPORT_RPMLEAD		0	/* XXX default is add lead. */
 
 /**
- * Turn off pgp/pgp5 signing (hasn't been looked at seriously for years).
+ * Mark --initdb and --verifydb for destruction.
  */
-#if 0
-#define	SUPPORT_PGP_SIGNING		1
-#endif
+#define	SUPPORT_INITDB		1
+#define	SUPPORT_VERIFYDB	1
+
+/**
+ * Use the tag data type compiled into rpm, not the type from the header.
+ */
+#undef SUPPORT_IMPLICIT_TAG_DATA_TYPES	/* XXX postpone to rpm-5.1 */
 
 #endif	/* H_SYSTEM */

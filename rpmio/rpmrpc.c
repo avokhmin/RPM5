@@ -4,10 +4,6 @@
 
 #include "system.h"
 
-#if defined(HAVE_PTHREAD_H) && !defined(__LCLINT__)
-#include <pthread.h>
-#endif
-
 #include "rpmio_internal.h"
 #include "rpmmacro.h"
 
@@ -164,6 +160,7 @@ int Rmdir (const char * path)
 /*@unchecked@*/
 const char * _chroot_prefix = NULL;
 
+/*@-mods@*/	/* XXX hide rpmGlobalMacroContext mods for now. */
 int Chroot(const char * path)
 {
     const char * lpath;
@@ -188,7 +185,9 @@ fprintf(stderr, "*** Chroot(%s)\n", path);
 	/*@notreached@*/ break;
     }
 
+/*@-dependenttrans -modobserver -observertrans @*/
     _chroot_prefix = _free(_chroot_prefix);
+/*@=dependenttrans =modobserver =observertrans @*/
     if (strcmp(path, "."))
 	_chroot_prefix = rpmGetPath(path, NULL);
 
@@ -196,14 +195,16 @@ fprintf(stderr, "*** Chroot(%s)\n", path);
     return chroot(path);
 /*@=superuser@*/
 }
+/*@=mods@*/
 
 int Open(const char * path, int flags, mode_t mode)
 {
     const char * lpath;
     int ut = urlPath(path, &lpath);
+    int fdno;
 
 if (_rpmio_debug)
-fprintf(stderr, "*** Open(%s, 0x%x, 0%o)\n", path, flags, mode);
+fprintf(stderr, "*** Open(%s, 0x%x, 0%o)\n", path, flags, (unsigned)mode);
     switch (ut) {
     case URL_IS_PATH:
 	path = lpath;
@@ -234,7 +235,14 @@ fprintf(stderr, "*** Open(%s, 0x%x, 0%o)\n", path, flags, mode);
     if (mode == 0)
 	mode = 0644;
 #endif
-    return open(path, flags, mode);
+    fdno = open(path, flags, mode);
+    if (fdno >= 0) {
+	if (fcntl(fdno, F_SETFD, FD_CLOEXEC) < 0) {
+	    (void) close(fdno);
+	    fdno = -1;
+	}
+    }
+    return fdno;
 }
 
 /* XXX rpmdb.c: analogue to rename(2). */
@@ -393,7 +401,6 @@ static char *columns [MAXCOLS];	/* Points to the string in column n */
 /*@unchecked@*/
 static int   column_ptr [MAXCOLS]; /* Index from 0 to the starting positions of the columns */
 
-/*@-boundswrite@*/
 static int
 vfs_split_text (char *p)
 	/*@globals columns, column_ptr @*/
@@ -405,7 +412,7 @@ vfs_split_text (char *p)
 
     for (numcols = 0; *p && numcols < MAXCOLS; numcols++){
 	while (*p == ' ' || *p == '\r' || *p == '\n'){
-	    *p = 0;
+	    *p = '\0';
 	    p++;
 	}
 	columns [numcols] = p;
@@ -415,9 +422,7 @@ vfs_split_text (char *p)
     }
     return numcols;
 }
-/*@=boundswrite@*/
 
-/*@-boundsread@*/
 static int
 is_num (int idx)
 	/*@*/
@@ -426,9 +431,7 @@ is_num (int idx)
 	return 0;
     return 1;
 }
-/*@=boundsread@*/
 
-/*@-boundsread@*/
 static int
 is_dos_date(/*@null@*/ const char *str)
 	/*@*/
@@ -438,7 +441,6 @@ is_dos_date(/*@null@*/ const char *str)
 	return 1;
     return 0;
 }
-/*@=boundsread@*/
 
 static int
 is_week (/*@null@*/ const char * str, /*@out@*/ struct tm * tim)
@@ -530,17 +532,17 @@ vfs_parse_filetype (char c)
 	/*@*/
 {
     switch (c) {
-        case 'd': return S_IFDIR;
-        case 'b': return S_IFBLK;
-        case 'c': return S_IFCHR;
-        case 'l': return S_IFLNK;
+        case 'd': return (int)S_IFDIR;
+        case 'b': return (int)S_IFBLK;
+        case 'c': return (int)S_IFCHR;
+        case 'l': return (int)S_IFLNK;
         case 's':
 #ifdef IS_IFSOCK /* And if not, we fall through to IFIFO, which is pretty close */
-	          return S_IFSOCK;
+	          return (int)S_IFSOCK;
 #endif
-        case 'p': return S_IFIFO;
+        case 'p': return (int)S_IFIFO;
         case 'm': case 'n':		/* Don't know what these are :-) */
-        case '-': case '?': return S_IFREG;
+        case '-': case '?': return (int)S_IFREG;
         default: return -1;
     }
 }
@@ -604,7 +606,6 @@ static int vfs_parse_filemode (const char *p)
     return res;
 }
 
-/*@-boundswrite@*/
 static int vfs_parse_filedate(int idx, /*@out@*/ time_t *t)
 	/*@modifies *t @*/
 {	/* This thing parses from idx in columns[] array */
@@ -712,9 +713,7 @@ static int vfs_parse_filedate(int idx, /*@out@*/ time_t *t)
         *t = 0;
     return idx;
 }
-/*@=boundswrite@*/
 
-/*@-boundswrite@*/
 static int
 vfs_parse_ls_lga (char * p, /*@out@*/ struct stat * st,
 		/*@out@*/ const char ** filename,
@@ -851,8 +850,9 @@ vfs_parse_ls_lga (char * p, /*@out@*/ struct stat * st,
 
     if (((S_ISLNK (st->st_mode) ||
         (num_cols == idx + 3 && st->st_nlink > 1))) /* Maybe a hardlink? (in extfs) */
-        && idx2){
-	int tlen;
+        && idx2)
+    {
+	size_t tlen;
 	char *t;
 
 	if (filename){
@@ -869,9 +869,9 @@ vfs_parse_ls_lga (char * p, /*@out@*/ struct stat * st,
 	    t = g_strdup (p_copy + column_ptr [idx2+1]);
 	    tlen = strlen (t);
 	    if (t [tlen-1] == '\r' || t [tlen-1] == '\n')
-		t [tlen-1] = 0;
+		t [tlen-1] = '\0';
 	    if (t [tlen-2] == '\r' || t [tlen-2] == '\n')
-		t [tlen-2] = 0;
+		t [tlen-2] = '\0';
 		
 	    *linkname = t;
 	}
@@ -883,16 +883,16 @@ vfs_parse_ls_lga (char * p, /*@out@*/ struct stat * st,
 	    /*
 	    *filename = g_strdup (columns [idx++]);
 	    */
-	    int tlen;
+	    size_t tlen;
 	    char *t;
 
 	    t = g_strdup (p_copy + column_ptr [idx]); idx++;
 	    tlen = strlen (t);
 	    /* g_strchomp(); */
 	    if (t [tlen-1] == '\r' || t [tlen-1] == '\n')
-	        t [tlen-1] = 0;
+	        t [tlen-1] = '\0';
 	    if (t [tlen-2] == '\r' || t [tlen-2] == '\n')
-		t [tlen-2] = 0;
+		t [tlen-2] = '\0';
 
 	    *filename = t;
 	}
@@ -920,7 +920,6 @@ error:
 	g_free (p_copy);
     return 0;
 }
-/*@=boundswrite@*/
 
 typedef enum {
 	DO_FTP_STAT	= 1,
@@ -942,7 +941,6 @@ static /*@only@*/ char * ftpBuf = NULL;
 	
 #define alloca_strdup(_s)       strcpy(alloca(strlen(_s)+1), (_s))
 
-/*@-boundswrite@*/
 static int ftpNLST(const char * url, ftpSysCall_t ftpSysCall,
 		/*@out@*/ /*@null@*/ struct stat * st,
 		/*@out@*/ /*@null@*/ char * rlbuf, size_t rlbufsiz)
@@ -959,7 +957,7 @@ static int ftpNLST(const char * url, ftpSysCall_t ftpSysCall,
     char * se;
     const char * urldn;
     char * bn = NULL;
-    int nbn = 0;
+    size_t nbn = 0;
     urlinfo u;
     int rc;
 
@@ -978,14 +976,12 @@ static int ftpNLST(const char * url, ftpSysCall_t ftpSysCall,
 	break;
     default:
 	urldn = alloca_strdup(url);
-	/*@-branchstate@*/
 	if ((bn = strrchr(urldn, '/')) == NULL)
 	    return -2;
 	else if (bn == path)
 	    bn = ".";
 	else
 	    *bn++ = '\0';
-	/*@=branchstate@*/
 	nbn = strlen(bn);
 
 	rc = ftpChdir(urldn);		/* XXX don't care about CWD */
@@ -999,7 +995,7 @@ static int ftpNLST(const char * url, ftpSysCall_t ftpSysCall,
 	/* XXX possibly should do "NLST -lais" to get st_ino/st_blocks also */
 	u->openError = ftpReq(fd, "NLST", "-la");
 
-	if (bn == NULL || nbn <= 0) {
+	if (bn == NULL || nbn == 0) {
 	    rc = -2;
 	    goto exit;
 	}
@@ -1115,10 +1111,11 @@ static int ftpNLST(const char * url, ftpSysCall_t ftpSysCall,
 	    rc = -1;
 	} else {
 	    rc = oe - o;
-	    if (rc > rlbufsiz)
-		rc = rlbufsiz;
-	    memcpy(rlbuf, o, rc);
-	    if (rc < rlbufsiz)
+assert(rc >= 0);
+	    if (rc > (int)rlbufsiz)
+		rc = (int)rlbufsiz;
+	    memcpy(rlbuf, o, (size_t)rc);
+	    if (rc < (int)rlbufsiz)
 		rlbuf[rc] = '\0';
 	}
 	break;
@@ -1134,7 +1131,6 @@ exit:
     (void) ufdClose(fd);
     return rc;
 }
-/*@=boundswrite@*/
 
 static const char * statstr(const struct stat * st,
 		/*@returned@*/ /*@out@*/ char * buf)
@@ -1199,7 +1195,6 @@ fprintf(stderr, "*** ftpReadlink(%s) rc %d\n", path, rc);
     return rc;
 }
 
-/*@-boundswrite@*/
 /*@null@*/
 static DIR * ftpOpendir(const char * path)
 	/*@globals h_errno, fileSystem, internalState @*/
@@ -1230,7 +1225,7 @@ fprintf(stderr, "*** ftpOpendir(%s)\n", path);
     ac = 2;
     sb = NULL;
     s = se = ftpBuf;
-    while ((c = *se) != '\0') {
+    while ((c = (int) *se) != (int) '\0') {
 	se++;
 	switch (c) {
 	case '/':
@@ -1279,12 +1274,12 @@ fprintf(stderr, "*** ftpOpendir(%s)\n", path);
 
     ac = 0;
     /*@-dependenttrans -unrecog@*/
-    dt[ac] = DT_DIR;	av[ac++] = t;	t = stpcpy(t, ".");	t++;
-    dt[ac] = DT_DIR;	av[ac++] = t;	t = stpcpy(t, "..");	t++;
+    dt[ac] = (unsigned char)DT_DIR; av[ac++] = t; t = stpcpy(t, ".");	t++;
+    dt[ac] = (unsigned char)DT_DIR; av[ac++] = t; t = stpcpy(t, "..");	t++;
     /*@=dependenttrans =unrecog@*/
     sb = NULL;
     s = se = ftpBuf;
-    while ((c = *se) != '\0') {
+    while ((c = (int) *se) != (int) '\0') {
 	se++;
 	switch (c) {
 	case '/':
@@ -1298,28 +1293,28 @@ fprintf(stderr, "*** ftpOpendir(%s)\n", path);
 		/*@-unrecog@*/
 		switch(*s) {
 		case 'p':
-		    dt[ac] = DT_FIFO;
+		    dt[ac] = (unsigned char) DT_FIFO;
 		    /*@innerbreak@*/ break;
 		case 'c':
-		    dt[ac] = DT_CHR;
+		    dt[ac] = (unsigned char) DT_CHR;
 		    /*@innerbreak@*/ break;
 		case 'd':
-		    dt[ac] = DT_DIR;
+		    dt[ac] = (unsigned char) DT_DIR;
 		    /*@innerbreak@*/ break;
 		case 'b':
-		    dt[ac] = DT_BLK;
+		    dt[ac] = (unsigned char) DT_BLK;
 		    /*@innerbreak@*/ break;
 		case '-':
-		    dt[ac] = DT_REG;
+		    dt[ac] = (unsigned char) DT_REG;
 		    /*@innerbreak@*/ break;
 		case 'l':
-		    dt[ac] = DT_LNK;
+		    dt[ac] = (unsigned char) DT_LNK;
 		    /*@innerbreak@*/ break;
 		case 's':
-		    dt[ac] = DT_SOCK;
+		    dt[ac] = (unsigned char) DT_SOCK;
 		    /*@innerbreak@*/ break;
 		default:
-		    dt[ac] = DT_UNKNOWN;
+		    dt[ac] = (unsigned char) DT_UNKNOWN;
 		    /*@innerbreak@*/ break;
 		}
 		/*@=unrecog@*/
@@ -1343,7 +1338,6 @@ fprintf(stderr, "*** ftpOpendir(%s)\n", path);
     return (DIR *) avdir;
 /*@=kepttrans@*/
 }
-/*@=boundswrite@*/
 
 int Stat(const char * path, struct stat * st)
 {
@@ -1740,6 +1734,7 @@ int Glob(const char *pattern, int flags,
 {
     const char * lpath;
     int ut = urlPath(pattern, &lpath);
+    const char *home = getenv("HOME");
 
 /*@-castfcnptr@*/
 if (_rpmio_debug)
@@ -1763,6 +1758,10 @@ fprintf(stderr, "*** Glob(%s,0x%x,%p,%p)\n", pattern, (unsigned)flags, (void *)e
 	pattern = lpath;
 	/*@fallthrough@*/
     case URL_IS_UNKNOWN:
+	if (home && home[0])
+	    flags |= GLOB_TILDE;
+	else
+	    flags &= ~GLOB_TILDE;
 	break;
     case URL_IS_DASH:
     case URL_IS_HKP:

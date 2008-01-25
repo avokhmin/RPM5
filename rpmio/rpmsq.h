@@ -30,6 +30,7 @@ typedef void (*rpmsqAction_t) (int signum, void * info, void * context)
 extern int _rpmsq_debug;
 /*@=redecl@*/
 
+#if defined(_RPMSQ_INTERNAL)
 /**
  * SIGCHLD queue element.
  */
@@ -45,11 +46,8 @@ struct rpmsqElem {
     int pipes[2];		/*!< Parent/child interlock. */
 /*@shared@*/
     void * id;			/*!< Blocking thread id (pthread_t). */
-#if defined(HAVE_PTHREAD_H)
-    pthread_mutex_t mutex;	/*!< Signal delivery to thread condvar. */
-    pthread_cond_t cond;
-#endif
 };
+#endif
 
 /*@-exportlocal@*/
 /*@unchecked@*/
@@ -94,8 +92,9 @@ int rpmsqRemove(/*@null@*/ void * elem)
  */
 /*@-exportlocal@*/
 void rpmsqAction(int signum, void * info, void * context)
-	/*@globals rpmsqCaught, rpmsqQueue, errno, fileSystem @*/
-	/*@modifies rpmsqCaught, rpmsqQueue, errno, fileSystem @*/;
+	/*@globals rpmsqCaught, rpmsqQueue, errno, fileSystem, internalState @*/
+	/*@modifies rpmsqCaught, rpmsqQueue, errno,
+		fileSystem, internalState @*/;
 /*@=exportlocal@*/
 
 /**
