@@ -22,9 +22,9 @@ extern void (*sigset(int sig, void (*disp)(int)))(int)
 	/*@globals errno, systemState @*/;
 
 struct qelem;
-extern	void insque(struct qelem * __elem, struct qelem * __prev)
+extern	void __insque(struct qelem * __elem, struct qelem * __prev)
 	/*@modifies  __elem, __prev @*/;
-extern	void remque(struct qelem * __elem)
+extern	void __remque(struct qelem * __elem)
 	/*@modifies  __elem @*/;
 
 extern pthread_t pthread_self(void)
@@ -118,7 +118,9 @@ extern int pthread_cond_signal(pthread_cond_t *cond)
 #endif
 
 #include <signal.h>
+#if !defined(__QNX__)
 #include <sys/signal.h>
+#endif
 #include <sys/wait.h>
 #include <search.h>
 
@@ -164,14 +166,40 @@ static int __RPM_sigpause(int sig)
 #define sigpause(sig) __RPM_sigpause(sig)
 #endif
 
+/* portability fallback for insque(3)/remque(3) */
+#if defined(__CYGWIN__) || defined(__MINGW32__) || defined(__QNX__)
+struct qelem {
+  struct qelem *q_forw;
+  struct qelem *q_back;
+};
+
+static void __insque(struct qelem * elem, struct qelem * pred)
+{
+  elem -> q_forw = pred -> q_forw;
+  pred -> q_forw -> q_back = elem;
+  elem -> q_back = pred;
+  pred -> q_forw = elem;
+}
+#define	insque(_e, _p)	__insque((_e), (_p))
+
+static	void __remque(struct qelem * elem)
+{
+  elem -> q_forw -> q_back = elem -> q_back;
+  elem -> q_back -> q_forw = elem -> q_forw;
+}
+#define	remque(_e)	__remque(_e)
+#endif
+
 #if defined(HAVE_PTHREAD_H)
 
 #include <pthread.h>
 
+# if !defined(__QNX__)
 /* XXX suggested in bugzilla #159024 */
 #if PTHREAD_MUTEX_DEFAULT != PTHREAD_MUTEX_NORMAL
   #error RPM expects PTHREAD_MUTEX_DEFAULT == PTHREAD_MUTEX_NORMAL
 #endif
+# endif
 
 #ifndef PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP
 /*@unchecked@*/
@@ -204,7 +232,15 @@ static pthread_mutex_t rpmsigTbl_lock = PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP;
 
 #define	SAME_THREAD(_a, _b)	pthread_equal(((pthread_t)_a), ((pthread_t)_b))
 
-#define	ME()	((void *)pthread_self())
+#define ME() __tid2vp(pthread_self())
+/*@shared@*/
+static void *__tid2vp(pthread_t tid)
+	/*@*/
+{
+    union { pthread_t tid; /*@shared@*/ void *vp; } u;
+    u.tid = tid;
+    return u.vp;
+}
 
 #else
 
@@ -218,10 +254,19 @@ static pthread_mutex_t rpmsigTbl_lock = PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP;
 
 #define	SAME_THREAD(_a, _b)	(42)
 
-#define	ME()	(((void *)getpid()))
+#define ME() __pid2vp(getpid())
+/*@shared@*/
+static void *__pid2vp(pid_t pid)
+	/*@*/
+{
+    union { pid_t pid; /*@shared@*/ void *vp; } u;
+    u.pid = pid;
+    return u.vp;
+}
 
 #endif	/* HAVE_PTHREAD_H */
 
+#define	_RPMSQ_INTERNAL
 #include <rpmsq.h>
 
 #include "debug.h"
@@ -255,12 +300,12 @@ fprintf(stderr, "    Insert(%p): %p\n", ME(), sq);
 	    sq->status = 0;
 	   /* ==> Set to 1 to catch SIGCHLD, set to 0 to use waitpid(2).  */
 	    sq->reaper = 1;
-/*@-bounds@*/
 	    sq->pipes[0] = sq->pipes[1] = -1;
-/*@=bounds@*/
 
 	    sq->id = ME();
+/*@-noeffect@*/
 	    insque(elem, (prev != NULL ? prev : rpmsqQueue));
+/*@=noeffect@*/
 	    ret = sigrelse(SIGCHLD);
 	}
     }
@@ -280,13 +325,13 @@ fprintf(stderr, "    Remove(%p): %p\n", ME(), sq);
 #endif
 	ret = sighold (SIGCHLD);
 	if (ret == 0) {
+/*@-noeffect@*/
 	    remque(elem);
+/*@=noeffect@*/
 	    sq->id = NULL;
-/*@-bounds@*/
 	    if (sq->pipes[1] > 0)	ret = close(sq->pipes[1]);
 	    if (sq->pipes[0] > 0)	ret = close(sq->pipes[0]);
 	    sq->pipes[0] = sq->pipes[1] = -1;
-/*@=bounds@*/
 #ifdef	NOTYET	/* rpmpsmWait debugging message needs */
 	    sq->status = 0;
 	    sq->reaped = 0;
@@ -450,27 +495,23 @@ fprintf(stderr, "    Enable(%p): %p\n", ME(), sq);
     pid = fork();
     if (pid < (pid_t) 0) {		/* fork failed.  */
 	sq->child = (pid_t)-1;
-/*@-bounds@*/
 	xx = close(sq->pipes[0]);
 	xx = close(sq->pipes[1]);
 	sq->pipes[0] = sq->pipes[1] = -1;
-/*@=bounds@*/
 	goto out;
     } else if (pid == (pid_t) 0) {	/* Child. */
 	int yy;
 
 	/* Block to permit parent time to wait. */
-/*@-bounds@*/
 	xx = close(sq->pipes[1]);
 	if (sq->reaper)
-	    xx = read(sq->pipes[0], &yy, sizeof(yy));
+	    xx = (int)read(sq->pipes[0], &yy, sizeof(yy));
 	xx = close(sq->pipes[0]);
 	sq->pipes[0] = sq->pipes[1] = -1;
-/*@=bounds@*/
 
 #ifdef _RPMSQ_DEBUG
 if (_rpmsq_debug)
-fprintf(stderr, "     Child(%p): %p child %d\n", ME(), sq, getpid());
+fprintf(stderr, "     Child(%p): %p child %d\n", ME(), sq, (int)getpid());
 #endif
 
     } else {				/* Parent. */
@@ -479,7 +520,7 @@ fprintf(stderr, "     Child(%p): %p child %d\n", ME(), sq, getpid());
 
 #ifdef _RPMSQ_DEBUG
 if (_rpmsq_debug)
-fprintf(stderr, "    Parent(%p): %p child %d\n", ME(), sq, sq->child);
+fprintf(stderr, "    Parent(%p): %p child %d\n", ME(), sq, (int)sq->child);
 #endif
 
     }
@@ -508,12 +549,10 @@ assert(sq->reaper);
     ret = sighold(SIGCHLD);
 
     /* Start the child, linux often runs child before parent. */
-/*@-bounds@*/
     if (sq->pipes[0] >= 0)
 	xx = close(sq->pipes[0]);
     if (sq->pipes[1] >= 0)
 	xx = close(sq->pipes[1]);
-/*@=bounds@*/
 
     /* Re-initialize the pipe to receive SIGCHLD receipt confirmation. */
     xx = pipe(sq->pipes);
@@ -548,7 +587,7 @@ assert(sq->reaper);
 
 #ifdef _RPMSQ_DEBUG
 if (_rpmsq_debug)
-fprintf(stderr, "      Wake(%p): %p child %d reaper %d ret %d\n", ME(), sq, sq->child, sq->reaper, ret);
+fprintf(stderr, "      Wake(%p): %p child %d reaper %d ret %d\n", ME(), sq, (int)sq->child, sq->reaper, ret);
 #endif
 
     /* Remove processed SIGCHLD item from queue. */
@@ -569,7 +608,7 @@ pid_t rpmsqWait(rpmsq sq)
 
 #ifdef _RPMSQ_DEBUG
 if (_rpmsq_debug)
-fprintf(stderr, "      Wait(%p): %p child %d reaper %d\n", ME(), sq, sq->child, sq->reaper);
+fprintf(stderr, "      Wait(%p): %p child %d reaper %d\n", ME(), sq, (int)sq->child, sq->reaper);
 #endif
 
     if (sq->reaper) {
@@ -584,13 +623,13 @@ fprintf(stderr, "      Wait(%p): %p child %d reaper %d\n", ME(), sq, sq->child, 
 	sq->status = status;
 #ifdef _RPMSQ_DEBUG
 if (_rpmsq_debug)
-fprintf(stderr, "   Waitpid(%p): %p child %d reaped %d\n", ME(), sq, sq->child, sq->reaped);
+fprintf(stderr, "   Waitpid(%p): %p child %d reaped %d\n", ME(), sq, (int)sq->child, (int)sq->reaped);
 #endif
     }
 
 #ifdef _RPMSQ_DEBUG
 if (_rpmsq_debug)
-fprintf(stderr, "      Fini(%p): %p child %d status 0x%x\n", ME(), sq, sq->child, sq->status);
+fprintf(stderr, "      Fini(%p): %p child %d status 0x%x\n", ME(), sq, (int)sq->child, sq->status);
 #endif
 
     return sq->reaped;
@@ -702,7 +741,9 @@ rpmsqExecve (const char ** argv)
 	goto out;
     }
 
+/*@-sysunrecog@*/
     CLEANUP_HANDLER(sigchld_cancel, &pid, &oldtype);
+/*@=sysunrecog@*/
 
     pid = fork ();
     if (pid < (pid_t) 0) {		/* fork failed.  */
