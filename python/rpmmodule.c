@@ -5,13 +5,14 @@
 #include "system.h"
 
 #include <rpmio_internal.h>
-#include <rpmcli.h>	/* XXX for rpmCheckSig */
-#include <rpmdb.h>
 #include <rpmsq.h>
+#define	_RPMTAG_INTERNAL
+#include <rpmtag.h>
+#include <rpmdb.h>
+#include <rpmcli.h>	/* XXX for rpmCheckSig */
 
 #include "legacy.h"
 #include "misc.h"
-#include "header.h"
 
 #include "header-py.h"
 #include "rpmal-py.h"
@@ -19,9 +20,9 @@
 #include "rpmfd-py.h"
 #include "rpmfts-py.h"
 #include "rpmfi-py.h"
+#include "rpmmacro-py.h"
 #include "rpmmi-py.h"
 #include "rpmps-py.h"
-#include "rpmrc-py.h"
 #include "rpmte-py.h"
 #include "rpmts-py.h"
 #include "spec-py.h"
@@ -47,6 +48,22 @@ extern sigset_t rpmsqCaught;
 #if PY_VERSION_HEX < 0x02050000
 typedef int Py_ssize_t;
 #endif
+
+/**
+ *  */
+static PyObject * archScore(PyObject * self, PyObject * args, PyObject * kwds)
+{
+    char * arch;
+    int score;
+    char * kwlist[] = {"arch", NULL};
+
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "s", kwlist, &arch))
+	return NULL;
+
+    score = rpmPlatformScore(arch, NULL, 0);
+
+    return Py_BuildValue("i", score);
+}
 
 /**
  */
@@ -169,14 +186,17 @@ static PyMethodDef rpmModuleMethods[] = {
 "rpm.TransactionSet([rootDir, [db]]) -> ts\n\
 - Create a transaction set.\n" },
 
-#if Py_TPFLAGS_HAVE_ITER        /* XXX backport to python-1.5.2 */
-    { "newrc", (PyCFunction) rpmrc_Create, METH_VARARGS|METH_KEYWORDS,
+    { "addMacro", (PyCFunction) rpmmacro_AddMacro, METH_VARARGS|METH_KEYWORDS,
 	NULL },
-#endif
-    { "addMacro", (PyCFunction) rpmrc_AddMacro, METH_VARARGS|METH_KEYWORDS,
+    { "delMacro", (PyCFunction) rpmmacro_DelMacro, METH_VARARGS|METH_KEYWORDS,
 	NULL },
-    { "delMacro", (PyCFunction) rpmrc_DelMacro, METH_VARARGS|METH_KEYWORDS,
+    { "expandMacro", (PyCFunction)rpmmacro_ExpandMacro, METH_VARARGS|METH_KEYWORDS,
 	NULL },
+    { "getMacros", (PyCFunction) rpmmacro_GetMacros, METH_VARARGS|METH_KEYWORDS,
+	NULL },
+
+    { "archscore", (PyCFunction) archScore, METH_VARARGS|METH_KEYWORDS,
+        NULL },
 
     { "signalsCaught", (PyCFunction) signalsCaught, METH_O,
 	NULL },
@@ -185,8 +205,7 @@ static PyMethodDef rpmModuleMethods[] = {
 
     { "headerLoad", (PyCFunction) hdrLoad, METH_VARARGS|METH_KEYWORDS,
 	NULL },
-    { "mergeHeaderListFromFD", (PyCFunction) rpmMergeHeadersFromFD, METH_VARARGS|METH_KEYWORDS,
-	NULL },
+
     { "readHeaderListFromFD", (PyCFunction) rpmHeaderFromFD, METH_VARARGS|METH_KEYWORDS,
 	NULL },
     { "readHeaderListFromFile", (PyCFunction) rpmHeaderFromFile, METH_VARARGS|METH_KEYWORDS,
@@ -232,10 +251,7 @@ void init_rpm(void);	/* XXX eliminate gcc warning */
  */
 void init_rpm(void)
 {
-    PyObject * d, *o, * tag = NULL, * dict;
-    int i;
-    const struct headerSprintfExtension_s * extensions = rpmHeaderFormats;
-    struct headerSprintfExtension_s * ext;
+    PyObject * d, *o, * dict;
     PyObject * m;
 
 #if Py_TPFLAGS_HAVE_ITER        /* XXX backport to python-1.5.2 */
@@ -247,9 +263,6 @@ void init_rpm(void)
     if (PyType_Ready(&rpmfi_Type) < 0) return;
     if (PyType_Ready(&rpmmi_Type) < 0) return;
     if (PyType_Ready(&rpmps_Type) < 0) return;
-
-    rpmrc_Type.tp_base = &PyDict_Type;
-    if (PyType_Ready(&rpmrc_Type) < 0) return;
 
     if (PyType_Ready(&rpmte_Type) < 0) return;
     if (PyType_Ready(&rpmts_Type) < 0) return;
@@ -306,9 +319,6 @@ void init_rpm(void)
     Py_INCREF(&rpmps_Type);
     PyModule_AddObject(m, "ps", (PyObject *) &rpmps_Type);
 
-    Py_INCREF(&rpmrc_Type);
-    PyModule_AddObject(m, "rc", (PyObject *) &rpmrc_Type);
-
     Py_INCREF(&rpmte_Type);
     PyModule_AddObject(m, "te", (PyObject *) &rpmte_Type);
 
@@ -333,28 +343,34 @@ void init_rpm(void)
 
     dict = PyDict_New();
 
-    for (i = 0; i < rpmTagTableSize; i++) {
-	tag = PyInt_FromLong(rpmTagTable[i].val);
-	PyDict_SetItemString(d, (char *) rpmTagTable[i].name, tag);
-	Py_DECREF(tag);
-        PyDict_SetItem(dict, tag, o=PyString_FromString(rpmTagTable[i].name + 7));
+ {  const struct headerTagTableEntry_s * t;
+    PyObject * to;
+    for (t = rpmTagTable; t && t->name; t++) {
+	PyDict_SetItemString(d, (char *) t->name, to=PyInt_FromLong(t->val));
+	Py_DECREF(to);
+        PyDict_SetItem(dict, to, o=PyString_FromString(t->name + 7));
 	Py_DECREF(o);
     }
+ }
 
-    while (extensions->name) {
-	if (extensions->type == HEADER_EXT_TAG) {
-            ext = extensions;
-            PyDict_SetItemString(d, (char *) extensions->name, o=PyCObject_FromVoidPtr(ext, NULL));
-	    Py_DECREF(o);
-            PyDict_SetItem(dict, tag, o=PyString_FromString(ext->name + 7));
-	    Py_DECREF(o);
-        }
-        extensions++;
+ {  headerSprintfExtension exts = rpmHeaderFormats;
+    headerSprintfExtension ext;
+    PyObject * to;
+    int extNum;
+    for (ext = exts, extNum = 0; ext != NULL && ext->type != HEADER_EXT_LAST;
+        ext = (ext->type == HEADER_EXT_MORE ? *ext->u.more : ext+1), extNum++)
+    {
+	if (ext->name == NULL || ext->type != HEADER_EXT_TAG)
+	    continue;
+	PyDict_SetItemString(d, (char *) ext->name, to=PyCObject_FromVoidPtr((void *)ext, NULL));
+	Py_DECREF(to);
+        PyDict_SetItem(dict, to, o=PyString_FromString(ext->name + 7));
+	Py_DECREF(o);
     }
+ }
 
     PyDict_SetItemString(d, "tagnames", dict);
     Py_DECREF(dict);
-
 
 #define REGISTER_ENUM(val) \
     PyDict_SetItemString(d, #val, o=PyInt_FromLong( val )); \
@@ -443,6 +459,7 @@ void init_rpm(void)
     REGISTER_ENUM(RPMCALLBACK_REPACKAGE_STOP);
     REGISTER_ENUM(RPMCALLBACK_UNPACK_ERROR);
     REGISTER_ENUM(RPMCALLBACK_CPIO_ERROR);
+    REGISTER_ENUM(RPMCALLBACK_SCRIPT_ERROR);
 
     REGISTER_ENUM(RPMPROB_BADARCH);
     REGISTER_ENUM(RPMPROB_BADOS);
