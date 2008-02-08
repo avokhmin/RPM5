@@ -21,19 +21,6 @@
 extern int _rpmdb_debug;
 /*@=exportlocal@*/
 
-/*@unchecked@*/
-extern int _rsegfault;
-/*@unchecked@*/
-extern int _wsegfault;
-
-#if defined(__LCLINT__)
-#define	RSEGFAULT
-#define	WSEGFAULT
-#else
-#define	RSEGFAULT	{ if (_rsegfault > 0) assert(--_rsegfault); }
-#define	WSEGFAULT	{ if (_wsegfault > 0) assert(--_wsegfault); }
-#endif
-
 #ifdef	NOTYET
 /** \ingroup rpmdb
  * Database of headers and tag value indices.
@@ -43,7 +30,7 @@ typedef /*@abstract@*/ /*@refcounted@*/ struct rpmdb_s * rpmdb;
 /** \ingroup rpmdb
  * Database iterator.
  */
-typedef /*@abstract@*/ struct _rpmdbMatchIterator * rpmdbMatchIterator;
+typedef /*@abstract@*/ struct rpmdbMatchIterator_s * rpmdbMatchIterator;
 #endif
 
 /**
@@ -68,9 +55,9 @@ typedef /*@abstract@*/ struct _dbiIndex * dbiIndex;
  * and was identical to the "data saved" structure below.
  */
 struct _dbiIndexItem {
-    unsigned int hdrNum;		/*!< header instance in db */
-    unsigned int tagNum;		/*!< tag index in header */
-    unsigned int fpNum;			/*!< finger print index */
+    uint32_t hdrNum;			/*!< header instance in db */
+    uint32_t tagNum;			/*!< tag index in header */
+    uint32_t fpNum;			/*!< finger print index */
 };
 
 /** \ingroup dbi
@@ -407,7 +394,7 @@ struct _dbiIndex {
 /*@refcounted@*/
     rpmdb dbi_rpmdb;		/*!< the parent rpm database */
     rpmTag dbi_rpmtag;		/*!< rpm tag used for index */
-    int	dbi_jlen;		/*!< size of join key */
+    size_t dbi_jlen;		/*!< size of join key */
 
 /*@only@*//*@relnull@*/
     DB * dbi_db;		/*!< Berkeley DB * handle */
@@ -464,8 +451,8 @@ struct rpmdb_s {
     int		db_opens;	/*!< No. of opens for this rpmdb. */
 /*@only@*/ /*@null@*/
     void *	db_dbenv;	/*!< Berkeley DB_ENV handle. */
-    int *	db_tagn;	/*!< Tag index mappings. */
-    int		db_ndbi;	/*!< No. of tag indices. */
+    tagStore_t	db_tags;	/*!< Tag name/value mappings. */
+    size_t	db_ndbi;	/*!< No. of tag indices. */
 /*@only@*/ /*@null@*/
     dbiIndex * _dbi;		/*!< Tag indices. */
 
@@ -616,13 +603,12 @@ int dbiDel(dbiIndex dbi, /*@null@*/ DBC * dbcursor, DBT * key, DBT * data,
 	/*@globals fileSystem, internalState @*/
 	/*@modifies dbi, *dbcursor, fileSystem, internalState @*/
 {
-    void * sw = dbiStatsAccumulator(dbi, 16);	/* RPMTS_OP_DBDEL */
+    rpmop sw = (rpmop)dbiStatsAccumulator(dbi, 16);	/* RPMTS_OP_DBDEL */
     int rc;
     assert(key->data != NULL && key->size > 0);
     (void) rpmswEnter(sw, 0);
     rc = (dbi->dbi_vec->cdel) (dbi, dbcursor, key, data, flags);
     (void) rpmswExit(sw, data->size);
-WSEGFAULT;
     return rc;
 }
 
@@ -641,13 +627,12 @@ int dbiGet(dbiIndex dbi, /*@null@*/ DBC * dbcursor, DBT * key, DBT * data,
 	/*@globals fileSystem, internalState @*/
 	/*@modifies dbi, *dbcursor, *key, *data, fileSystem, internalState @*/
 {
-    void * sw = dbiStatsAccumulator(dbi, 14);	/* RPMTS_OP_DBGET */
+    rpmop sw = (rpmop)dbiStatsAccumulator(dbi, 14);	/* RPMTS_OP_DBGET */
     int rc;
     assert((flags == DB_NEXT) || (key->data != NULL && key->size > 0));
     (void) rpmswEnter(sw, 0);
     rc = (dbi->dbi_vec->cget) (dbi, dbcursor, key, data, flags);
     (void) rpmswExit(sw, data->size);
-RSEGFAULT;
     return rc;
 }
 
@@ -667,7 +652,7 @@ int dbiPget(dbiIndex dbi, /*@null@*/ DBC * dbcursor,
 	/*@globals fileSystem, internalState @*/
 	/*@modifies dbi, *dbcursor, *key, *pkey, *data, fileSystem, internalState @*/
 {
-    void * sw = dbiStatsAccumulator(dbi, 14);	/* RPMTS_OP_DBGET */
+    rpmop sw = (rpmop)dbiStatsAccumulator(dbi, 14);	/* RPMTS_OP_DBGET */
     int rc;
     assert((flags == DB_NEXT) || (key->data != NULL && key->size > 0));
     (void) rpmswEnter(sw, 0);
@@ -691,13 +676,12 @@ int dbiPut(dbiIndex dbi, /*@null@*/ DBC * dbcursor, DBT * key, DBT * data,
 	/*@globals fileSystem, internalState @*/
 	/*@modifies dbi, *dbcursor, *key, fileSystem, internalState @*/
 {
-    void * sw = dbiStatsAccumulator(dbi, 15);	/* RPMTS_OP_DBPUT */
+    rpmop sw = (rpmop)dbiStatsAccumulator(dbi, 15);	/* RPMTS_OP_DBPUT */
     int rc;
     assert(key->data != NULL && key->size > 0 && data->data != NULL && data->size > 0);
     (void) rpmswEnter(sw, 0);
     rc = (dbi->dbi_vec->cput) (dbi, dbcursor, key, data, flags);
     (void) rpmswExit(sw, data->size);
-WSEGFAULT;
     return rc;
 }
 
