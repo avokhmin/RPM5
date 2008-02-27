@@ -25,7 +25,6 @@ static int checkSpec(rpmts ts, Header h)
 	/*@globals rpmGlobalMacroContext, h_errno, fileSystem, internalState @*/
 	/*@modifies ts, h, rpmGlobalMacroContext, fileSystem, internalState @*/
 {
-    rpmps ps;
     int rc;
 
     if (!headerIsEntry(h, RPMTAG_REQUIRENAME)
@@ -34,15 +33,7 @@ static int checkSpec(rpmts ts, Header h)
 
     rc = rpmtsAddInstallElement(ts, h, NULL, 0, NULL);
 
-    rc = rpmtsCheck(ts);
-
-    ps = rpmtsProblems(ts);
-    if (rc == 0 && rpmpsNumProblems(ps) > 0) {
-	rpmMessage(RPMMESS_ERROR, _("Failed build dependencies:\n"));
-	rpmpsPrint(NULL, ps);
-	rc = 1;
-    }
-    ps = rpmpsFree(ps);
+    rc = rpmcliInstallProblems(ts, _("Failed build dependencies"), rpmtsCheck(ts));
 
     /* XXX nuke the added package. */
     rpmtsClean(ts);
@@ -69,7 +60,7 @@ static int isSpecFile(const char * specfile)
 
     fd = Fopen(specfile, "r");
     if (fd == NULL || Ferror(fd)) {
-	rpmError(RPMERR_OPEN, _("Unable to open spec file %s: %s\n"),
+	rpmlog(RPMLOG_ERR, _("Unable to open spec file %s: %s\n"),
 		specfile, Fstrerror(fd));
 	return 0;
     }
@@ -114,7 +105,7 @@ static int buildForTarget(rpmts ts, const char * arg, BTA_t ba)
     size_t nb = strlen(arg) + BUFSIZ;
     char * buf = alloca(nb);
     Spec spec = NULL;
-    int verify = 1;
+    int verify = ((ba->buildAmount & RPMBUILD_TRACK) ? 0 : 1);
     int xx;
     int rc;
 
@@ -146,7 +137,7 @@ static int buildForTarget(rpmts ts, const char * arg, BTA_t ba)
 	    break;
 	}
 	if (!bingo) {
-	    rpmError(RPMERR_READ, _("Failed to read spec file from %s\n"), arg);
+	    rpmlog(RPMLOG_ERR, _("Failed to read spec file from %s\n"), arg);
 	    xx = Unlink(tmpSpecFile);
 	    tmpSpecFile = _free(tmpSpecFile);
 	    return 1;
@@ -160,7 +151,7 @@ static int buildForTarget(rpmts ts, const char * arg, BTA_t ba)
 	specut = urlPath(specURL, &specFile);
 	xx = Rename(tmpSpecFile, specFile);
 	if (xx) {
-	    rpmError(RPMERR_RENAME, _("Failed to rename %s to %s: %m\n"),
+	    rpmlog(RPMLOG_ERR, _("Failed to rename %s to %s: %m\n"),
 			tmpSpecFile, s);
 	    (void) Unlink(tmpSpecFile);
 	}
@@ -190,10 +181,10 @@ static int buildForTarget(rpmts ts, const char * arg, BTA_t ba)
 		se += strlen(se);
 	    else
 		se = stpcpy(se, ".");
+	    *se++ = '/';
+	    se += strlen(strcpy(se,strcpy(se, s)));
 	} else
 	    se = stpcpy(se, s);
-	*se++ = '/';
-	se += strlen(basename(strcpy(se, s)));
 	specURL = rpmGetPath(buf, NULL);
 	specut = urlPath(specURL, &specFile);
     }
@@ -201,12 +192,12 @@ static int buildForTarget(rpmts ts, const char * arg, BTA_t ba)
     if (specut != URL_IS_DASH) {
 	struct stat sb;
 	if (Stat(specURL, &sb) < 0) {
-	    rpmError(RPMERR_STAT, _("failed to stat %s: %m\n"), specURL);
+	    rpmlog(RPMLOG_ERR, _("failed to stat %s: %m\n"), specURL);
 	    rc = 1;
 	    goto exit;
 	}
 	if (! S_ISREG(sb.st_mode)) {
-	    rpmError(RPMERR_NOTREG, _("File %s is not a regular file.\n"),
+	    rpmlog(RPMLOG_ERR, _("File %s is not a regular file.\n"),
 		specURL);
 	    rc = 1;
 	    goto exit;
@@ -214,7 +205,7 @@ static int buildForTarget(rpmts ts, const char * arg, BTA_t ba)
 
 	/* Try to verify that the file is actually a specfile */
 	if (!isSpecFile(specURL)) {
-	    rpmError(RPMERR_BADSPEC,
+	    rpmlog(RPMLOG_ERR,
 		_("File %s does not appear to be a specfile.\n"), specURL);
 	    rc = 1;
 	    goto exit;
@@ -304,7 +295,7 @@ int build(rpmts ts, const char * arg, BTA_t ba, const char * rcfile)
 	else	/* XXX Perform clean-up after last target build. */
 	    ba->buildAmount |= cleanFlags;
 
-	rpmMessage(RPMMESS_DEBUG, _("    target platform: %s\n"), target);
+	rpmlog(RPMLOG_DEBUG, _("    target platform: %s\n"), target);
 
 	/* Read in configuration for target. */
 	if (t != targets) {
