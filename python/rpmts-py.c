@@ -6,7 +6,7 @@
 
 #include <rpmio_internal.h>	/* XXX for fdSetOpen */
 
-#define	_RPMPS_INTERNAL	/* XXX rpmps needs iterator */
+#define	_RPMPS_INTERNAL	/* XXX almost (but not quite) opaque. */
 #include <rpmcli.h>
 #include <rpmpgp.h>
 #include <rpmdb.h>
@@ -212,7 +212,7 @@ fprintf(stderr, "*** rpmts_SolveCallback(%p,%p,%p) \"%s\"\n", ts, ds, data, rpmd
 /*@null@*/
 static void *
 rpmtsCallback(/*@unused@*/ const void * hd, const rpmCallbackType what,
-		         const unsigned long long amount, const unsigned long long total,
+		         const uint64_t amount, const uint64_t total,
 	                 const void * pkgKey, rpmCallbackData data)
 	/*@globals _Py_NoneStruct @*/
 	/*@modifies _Py_NoneStruct @*/
@@ -235,9 +235,15 @@ rpmtsCallback(/*@unused@*/ const void * hd, const rpmCallbackType what,
     /* Synthesize a python object for callback (if necessary). */
     if (pkgObj == NULL) {
 	if (h) {
-	    const char * n = NULL;
-	    (void) headerGetEntry(h, RPMTAG_NAME, NULL, &n, NULL);
-	    pkgObj = Py_BuildValue("s", n);
+	    HE_t he = memset(alloca(sizeof(*he)), 0, sizeof(*he));
+	    he->tag = RPMTAG_NAME;
+	    if (headerGet(h, he, 0)) {
+		pkgObj = Py_BuildValue("s", he->p.str);
+		he->p.ptr = _free(he->p.ptr);
+	    } else {
+		pkgObj = Py_None;
+		Py_INCREF(pkgObj);
+	    }
 	} else {
 	    pkgObj = Py_None;
 	    Py_INCREF(pkgObj);
@@ -462,7 +468,7 @@ fprintf(stderr, "*** rpmts_AddErase(%p) ts %p\n", s, s->ts);
 	mi = rpmdbFreeIterator(mi);
     } else
     if (PyInt_Check(o)) {
-	uint_32 instance = PyInt_AsLong(o);
+	uint32_t instance = PyInt_AsLong(o);
 
 	mi = rpmtsInitIterator(s->ts, RPMDBI_PACKAGES, &instance, sizeof(instance));
 	if (instance == 0 || mi == NULL) {
@@ -472,7 +478,7 @@ fprintf(stderr, "*** rpmts_AddErase(%p) ts %p\n", s, s->ts);
 	} else {
 	    Header h;
 	    while ((h = rpmdbNextIterator(mi)) != NULL) {
-		uint_32 recOffset = rpmdbGetIteratorOffset(mi);
+		uint32_t recOffset = rpmdbGetIteratorOffset(mi);
 		if (recOffset)
 		    rpmtsAddEraseElement(s->ts, h, recOffset);
 		break;
@@ -532,9 +538,9 @@ fprintf(stderr, "*** rpmts_Check(%p) ts %p cb %p\n", s, s->ts, cbInfo.cb);
 
     if (ps != NULL) {
 	list = PyList_New(0);
+	rpmpsi psi = rpmpsInitIterator(ps);
 
-	/* XXX TODO: rpmlib >= 4.0.3 can return multiple suggested keys. */
-	for (i = 0; i < ps->numProblems; i++) {
+	while ((i = rpmpsNextIterator(psi)) >= 0) {
 #ifdef	DYING
 	    cf = Py_BuildValue("((sss)(ss)iOi)", conflicts[i].byName,
 			       conflicts[i].byVersion, conflicts[i].byRelease,
@@ -549,16 +555,17 @@ fprintf(stderr, "*** rpmts_Check(%p) ts %p cb %p\n", s, s->ts, cbInfo.cb);
 #else
 	    char * byName, * byVersion, * byRelease, *byArch;
 	    char * needsName, * needsOP, * needsVersion;
+	    char * a, * b;
 	    int needsFlags, sense;
 	    fnpyKey key;
 
-	    p = ps->probs + i;
+	    p = rpmpsProblem(psi);
 
             /* XXX autorelocated i386 on ia64, fix system-config-packages! */
-	    if (p->type == RPMPROB_BADRELOCATE)
+	    if (rpmProblemGetType(p) == RPMPROB_BADRELOCATE)
 		continue;
 
-	    byName = p->pkgNEVR;
+	    a = byName = xstrdup(rpmProblemGetPkgNEVR(p));
 	    if ((byArch= strrchr(byName, '.')) != NULL)
 		*byArch++ = '\0';
 	    if ((byRelease = strrchr(byName, '-')) != NULL)
@@ -566,9 +573,9 @@ fprintf(stderr, "*** rpmts_Check(%p) ts %p cb %p\n", s, s->ts, cbInfo.cb);
 	    if ((byVersion = strrchr(byName, '-')) != NULL)
 		*byVersion++ = '\0';
 
-	    key = p->key;
+	    key = rpmProblemKey(p);
 
-	    needsName = p->altNEVR;
+	    b = needsName = xstrdup(rpmProblemGetAltNEVR(p));
 	    if (needsName[1] == ' ') {
 		sense = (needsName[0] == 'C')
 			? RPMDEP_SENSE_CONFLICTS : RPMDEP_SENSE_REQUIRES;
@@ -591,11 +598,14 @@ fprintf(stderr, "*** rpmts_Check(%p) ts %p cb %p\n", s, s->ts, cbInfo.cb);
 			       needsName, needsVersion, needsFlags,
 			       (key != NULL ? key : Py_None),
 			       sense);
+	    a = _free(a);
+	    b = _free(b);
 #endif
 	    PyList_Append(list, (PyObject *) cf);
 	    Py_DECREF(cf);
 	}
 
+	psi = rpmpsFreeIterator(psi);
 	ps = rpmpsFree(ps);
 
 	return list;
@@ -653,7 +663,7 @@ rpmts_IDTXload(rpmtsObject * s, PyObject * args, PyObject * kwds)
     PyObject * result = NULL;
     rpmTag tag = RPMTAG_INSTALLTID;
     char * kwlist[] = {"rbtid", NULL};
-    uint_32 rbtid = 0;
+    uint32_t rbtid = 0;
     IDTX idtx;
 
 if (_rpmts_debug)
@@ -704,7 +714,7 @@ rpmts_IDTXglob(rpmtsObject * s, PyObject * args, PyObject * kwds)
     const char * globstr;
     rpmTag tag = RPMTAG_REMOVETID;
     char * kwlist[] = {"rbtid", NULL};
-    uint_32 rbtid = 0;
+    uint32_t rbtid = 0;
     IDTX idtx;
 
 if (_rpmts_debug)
@@ -756,7 +766,7 @@ rpmts_Rollback(rpmtsObject * s, PyObject * args, PyObject * kwds)
     QVA_t ia = memset(alloca(sizeof(*ia)), 0, sizeof(*ia));
     rpmtransFlags transFlags;
     const char ** av = NULL;
-    uint_32 rbtid;
+    uint32_t rbtid;
     int rc;
     char * kwlist[] = {"transactionId", NULL};
 
@@ -795,10 +805,10 @@ rpmts_OpenDB(rpmtsObject * s)
 if (_rpmts_debug)
 fprintf(stderr, "*** rpmts_OpenDB(%p) ts %p\n", s, s->ts);
 
-    if (rpmtsDbmode(s->ts) == -1)
-	(void) rpmtsSetDbmode(s->ts, O_RDONLY);
+    if (rpmtsDBMode(s->ts) == -1)
+	(void) rpmtsSetDBMode(s->ts, O_RDONLY);
 
-    return Py_BuildValue("i", rpmtsOpenDB(s->ts, rpmtsDbmode(s->ts)));
+    return Py_BuildValue("i", rpmtsOpenDB(s->ts, rpmtsDBMode(s->ts)));
 }
 
 /**
@@ -814,7 +824,7 @@ if (_rpmts_debug)
 fprintf(stderr, "*** rpmts_CloseDB(%p) ts %p\n", s, s->ts);
 
     rc = rpmtsCloseDB(s->ts);
-    (void) rpmtsSetDbmode(s->ts, -1);		/* XXX disable lazy opens */
+    (void) rpmtsSetDBMode(s->ts, -1);		/* XXX disable lazy opens */
 
     return Py_BuildValue("i", rc);
 }
@@ -945,6 +955,7 @@ rpmts_HdrCheck(rpmtsObject * s, PyObject * args, PyObject * kwds)
     const char * msg = NULL;
     const void * uh;
     int uc;
+    pgpDig dig;
     rpmRC rpmrc;
     char * kwlist[] = {"headers", NULL};
 
@@ -965,7 +976,9 @@ fprintf(stderr, "*** rpmts_HdrCheck(%p) ts %p\n", s, s->ts);
     uh = PyString_AsString(blob);
     uc = PyString_Size(blob);
 
-    rpmrc = headerCheck(s->ts, uh, uc, &msg);
+    dig = pgpDigNew(rpmtsVSFlags(s->ts));
+    rpmrc = headerCheck(dig, uh, uc, &msg);
+    dig = pgpDigFree(dig);
 
     switch (rpmrc) {
     case RPMRC_OK:
@@ -974,6 +987,7 @@ fprintf(stderr, "*** rpmts_HdrCheck(%p) ts %p\n", s, s->ts);
 	break;
 
     case RPMRC_NOKEY:
+	/* XXX note "availaiable", the script kiddies need the misspelling. */
 	PyErr_SetString(pyrpmError, "public key not availaiable");
 	break;
 
@@ -989,6 +1003,14 @@ fprintf(stderr, "*** rpmts_HdrCheck(%p) ts %p\n", s, s->ts);
     msg = _free(msg);
 
     return result;
+}
+
+/**
+ */
+static PyObject *
+rpmts_GetVSFlags(rpmtsObject * s)
+{
+    return Py_BuildValue("i", rpmtsVSFlags(s->ts));
 }
 
 /**
@@ -1021,7 +1043,7 @@ static PyObject *
 rpmts_SetColor(rpmtsObject * s, PyObject * args, PyObject * kwds)
 	/*@modifies s @*/
 {
-    uint_32 tscolor;
+    uint32_t tscolor;
     char * kwlist[] = {"color", NULL};
 
 if (_rpmts_debug)
@@ -1104,7 +1126,7 @@ fprintf(stderr, "*** rpmts_PgpImportPubkey(%p) ts %p\n", s, s->ts);
     pkt = (unsigned char *) PyString_AsString(blob);
     pktlen = PyString_Size(blob);
 
-    rc = rpmcliImportPubkey(s->ts, pkt, pktlen);
+    rc = rpmtsImportPubkey(s->ts, pkt, pktlen);
 
     return Py_BuildValue("i", rc);
 }
@@ -1197,9 +1219,10 @@ rpmts_Run(rpmtsObject * s, PyObject * args, PyObject * kwds)
 	/*@globals rpmGlobalMacroContext, _Py_NoneStruct @*/
 	/*@modifies s, rpmGlobalMacroContext, _Py_NoneStruct @*/
 {
-    int rc, i;
+    int rc;
     PyObject * list;
     rpmps ps;
+    rpmpsi psi;
     struct rpmtsCallbackType_s cbInfo;
     char * kwlist[] = {"callback", "data", NULL};
 
@@ -1221,12 +1244,14 @@ rpmts_Run(rpmtsObject * s, PyObject * args, PyObject * kwds)
     }
 
     /* Initialize security context patterns (if not already done). */
-    if (!(rpmtsFlags(s->ts) & RPMTRANS_FLAG_NOCONTEXTS)) {
-	    const char *fn = rpmGetPath("%{?_install_file_context_path}", NULL);
+    if (rpmtsSELinuxEnabled(s->ts)
+     && !(rpmtsFlags(s->ts) & RPMTRANS_FLAG_NOCONTEXTS))
+    {
+	const char *fn = rpmGetPath("%{?_install_file_context_path}", NULL);
 	if (fn != NULL && *fn != '\0')
 	    rc = matchpathcon_init(fn);
 	    fn = _free(fn);
-	}
+    }
 
 if (_rpmts_debug)
 fprintf(stderr, "*** rpmts_Run(%p) ts %p ignore %x\n", s, s->ts, s->ignoreSet);
@@ -1253,16 +1278,18 @@ fprintf(stderr, "*** rpmts_Run(%p) ts %p ignore %x\n", s, s->ts, s->ignoreSet);
     }
 
     list = PyList_New(0);
-    for (i = 0; i < ps->numProblems; i++) {
-	rpmProblem p = ps->probs + i;
+    psi = rpmpsInitIterator(ps);
+    while (rpmpsNextIterator(psi) >= 0) {
+	rpmProblem p = rpmpsProblem(psi);
 	unsigned long ulong1 = p->ulong1;
 	PyObject * prob = Py_BuildValue("s(isN)", rpmProblemString(p),
-			     p->type,
+			     rpmProblemGetType(p),
 			     p->str1,
 			     PyLong_FromLongLong(ulong1));
 	PyList_Append(list, prob);
 	Py_DECREF(prob);
     }
+    psi = rpmpsFreeIterator(psi);
 
     ps = rpmpsFree(ps);
 
@@ -1450,6 +1477,9 @@ static struct PyMethodDef rpmts_methods[] = {
 - Read a package header from a file descriptor.\n" },
  {"hdrCheck",	(PyCFunction) rpmts_HdrCheck,	METH_VARARGS|METH_KEYWORDS,
 	NULL },
+{"getVSFlags",(PyCFunction) rpmts_GetVSFlags,	METH_NOARGS,
+"ts.getVSFlags() -> vsflags\n\
+- Retrieve current signature verification flags from transaction\n" },
  {"setVSFlags",(PyCFunction) rpmts_SetVSFlags,	METH_VARARGS|METH_KEYWORDS,
 "ts.setVSFlags(vsflags) -> ovsflags\n\
 - Set signature verification flags. Values for vsflags are:\n\
@@ -1663,7 +1693,7 @@ PyTypeObject rpmts_Type = {
 	(initproc) rpmts_init,		/* tp_init */
 	(allocfunc) rpmts_alloc,	/* tp_alloc */
 	(newfunc) rpmts_new,		/* tp_new */
-	rpmts_free,			/* tp_free */
+	(freefunc) rpmts_free,		/* tp_free */
 	0,				/* tp_is_gc */
 #endif
 };
