@@ -9,46 +9,49 @@
 #include <sys/file.h>
 
 #include <rpmio.h>
+#include <rpmlog.h>
 #include <rpmpgp.h>
 #include <rpmurl.h>
+#define	_MIRE_INTERNAL
 #include <rpmmacro.h>
 #include <rpmsq.h>
+
+#define	_RPMTAG_INTERNAL
+#include "header_internal.h"	/* XXX for HEADERFLAG_ALLOCATED */
 
 #define	_RPMEVR_INTERNAL	/* XXX isInstallPrereq */
 #include <rpmevr.h>
 
-#ifdef	NOTYET
-/*@exposed@*/
+/* XXX avoid including <rpmts.h> */
+/*@-redecl -type @*/
 extern pgpDig rpmtsDig(void * ts)
         /*@*/;
 extern void rpmtsCleanDig(void * ts)
         /*@modifies ts @*/;
-#endif
+/*@=redecl =type @*/
 
 #define	_RPMDB_INTERNAL
-#define	_MIRE_INTERNAL
 #include "rpmdb.h"
 #include "pkgio.h"
 #include "fprint.h"
 #include "legacy.h"
-#include "header_internal.h"	/* XXX for HEADERFLAG_ALLOCATED */
 
 #include "debug.h"
 
+/* XXX retrofit the *BSD typedef for the deprived. */
+#if defined(__QNXNTO__)
+typedef	u_int32_t	uint32_t;
+#endif
+
 /*@access dbiIndexSet@*/
 /*@access dbiIndexItem@*/
-/*@access rpmts@*/		/* XXX compared with NULL */
+/*@access miRE@*/
 /*@access Header@*/		/* XXX compared with NULL */
 /*@access rpmdbMatchIterator@*/
+/*@access rpmts@*/		/* XXX compared with NULL */
 
 /*@unchecked@*/
 int _rpmdb_debug = 0;
-
-/*@unchecked@*/
-int _rsegfault = 0;
-
-/*@unchecked@*/
-int _wsegfault = 0;
 
 /*@unchecked@*/
 static int _rebuildinprogress = 0;
@@ -123,12 +126,12 @@ static inline unsigned char nibble(char c)
 	/*@*/
 {
     if (c >= '0' && c <= '9')
-	return (c - '0');
+	return (unsigned char)(c - '0');
     if (c >= 'A' && c <= 'F')
-	return (c - 'A') + 10;
+	return (unsigned char)((int)(c - 'A') + 10);
     if (c >= 'a' && c <= 'f')
-	return (c - 'a') + 10;
-    return 0;
+	return (unsigned char)((int)(c - 'a') + 10);
+    return '\0';
 }
 
 /**
@@ -146,8 +149,8 @@ static char * bin2hex(const void *data, size_t size)
     char * t, * val;
     val = t = xmalloc(size * 2 + 1);
     while (size-- > 0) {
-	unsigned int i;
-	i = *s++;
+	unsigned i;
+	i = (unsigned) *s++;
 	*t++ = hex[ (i >> 4) & 0xf ];
 	*t++ = hex[ (i     ) & 0xf ];
     }
@@ -177,38 +180,41 @@ static int printable(const void * ptr, size_t len)	/*@*/
  * Return dbi index used for rpm tag.
  * @param db		rpm database
  * @param rpmtag	rpm header tag
- * @return		dbi index, -1 on error
+ * @return		dbi index, 0xffffffff on error
  */
-static int dbiTagToDbix(rpmdb db, int rpmtag)
+static size_t dbiTagToDbix(rpmdb db, rpmTag rpmtag)
 	/*@*/
 {
-    int dbix;
+    size_t dbix;
 
-    if (db->db_tagn != NULL)
+    if (db->db_tags != NULL)
     for (dbix = 0; dbix < db->db_ndbi; dbix++) {
-	if (rpmtag != db->db_tagn[dbix])
+	if (rpmtag != db->db_tags[dbix].tag)
 	    continue;
 	return dbix;
     }
-    return -1;
+    return 0xffffffff;
 }
 
 /**
  * Initialize database (index, tag) tuple from configuration.
  */
 /*@-exportheader@*/
-static void dbiTagsInit(/*@null@*/int ** dbiTagsP, /*@null@*/int * dbiTagsMaxP)
+static void dbiTagsInit(/*@null@*/ tagStore_t * dbiTagsP,
+		/*@null@*/ size_t * dbiNTagsP)
 	/*@globals rpmGlobalMacroContext, h_errno @*/
-	/*@modifies dbiTagsP, dbiTagsMaxP, rpmGlobalMacroContext @*/
+	/*@modifies *dbiTagsP, *dbiNTagsP, rpmGlobalMacroContext @*/
 {
 /*@observer@*/
     static const char * const _dbiTagStr_default =
 	"Packages:Name:Basenames:Group:Requirename:Providename:Conflictname:Triggername:Dirnames:Requireversion:Provideversion:Installtid:Sigmd5:Sha1header:Filemd5s:Depends:Pubkeys";
-    int * dbiTags = NULL;
-    int dbiTagsMax = 0;
+    tagStore_t dbiTags = NULL;
+    size_t dbiNTags = 0;
     char * dbiTagStr = NULL;
     char * o, * oe;
-    int dbix, rpmtag, bingo;
+    rpmTag rpmtag;
+    size_t dbix;
+    int bingo;
 
     dbiTagStr = rpmExpand("%{?_dbi_tags}", NULL);
     if (!(dbiTagStr && *dbiTagStr)) {
@@ -218,15 +224,18 @@ static void dbiTagsInit(/*@null@*/int ** dbiTagsP, /*@null@*/int * dbiTagsMaxP)
 
     /* Always allocate package index */
     dbiTags = xcalloc(1, sizeof(*dbiTags));
-    dbiTags[dbiTagsMax++] = RPMDBI_PACKAGES;
+    dbiTags[dbiNTags].str = xstrdup("Packages");
+    dbiTags[dbiNTags].tag = RPMDBI_PACKAGES;
+    dbiTags[dbiNTags].val = NULL;
+    dbiNTags++;
 
     for (o = dbiTagStr; o && *o; o = oe) {
-	while (*o && xisspace(*o))
+	while (*o && xisspace((int)*o))
 	    o++;
 	if (*o == '\0')
 	    break;
 	for (oe = o; oe && *oe; oe++) {
-	    if (xisspace(*oe))
+	    if (xisspace((int)*oe))
 		/*@innerbreak@*/ break;
 	    if (oe[0] == ':' && !(oe[1] == '/' && oe[2] == '/'))
 		/*@innerbreak@*/ break;
@@ -234,16 +243,11 @@ static void dbiTagsInit(/*@null@*/int ** dbiTagsP, /*@null@*/int * dbiTagsMaxP)
 	if (oe && *oe)
 	    *oe++ = '\0';
 	rpmtag = tagValue(o);
-	if (rpmtag < 0) {
-	    rpmMessage(RPMMESS_WARNING,
-		_("dbiTagsInit: unrecognized tag name: \"%s\" ignored\n"), o);
-	    continue;
-	}
 
 	bingo = 0;
 	if (dbiTags != NULL)
-	for (dbix = 0; dbix < dbiTagsMax; dbix++) {
-	    if (rpmtag == dbiTags[dbix]) {
+	for (dbix = 0; dbix < dbiNTags; dbix++) {
+	    if (rpmtag == dbiTags[dbix].tag) {
 		bingo = 1;
 		/*@innerbreak@*/ break;
 	    }
@@ -251,16 +255,19 @@ static void dbiTagsInit(/*@null@*/int ** dbiTagsP, /*@null@*/int * dbiTagsMaxP)
 	if (bingo)
 	    continue;
 
-	dbiTags = xrealloc(dbiTags, (dbiTagsMax + 1) * sizeof(*dbiTags)); /* XXX memory leak */
-	dbiTags[dbiTagsMax++] = rpmtag;
+	dbiTags = xrealloc(dbiTags, (dbiNTags + 1) * sizeof(*dbiTags));
+	dbiTags[dbiNTags].str = xstrdup(o);
+	dbiTags[dbiNTags].tag = rpmtag;
+	dbiTags[dbiNTags].val = NULL;
+	dbiNTags++;
     }
 
-    if (dbiTagsMaxP != NULL)
-	*dbiTagsMaxP = dbiTagsMax;
+    if (dbiNTagsP != NULL)
+	*dbiNTagsP = dbiNTags;
     if (dbiTagsP != NULL)
 	*dbiTagsP = dbiTags;
     else
-	dbiTags = _free(dbiTags);
+	dbiTags = tagStoreFree(dbiTags, dbiNTags);
     dbiTagStr = _free(dbiTagStr);
 }
 /*@=exportheader@*/
@@ -312,7 +319,9 @@ static inline int checkfd(const char * devnull, int fdno, int flags)
 dbiIndex dbiOpen(rpmdb db, rpmTag rpmtag, /*@unused@*/ unsigned int flags)
 {
     static int _oneshot = 0;
-    int dbix;
+    size_t dbix;
+    tagStore_t dbiTag;
+    const char * dbiBN;
     dbiIndex dbi = NULL;
     int _dbapi, _dbapi_rebuild, _dbapi_wanted;
     int rc = 0;
@@ -334,15 +343,17 @@ dbiIndex dbiOpen(rpmdb db, rpmTag rpmtag, /*@unused@*/ unsigned int flags)
 
 /*@-modfilesys@*/
 if (_rpmdb_debug)
-fprintf(stderr, "==> dbiOpen(%p, %s, 0x%x)\n", db, tagName(rpmtag), flags);
+fprintf(stderr, "==> dbiOpen(%p, %u, 0x%x)\n", db, rpmtag, flags);
 /*@=modfilesys@*/
 
     if (db == NULL)
 	return NULL;
 
     dbix = dbiTagToDbix(db, rpmtag);
-    if (dbix < 0 || dbix >= db->db_ndbi)
+    if (dbix >= db->db_ndbi)
 	return NULL;
+    dbiTag = db->db_tags + dbix;
+    dbiBN = (dbiTag->str != NULL ? dbiTag->str : tagName(rpmtag));
 
     /* Is this index already open ? */
 /*@-compdef@*/ /* FIX: db->_dbi may be NULL */
@@ -360,7 +371,7 @@ fprintf(stderr, "==> dbiOpen(%p, %s, 0x%x)\n", db, tagName(rpmtag), flags);
     default:
 	_dbapi = _dbapi_wanted;
 	if (_dbapi < 0 || _dbapi >= 5 || mydbvecs[_dbapi] == NULL) {
-            rpmMessage(RPMMESS_DEBUG, D_("dbiOpen: _dbiapi failed\n"));
+            rpmlog(RPMLOG_DEBUG, D_("dbiOpen: _dbiapi failed\n"));
 	    return NULL;
 	}
 	errno = 0;
@@ -369,9 +380,9 @@ fprintf(stderr, "==> dbiOpen(%p, %s, 0x%x)\n", db, tagName(rpmtag), flags);
 	if (rc) {
 	    static int _printed[32];
 	    if (!_printed[dbix & 0x1f]++)
-		rpmError(RPMERR_DBOPEN,
-			_("cannot open %s index using db%d - %s (%d)\n"),
-			tagName(rpmtag), _dbapi,
+		rpmlog(RPMLOG_ERR,
+			_("cannot open %s(%u) index using db%d - %s (%d)\n"),
+			dbiBN, rpmtag, _dbapi,
 			(rc > 0 ? strerror(rc) : ""), rc);
 	    _dbapi = -1;
 	}
@@ -390,8 +401,8 @@ fprintf(stderr, "==> dbiOpen(%p, %s, 0x%x)\n", db, tagName(rpmtag), flags);
 	if (_dbapi <= 0) {
 	    static int _printed[32];
 	    if (!_printed[dbix & 0x1f]++)
-		rpmError(RPMERR_DBOPEN, _("cannot open %s index\n"),
-			tagName(rpmtag));
+		rpmlog(RPMLOG_ERR, _("cannot open %s(%u) index\n"),
+			dbiBN, rpmtag);
 	    rc = 1;
 	    goto exit;
 	}
@@ -477,13 +488,13 @@ static int dbt2set(dbiIndex dbi, DBT * data, /*@out@*/ dbiIndexSet * setp)
     }
 
     set = xmalloc(sizeof(*set));
-    set->count = data->size / dbi->dbi_jlen;
+    set->count = (int) (data->size / dbi->dbi_jlen);
     set->recs = xmalloc(set->count * sizeof(*(set->recs)));
 
 /*@-sizeoftype @*/
     switch (dbi->dbi_jlen) {
     default:
-    case 2*sizeof(int_32):
+    case 2*sizeof(uint32_t):
 	for (i = 0; i < set->count; i++) {
 	    union _dbswap hdrNum, tagNum;
 
@@ -500,7 +511,7 @@ static int dbt2set(dbiIndex dbi, DBT * data, /*@out@*/ dbiIndexSet * setp)
 	    set->recs[i].fpNum = 0;
 	}
 	break;
-    case 1*sizeof(int_32):
+    case 1*sizeof(uint32_t):
 	for (i = 0; i < set->count; i++) {
 	    union _dbswap hdrNum;
 
@@ -534,13 +545,13 @@ static int set2dbt(dbiIndex dbi, DBT * data, dbiIndexSet set)
 {
     int _dbbyteswapped;
     char * tdbir;
-    int i;
+    unsigned i;
 
     if (dbi == NULL || data == NULL || set == NULL)
 	return -1;
     _dbbyteswapped = dbiByteSwapped(dbi);
 
-    data->size = set->count * (dbi->dbi_jlen);
+    data->size = (u_int32_t)(set->count * (dbi->dbi_jlen));
     if (data->size == 0) {
 	data->data = NULL;
 	return 0;
@@ -550,7 +561,7 @@ static int set2dbt(dbiIndex dbi, DBT * data, dbiIndexSet set)
 /*@-sizeoftype@*/
     switch (dbi->dbi_jlen) {
     default:
-    case 2*sizeof(int_32):
+    case 2*sizeof(uint32_t):
 	for (i = 0; i < set->count; i++) {
 	    union _dbswap hdrNum, tagNum;
 
@@ -568,7 +579,7 @@ static int set2dbt(dbiIndex dbi, DBT * data, dbiIndexSet set)
 	    tdbir += sizeof(tagNum.ui);
 	}
 	break;
-    case 1*sizeof(int_32):
+    case 1*sizeof(uint32_t):
 	for (i = 0; i < set->count; i++) {
 	    union _dbswap hdrNum;
 
@@ -678,12 +689,12 @@ unsigned int dbiIndexSetCount(dbiIndexSet set) {
 
 /* XXX transaction.c */
 unsigned int dbiIndexRecordOffset(dbiIndexSet set, int recno) {
-    return set->recs[recno].hdrNum;
+    return (unsigned) set->recs[recno].hdrNum;
 }
 
 /* XXX transaction.c */
 unsigned int dbiIndexRecordFileNumber(dbiIndexSet set, int recno) {
-    return set->recs[recno].tagNum;
+    return (unsigned) set->recs[recno].tagNum;
 }
 
 /* XXX transaction.c */
@@ -695,7 +706,7 @@ dbiIndexSet dbiFreeIndexSet(dbiIndexSet set) {
     return set;
 }
 
-struct _rpmdbMatchIterator {
+struct rpmdbMatchIterator_s {
 /*@dependent@*/ /*@null@*/
     rpmdbMatchIterator	mi_next;
 /*@only@*/
@@ -779,7 +790,7 @@ int rpmdbCheckSignals(void)
 
     if (rpmdbCheckTerminate(0)) {
 /*@-abstract@*/ /* sigset_t is abstract type */
-	rpmMessage(RPMMESS_DEBUG, D_("Exiting on signal(0x%lx) ...\n"), *((unsigned long *)&rpmsqCaught));
+	rpmlog(RPMLOG_DEBUG, D_("Exiting on signal(0x%lx) ...\n"), *((unsigned long *)&rpmsqCaught));
 /*@=abstract@*/
 	exit(EXIT_FAILURE);
     }
@@ -825,23 +836,23 @@ static int unblockSignals(/*@unused@*/ rpmdb db, sigset_t * oldMask)
 
 /**
  * Return header query string.
- * @warning Only default header extensions are available here.
+ * @warning Only compound header extensions are available here.
  * @param h		header
  * @param qfmt		header sprintf format
  * @return		header query string
  */
 static inline /*@null@*/ const char * queryHeader(Header h, const char * qfmt)
-	/*@globals headerDefaultFormats @*/
+	/*@globals headerCompoundFormats @*/
+	/*@modifies h @*/
 {
-    static const struct headerSprintfExtension_s * hdrfmts = headerDefaultFormats;
     const char * errstr = "(unkown error)";
     const char * str;
 
 /*@-modobserver@*/
-    str = headerSprintf(h, qfmt, rpmTagTable, hdrfmts, &errstr);
+    str = headerSprintf(h, qfmt, NULL, headerCompoundFormats, &errstr);
 /*@=modobserver@*/
     if (str == NULL)
-	rpmError(RPMERR_QFMT, _("incorrect format: \"%s\": %s\n"), qfmt, errstr);
+	rpmlog(RPMLOG_ERR, _("incorrect format: \"%s\": %s\n"), qfmt, errstr);
     return str;
 }
 
@@ -853,11 +864,12 @@ static inline /*@null@*/ const char * queryHeader(Header h, const char * qfmt)
  * @return		0 on success
  */
 static int rpmdbExportInfo(/*@unused@*/ rpmdb db, Header h, int adding)
-	/*@globals headerDefaultFormats, rpmGlobalMacroContext, h_errno,
+	/*@globals headerCompoundFormats, rpmGlobalMacroContext, h_errno,
 		fileSystem, internalState @*/
-	/*@modifies rpmGlobalMacroContext,
+	/*@modifies h, rpmGlobalMacroContext,
 		fileSystem, internalState @*/
 {
+    HE_t he = memset(alloca(sizeof(*he)), 0, sizeof(*he));
     const char * fn = NULL;
     int xx;
 
@@ -872,22 +884,23 @@ static int rpmdbExportInfo(/*@unused@*/ rpmdb db, Header h, int adding)
 
     if (adding) {
 	FD_t fd = Fopen(fn, "w.fdio");
-	int_32 *iidp;
 
 	if (fd != NULL) {
 	    xx = Fclose(fd);
 	    fd = NULL;
-	    if (headerGetEntry(h, RPMTAG_INSTALLTID, NULL, &iidp, NULL)) {
+	    he->tag = RPMTAG_INSTALLTID;
+	    if (headerGet(h, he, 0)) {
 		struct utimbuf stamp;
-		stamp.actime = *iidp;
-		stamp.modtime = *iidp;
+		stamp.actime = he->p.ui32p[0];
+		stamp.modtime = he->p.ui32p[0];
 		if (!Utime(fn, &stamp))
-		    rpmMessage(RPMMESS_DEBUG, "  +++ %s\n", fn);
+		    rpmlog(RPMLOG_DEBUG, "  +++ %s\n", fn);
 	    }
+	    he->p.ptr = _free(he->p.ptr);
 	}
     } else {
 	if (!Unlink(fn))
-	    rpmMessage(RPMMESS_DEBUG, "  --- %s\n", fn);
+	    rpmlog(RPMLOG_DEBUG, "  --- %s\n", fn);
     }
 
 exit:
@@ -914,18 +927,20 @@ static struct rpmdb_s dbTemplate = {
 
 int rpmdbOpenAll(rpmdb db)
 {
-    int dbix;
+    size_t dbix;
     int rc = 0;
 
     if (db == NULL) return -2;
 
-    if (db->db_tagn != NULL && db->_dbi != NULL)
+    if (db->db_tags != NULL && db->_dbi != NULL)
     for (dbix = 0; dbix < db->db_ndbi; dbix++) {
-	if (db->db_tagn[dbix] < 0)
+	tagStore_t dbiTag = db->db_tags + dbix;
+	int rpmtag = dbiTag->tag;
+	if (rpmtag < 0)
 	    continue;
 	if (db->_dbi[dbix] != NULL)
 	    continue;
-	switch ((db->db_tagn[dbix])) {
+	switch (rpmtag) {
 	case RPMDBI_AVAILABLE:
 	case RPMDBI_ADDED:
 	case RPMDBI_REMOVED:
@@ -935,7 +950,7 @@ int rpmdbOpenAll(rpmdb db)
 	default:
 	    /*@switchbreak@*/ break;
 	}
-	(void) dbiOpen(db, db->db_tagn[dbix], db->db_flags);
+	(void) dbiOpen(db, rpmtag, db->db_flags);
     }
     return rc;
 }
@@ -943,16 +958,16 @@ int rpmdbOpenAll(rpmdb db)
 int rpmdbBlockDBI(rpmdb db, int rpmtag)
 {
     int tagn = (rpmtag >= 0 ? rpmtag : -rpmtag);
-    int dbix;
+    size_t dbix;
 
     if (db == NULL || db->_dbi == NULL)
 	return 0;
 
-    if (db->db_tagn != NULL)
+    if (db->db_tags != NULL)
     for (dbix = 0; dbix < db->db_ndbi; dbix++) {
-	if (db->db_tagn[dbix] != tagn)
+	if (db->db_tags[dbix].tag != tagn)
 	    continue;
-	db->db_tagn[dbix] = rpmtag;
+	db->db_tags[dbix].tag = rpmtag;
 	return 0;
     }
     return 0;
@@ -960,15 +975,15 @@ int rpmdbBlockDBI(rpmdb db, int rpmtag)
 
 int rpmdbCloseDBI(rpmdb db, int rpmtag)
 {
-    int dbix;
+    size_t dbix;
     int rc = 0;
 
     if (db == NULL || db->_dbi == NULL)
 	return 0;
 
-    if (db->db_tagn != NULL)
+    if (db->db_tags != NULL)
     for (dbix = 0; dbix < db->db_ndbi; dbix++) {
-	if (db->db_tagn[dbix] != rpmtag)
+	if (db->db_tags[dbix].tag != rpmtag)
 	    continue;
 	if (db->_dbi[dbix] != NULL) {
 	    int xx;
@@ -990,7 +1005,7 @@ int rpmdbClose(rpmdb db)
 	/*@modifies rpmdbRock @*/
 {
     rpmdb * prev, next;
-    int dbix;
+    size_t dbix;
     int rc = 0;
 
     if (db == NULL)
@@ -1003,8 +1018,9 @@ int rpmdbClose(rpmdb db)
 	goto exit;
 
     if (db->_dbi)
-    for (dbix = db->db_ndbi; --dbix >= 0; ) {
+    for (dbix = db->db_ndbi; dbix;) {
 	int xx;
+	dbix--;
 	if (db->_dbi[dbix] == NULL)
 	    continue;
 	/*@-unqualifiedtrans@*/		/* FIX: double indirection. */
@@ -1017,7 +1033,7 @@ int rpmdbClose(rpmdb db)
     db->db_root = _free(db->db_root);
     db->db_home = _free(db->db_home);
     db->db_bits = PBM_FREE(db->db_bits);
-    db->db_tagn = _free(db->db_tagn);
+    db->db_tags = tagStoreFree(db->db_tags, db->db_ndbi);
     db->_dbi = _free(db->_dbi);
     db->db_ndbi = 0;
 
@@ -1046,7 +1062,7 @@ exit:
 
 int rpmdbSync(rpmdb db)
 {
-    int dbix;
+    size_t dbix;
     int rc = 0;
 
     if (db == NULL) return 0;
@@ -1154,7 +1170,7 @@ fprintf(stderr, "==> rpmdbNew(%s, %s, 0x%x, 0%o, 0x%x) db %p\n", root, home, mod
     db->db_home = rpmdbURIPath( (home && *home ? home : _DB_HOME) );
 
     if (!(db->db_home && db->db_home[0])) {
-	rpmError(RPMERR_DBOPEN, _("no dbpath has been set\n"));
+	rpmlog(RPMLOG_ERR, _("no dbpath has been set\n"));
 	db->db_root = _free(db->db_root);
 	db->db_home = _free(db->db_home);
 	db = _free(db);
@@ -1165,7 +1181,7 @@ fprintf(stderr, "==> rpmdbNew(%s, %s, 0x%x, 0%o, 0x%x) db %p\n", root, home, mod
     db->db_errpfx = rpmExpand( (epfx && *epfx ? epfx : _DB_ERRPFX), NULL);
     db->db_remove_env = 0;
     db->db_filter_dups = _db_filter_dups;
-    dbiTagsInit(&db->db_tagn, &db->db_ndbi);
+    dbiTagsInit(&db->db_tags, &db->db_ndbi);
     db->_dbi = xcalloc(db->db_ndbi, sizeof(*db->_dbi));
     db->nrefs = 0;
     /*@-globstate@*/
@@ -1213,16 +1229,17 @@ int rpmdbOpenDatabase(/*@null@*/ const char * prefix,
 
     db->db_api = _dbapi;
 
-    {	int dbix;
+    {	size_t dbix;
 
 	rc = 0;
-	if (db->db_tagn != NULL)
+	if (db->db_tags != NULL)
 	for (dbix = 0; rc == 0 && dbix < db->db_ndbi; dbix++) {
+	    tagStore_t dbiTag = db->db_tags + dbix;
+	    rpmTag rpmtag = dbiTag->tag;
 	    dbiIndex dbi;
-	    int rpmtag;
 
 	    /* Filter out temporary databases */
-	    switch ((rpmtag = db->db_tagn[dbix])) {
+	    switch (rpmtag) {
 	    case RPMDBI_AVAILABLE:
 	    case RPMDBI_ADDED:
 	    case RPMDBI_REMOVED:
@@ -1303,9 +1320,10 @@ int rpmdbOpen (const char * prefix, rpmdb *dbp, int mode, int perms)
 
 int rpmdbInit (const char * prefix, int perms)
 {
+    int rc = -1;	/* RPMRC_NOTFOUND somewhen */
+#ifdef	SUPPORT_INITDB
     rpmdb db = NULL;
     int _dbapi = rpmExpandNumeric("%{_dbapi}");
-    int rc;
 
     rc = rpmdbOpenDatabase(prefix, NULL, _dbapi, &db, (O_CREAT | O_RDWR),
 		perms, RPMDB_FLAG_JUSTCHECK);
@@ -1317,20 +1335,23 @@ int rpmdbInit (const char * prefix, int perms)
 	if (xx && rc == 0) rc = xx;
 	db = NULL;
     }
+#endif
     return rc;
 }
 
 int rpmdbVerifyAllDBI(rpmdb db)
 {
-    int rc = 0;
+    int rc = -1;	/* RPMRC_NOTFOUND somewhen */
 
+#if defined(SUPPORT_VERIFYDB)
     if (db != NULL) {
-	int dbix;
+	size_t dbix;
 	int xx;
 	rc = rpmdbOpenAll(db);
 
 	if (db->_dbi != NULL)
-	for (dbix = db->db_ndbi; --dbix >= 0; ) {
+	for (dbix = db->db_ndbi; dbix;) {
+	    dbix--;
 	    if (db->_dbi[dbix] == NULL)
 		continue;
 	    /*@-unqualifiedtrans@*/		/* FIX: double indirection. */
@@ -1346,17 +1367,21 @@ int rpmdbVerifyAllDBI(rpmdb db)
 	if (xx && rc == 0) rc = xx;
 	db = NULL;
     }
+#endif
     return rc;
 }
 
 int rpmdbVerify(const char * prefix)
 {
+    int rc = -1;	/* RPMRC_NOTFOUND somewhen */
+#if defined(SUPPORT_VERIFYDB)
     rpmdb db = NULL;
     int _dbapi = rpmExpandNumeric("%{_dbapi}");
-    int rc = rpmdbOpenDatabase(prefix, NULL, _dbapi, &db, O_RDONLY, 0644, 0);
 
+    rc = rpmdbOpenDatabase(prefix, NULL, _dbapi, &db, O_RDONLY, 0644, 0);
     if (!rc && db != NULL)
 	rc = rpmdbVerifyAllDBI(db);
+#endif
     return rc;
 }
 
@@ -1365,14 +1390,14 @@ int rpmdbVerify(const char * prefix)
  * @param s		(directory) path
  * @return		tagnum with (directory) path hash
  */
-static inline unsigned taghash(const char *s)
+static inline unsigned taghash(const char * s)
 	/*@*/
 {
     unsigned int r = 0;
     int c;
-    while ((c = *(const unsigned char *)s++) != 0) {
+    while ((c = (int) *s++) != 0) {
 	/* XXX Excluding the '/' character may cause hash collisions. */
-	if (c != '/')
+	if (c != (int) '/')
 	    r += (r << 3) + c;
     }
     return ((r & 0x7fff) | 0x8000) << 16;
@@ -1394,11 +1419,9 @@ static int rpmdbFindByFile(rpmdb db, /*@null@*/ const char * filespec,
 		fileSystem, internalState @*/
 	/*@requires maxSet(matches) >= 0 @*/
 {
-    HGE_t hge = (HGE_t)headerGetEntryMinMemory;
-    HFD_t hfd = headerFreeData;
+    HE_t he = memset(alloca(sizeof(*he)), 0, sizeof(*he));
     const char * dirName;
     const char * baseName;
-    rpmTagType bnt, dnt;
     fingerPrintCache fpc;
     fingerPrint fp1;
     dbiIndex dbi = NULL;
@@ -1439,12 +1462,12 @@ static int rpmdbFindByFile(rpmdb db, /*@null@*/ const char * filespec,
 /*@-temptrans@*/
 key->data = (void *) baseName;
 /*@=temptrans@*/
-key->size = strlen(baseName);
+key->size = (u_int32_t) strlen(baseName);
 if (key->size == 0) key->size++;	/* XXX "/" fixup. */
 
 	rc = dbiGet(dbi, dbcursor, key, data, DB_SET);
 	if (rc > 0) {
-	    rpmError(RPMERR_DBGETINDEX,
+	    rpmlog(RPMLOG_ERR,
 		_("error(%d) getting \"%s\" records from %s index\n"),
 		rc, key->data, tagName(dbi->dbi_rpmtag));
 	}
@@ -1475,8 +1498,9 @@ if (rc == 0)
     i = 0;
     if (allMatches != NULL)
     while (i < allMatches->count) {
-	const char ** baseNames, ** dirNames;
-	int_32 * dirIndexes;
+	const char ** baseNames;
+	const char ** dirNames;
+	uint32_t * dirIndexes;
 	unsigned int offset = dbiIndexRecordOffset(allMatches, i);
 	unsigned int prevoff;
 	Header h;
@@ -1494,9 +1518,15 @@ if (rc == 0)
 	    continue;
 	}
 
-	xx = hge(h, RPMTAG_BASENAMES, &bnt, &baseNames, NULL);
-	xx = hge(h, RPMTAG_DIRNAMES, &dnt, &dirNames, NULL);
-	xx = hge(h, RPMTAG_DIRINDEXES, NULL, &dirIndexes, NULL);
+	he->tag = RPMTAG_BASENAMES;
+	xx = headerGet(h, he, 0);
+	baseNames = he->p.argv;
+	he->tag = RPMTAG_DIRNAMES;
+	xx = headerGet(h, he, 0);
+	dirNames = he->p.argv;
+	he->tag = RPMTAG_DIRINDEXES;
+	xx = headerGet(h, he, 0);
+	dirIndexes = he->p.ui32p;
 
 	do {
 	    fingerPrint fp2;
@@ -1517,8 +1547,11 @@ if (rc == 0)
 		offset = dbiIndexRecordOffset(allMatches, i);
 	} while (i < allMatches->count && offset == prevoff);
 
-	baseNames = hfd(baseNames, bnt);
-	dirNames = hfd(dirNames, dnt);
+	baseNames = _free(baseNames);
+/*@-usereleased@*/
+	dirNames = _free(dirNames);
+/*@=usereleased@*/
+	dirIndexes = _free(dirIndexes);
 	h = headerFree(h);
     }
 
@@ -1558,7 +1591,7 @@ memset(data, 0, sizeof(*data));
 /*@-temptrans@*/
 key->data = (void *) name;
 /*@=temptrans@*/
-key->size = strlen(name);
+key->size = (u_int32_t) strlen(name);
 
     xx = dbiCopen(dbi, dbi->dbi_txnid, &dbcursor, 0);
     rc = dbiGet(dbi, dbcursor, key, data, DB_SET);
@@ -1581,7 +1614,7 @@ key->size = strlen(name);
     if (rc == DB_NOTFOUND) {	/* not found */
 	rc = 0;
     } else {			/* error */
-	rpmError(RPMERR_DBGETINDEX,
+	rpmlog(RPMLOG_ERR,
 		_("error(%d) getting \"%s\" records from %s index\n"),
 		rc, key->data, tagName(dbi->dbi_rpmtag));
 	rc = -1;
@@ -1625,7 +1658,7 @@ static rpmRC dbiFindMatches(dbiIndex dbi, DBC * dbcursor,
 /*@-temptrans@*/
 key->data = (void *) name;
 /*@=temptrans@*/
-key->size = strlen(name);
+key->size = (u_int32_t) strlen(name);
 
     rc = dbiGet(dbi, dbcursor, key, data, DB_SET);
 
@@ -1637,7 +1670,7 @@ key->size = strlen(name);
     if (rc == DB_NOTFOUND) {	/* not found */
 	return RPMRC_NOTFOUND;
     } else {			/* error */
-	rpmError(RPMERR_DBGETINDEX,
+	rpmlog(RPMLOG_ERR,
 		_("error(%d) getting \"%s\" records from %s index\n"),
 		rc, key->data, tagName(dbi->dbi_rpmtag));
 	return RPMRC_FAIL;
@@ -1814,9 +1847,8 @@ void * dbiStatsAccumulator(dbiIndex dbi, int opx)
  * @return 		0 on success
  */
 static int miFreeHeader(rpmdbMatchIterator mi, dbiIndex dbi)
-	/*@globals rpmGlobalMacroContext, h_errno, fileSystem, internalState @*/
-	/*@modifies mi, dbi,
-		rpmGlobalMacroContext, h_errno, fileSystem, internalState @*/
+	/*@globals fileSystem, internalState @*/
+	/*@modifies mi, dbi, fileSystem, internalState @*/
 {
     int rc = 0;
 
@@ -1833,11 +1865,11 @@ static int miFreeHeader(rpmdbMatchIterator mi, dbiIndex dbi)
 
 	(void) headerGetMagic(mi->mi_h, NULL, &nb);
 /*@i@*/	key->data = (void *) &mi->mi_prevoffset;
-	key->size = sizeof(mi->mi_prevoffset);
+	key->size = (u_int32_t) sizeof(mi->mi_prevoffset);
 	{   size_t len;
 	    len = 0;
 	    data->data = headerUnload(mi->mi_h, &len);
-	    data->size = len;	/* XXX data->size is uint32_t */
+	    data->size = (u_int32_t) len;	/* XXX data->size is uint32_t */
 #ifdef	DYING	/* XXX this is needed iff headerSizeof() is used instead. */
 	    data->size -= nb;	/* XXX HEADER_MAGIC_NO */
 #endif
@@ -1849,9 +1881,10 @@ static int miFreeHeader(rpmdbMatchIterator mi, dbiIndex dbi)
 	    int lvl;
 
 assert(data->data != NULL);
-	    rpmrc = headerCheck(mi->mi_ts, data->data, data->size, &msg);
-	    lvl = (rpmrc == RPMRC_FAIL ? RPMMESS_ERROR : RPMMESS_DEBUG);
-	    rpmMessage(lvl, "%s h#%8u %s",
+	    rpmrc = headerCheck(rpmtsDig(mi->mi_ts), data->data, data->size, &msg);
+	    rpmtsCleanDig(mi->mi_ts);
+	    lvl = (rpmrc == RPMRC_FAIL ? RPMLOG_ERR : RPMLOG_DEBUG);
+	    rpmlog(lvl, "%s h#%8u %s",
 		(rpmrc == RPMRC_FAIL ? _("miFreeHeader: skipping") : "write"),
 			mi->mi_prevoffset, (msg ? msg : "\n"));
 	    msg = _free(msg);
@@ -1861,7 +1894,7 @@ assert(data->data != NULL);
 	    (void) blockSignals(dbi->dbi_rpmdb, &signalMask);
 	    rc = dbiPut(dbi, mi->mi_dbc, key, data, DB_KEYLAST);
 	    if (rc) {
-		rpmError(RPMERR_DBPUTINDEX,
+		rpmlog(RPMLOG_ERR,
 			_("error(%d) storing record #%d into %s\n"),
 			rc, mi->mi_prevoffset, tagName(dbi->dbi_rpmtag));
 	    }
@@ -1945,8 +1978,10 @@ int rpmdbGetIteratorCount(rpmdbMatchIterator mi) {
  */
 static int mireCmp(const void * a, const void * b)
 {
+/*@-castexpose @*/
     const miRE mireA = (const miRE) a;
     const miRE mireB = (const miRE) b;
+/*@=castexpose @*/
     return (mireA->tag - mireB->tag);
 }
 
@@ -1982,7 +2017,7 @@ static /*@only@*/ char * mireDup(rpmTag tag, rpmMireMode *modep,
 
 	/* Find no. of bytes needed for pattern. */
 	/* periods and plusses are escaped, splats become '.*' */
-	c = '\0';
+	c = (int) '\0';
 	brackets = 0;
 	for (s = pattern; *s != '\0'; s++) {
 	    switch (*s) {
@@ -1998,10 +2033,10 @@ static /*@only@*/ char * mireDup(rpmTag tag, rpmMireMode *modep,
 		brackets = 1;
 		/*@switchbreak@*/ break;
 	    case ']':
-		if (c != '[') brackets = 0;
+		if (c != (int) '[') brackets = 0;
 		/*@switchbreak@*/ break;
 	    }
-	    c = *s;
+	    c = (int) *s;
 	}
 
 	pat = t = xmalloc(nb);
@@ -2009,7 +2044,7 @@ static /*@only@*/ char * mireDup(rpmTag tag, rpmMireMode *modep,
 	if (pattern[0] != '^') *t++ = '^';
 
 	/* Copy pattern, escaping periods, prefixing splats with period. */
-	c = '\0';
+	c = (int) '\0';
 	brackets = 0;
 	for (s = pattern; *s != '\0'; s++, t++) {
 	    switch (*s) {
@@ -2027,10 +2062,11 @@ static /*@only@*/ char * mireDup(rpmTag tag, rpmMireMode *modep,
 		brackets = 1;
 		/*@switchbreak@*/ break;
 	    case ']':
-		if (c != '[') brackets = 0;
+		if (c != (int) '[') brackets = 0;
 		/*@switchbreak@*/ break;
 	    }
-	    c = *t = *s;
+	    *t = *s;
+	    c = (int) *t;
 	}
 
 	if (s > pattern && s[-1] != '$') *t++ = '$';
@@ -2083,6 +2119,7 @@ int rpmdbSetIteratorRE(rpmdbMatchIterator mi, rpmTag tag,
     }
 
     nmire = mireNew(mode, tag);
+assert(nmire != NULL);
     allpat = mireDup(nmire->tag, &nmire->mode, pattern);
 
     if (nmire->mode == RPMMIRE_DEFAULT)
@@ -2119,27 +2156,16 @@ exit:
  * @param mi		rpm database iterator
  * @return		1 if header should be skipped
  */
+/*@-onlytrans@*/	/* XXX miRE array, not refcounted. */
 static int mireSkip (const rpmdbMatchIterator mi)
 	/*@modifies mi->mi_re @*/
 {
-    HGE_t hge = (HGE_t) headerGetExtension;
-    HFD_t hfd = (HFD_t) headerFreeData;
-    union {
-	void * ptr;
-	const char ** argv;
-	const char * str;
-	int_32 * i32p;
-	int_16 * i16p;
-	int_8 * i8p;
-    } u;
+    HE_t he = memset(alloca(sizeof(*he)), 0, sizeof(*he));
     char numbuf[32];
-    rpmTagType t;
-    int_32 c;
     miRE mire;
-    static int_32 zero = 0;
     int ntags = 0;
     int nmatches = 0;
-    int i, j;
+    int i;
     int rc;
 
     if (mi->mi_h == NULL)	/* XXX can't happen */
@@ -2155,49 +2181,64 @@ static int mireSkip (const rpmdbMatchIterator mi)
     for (i = 0; i < mi->mi_nre; i++, mire++) {
 	int anymatch;
 
-	if (!hge(mi->mi_h, mire->tag, &t, (void **)&u, &c)) {
-	    if (mire->tag != RPMTAG_EPOCH) {
+	he->tag = mire->tag;
+
+	if (!headerGet(mi->mi_h, he, 0)) {
+	    if (he->tag != RPMTAG_EPOCH) {
 		ntags++;
 		continue;
 	    }
-	    t = RPM_INT32_TYPE;
-/*@-immediatetrans@*/
-	    u.i32p = &zero;
-/*@=immediatetrans@*/
-	    c = 1;
+	    he->t = RPM_UINT32_TYPE;
+	    he->p.ui32p = xcalloc(1, sizeof(*he->p.ui32p));
+	    he->c = 1;
 	}
 
 	anymatch = 0;		/* no matches yet */
 	while (1) {
-	    switch (t) {
-	    case RPM_CHAR_TYPE:
-	    case RPM_INT8_TYPE:
-		sprintf(numbuf, "%d", (int) *u.i8p);
-		rc = mireRegexec(mire, numbuf);
-		if ((!rc && !mire->notmatch) || (rc && mire->notmatch))
-		    anymatch++;
+	    unsigned j;
+	    switch (he->t) {
+	    case RPM_UINT8_TYPE:
+		for (j = 0; j < (unsigned) he->c; j++) {
+		    sprintf(numbuf, "%u", (unsigned) he->p.ui8p[j]);
+		    rc = mireRegexec(mire, numbuf);
+		    if ((!rc && !mire->notmatch) || (rc && mire->notmatch))
+			anymatch++;
+		}
 		/*@switchbreak@*/ break;
-	    case RPM_INT16_TYPE:
-		sprintf(numbuf, "%d", (int) *u.i16p);
-		rc = mireRegexec(mire, numbuf);
-		if ((!rc && !mire->notmatch) || (rc && mire->notmatch))
-		    anymatch++;
+	    case RPM_UINT16_TYPE:
+		for (j = 0; j < (unsigned) he->c; j++) {
+		    sprintf(numbuf, "%u", (unsigned) he->p.ui16p[j]);
+		    rc = mireRegexec(mire, numbuf);
+		    if ((!rc && !mire->notmatch) || (rc && mire->notmatch))
+			anymatch++;
+		}
 		/*@switchbreak@*/ break;
-	    case RPM_INT32_TYPE:
-		sprintf(numbuf, "%d", (int) *u.i32p);
-		rc = mireRegexec(mire, numbuf);
-		if ((!rc && !mire->notmatch) || (rc && mire->notmatch))
-		    anymatch++;
+	    case RPM_UINT32_TYPE:
+		for (j = 0; j < (unsigned) he->c; j++) {
+		    sprintf(numbuf, "%u", (unsigned) he->p.ui32p[j]);
+		    rc = mireRegexec(mire, numbuf);
+		    if ((!rc && !mire->notmatch) || (rc && mire->notmatch))
+			anymatch++;
+		}
+		/*@switchbreak@*/ break;
+	    case RPM_UINT64_TYPE:
+/*@-duplicatequals@*/
+		for (j = 0; j < (unsigned) he->c; j++) {
+		    sprintf(numbuf, "%llu", (unsigned long long)he->p.ui64p[j]);
+		    rc = mireRegexec(mire, numbuf);
+		    if ((!rc && !mire->notmatch) || (rc && mire->notmatch))
+			anymatch++;
+		}
+/*@=duplicatequals@*/
 		/*@switchbreak@*/ break;
 	    case RPM_STRING_TYPE:
-		rc = mireRegexec(mire, u.str);
+		rc = mireRegexec(mire, he->p.str);
 		if ((!rc && !mire->notmatch) || (rc && mire->notmatch))
 		    anymatch++;
 		/*@switchbreak@*/ break;
-	    case RPM_I18NSTRING_TYPE:
 	    case RPM_STRING_ARRAY_TYPE:
-		for (j = 0; j < c; j++) {
-		    rc = mireRegexec(mire, u.argv[j]);
+		for (j = 0; j < (unsigned) he->c; j++) {
+		    rc = mireRegexec(mire, he->p.argv[j]);
 		    if ((!rc && !mire->notmatch) || (rc && mire->notmatch)) {
 			anymatch++;
 			/*@innerbreak@*/ break;
@@ -2205,13 +2246,13 @@ static int mireSkip (const rpmdbMatchIterator mi)
 		}
 		/*@switchbreak@*/ break;
 	    case RPM_BIN_TYPE:
-	    {   const char * s = bin2hex(u.ptr, c);
+	    {   const char * s = bin2hex(he->p.ptr, he->c);
 		rc = mireRegexec(mire, s);
 		if ((!rc && !mire->notmatch) || (rc && mire->notmatch))
 		    anymatch++;
 		s = _free(s);
 	    }   /*@switchbreak@*/ break;
-	    case RPM_NULL_TYPE:
+	    case RPM_I18NSTRING_TYPE:
 	    default:
 		/*@switchbreak@*/ break;
 	    }
@@ -2223,10 +2264,7 @@ static int mireSkip (const rpmdbMatchIterator mi)
 	    /*@innerbreak@*/ break;
 	}
 
-	if (mire->tag == RPMTAG_NVRA)
-	    u.str = _free(u.str);
-	else
-	    u.ptr = hfd(u.ptr, t);
+	he->p.ptr = _free(he->p.ptr);
 
 	if (anymatch)
 	    nmatches++;
@@ -2235,6 +2273,7 @@ static int mireSkip (const rpmdbMatchIterator mi)
 
     return (ntags > 0 && ntags == nmatches ? 0 : 1);
 }
+/*@=onlytrans@*/
 
 int rpmdbSetIteratorRewrite(rpmdbMatchIterator mi, int rewrite)
 {
@@ -2323,11 +2362,10 @@ if (dbiByteSwapped(dbi) == 1)
 	    keyp = &mi_offset;
 	    keylen = sizeof(mi_offset.ui);
 	} else {
-
-	    key->data = keyp = (void *)mi->mi_keyp;
-	    key->size = keylen = mi->mi_keylen;
+	    key->data = (void *)mi->mi_keyp;
+	    key->size = (u_int32_t) mi->mi_keylen;
 	    data->data = uh;
-	    data->size = uhlen;
+	    data->size = (u_int32_t) uhlen;
 #if !defined(_USE_COPY_LOAD)
 	    data->flags |= DB_DBT_MALLOC;
 #endif
@@ -2350,7 +2388,7 @@ if (dbiByteSwapped(dbi) == 1)
 		memcpy(&mi_offset, keyp, sizeof(mi_offset.ui));
 if (dbiByteSwapped(dbi) == 1)
     _DBSWAP(mi_offset);
-		mi->mi_offset = mi_offset.ui;
+		mi->mi_offset = (unsigned) mi_offset.ui;
 	    }
 
 	    /* Terminate on error or end of keys */
@@ -2371,7 +2409,7 @@ if (dbiByteSwapped(dbi) == 1)
     /* Retrieve next header blob for index iterator. */
     if (uh == NULL) {
 	key->data = keyp;
-	key->size = keylen;
+	key->size = (u_int32_t) keylen;
 #if !defined(_USE_COPY_LOAD)
 	data->flags |= DB_DBT_MALLOC;
 #endif
@@ -2414,11 +2452,12 @@ if (dbiByteSwapped(dbi) == 1)
 	    int lvl;
 
 assert(data->data != NULL);
-	    rpmrc = headerCheck(mi->mi_ts, uh, uhlen, &msg);
-	    lvl = (rpmrc == RPMRC_FAIL ? RPMMESS_ERROR : RPMMESS_DEBUG);
-	    rpmMessage(lvl, "%s h#%8u %s",
-		(rpmrc == RPMRC_FAIL ? _("rpmdbNextIterator: skipping") : " read"),
-			mi->mi_offset, (msg ? msg : "\n"));
+	    rpmrc = headerCheck(rpmtsDig(mi->mi_ts), uh, uhlen, &msg);
+	    rpmtsCleanDig(mi->mi_ts);
+	    lvl = (rpmrc == RPMRC_FAIL ? RPMLOG_ERR : RPMLOG_DEBUG);
+	    rpmlog(lvl, "%s h#%8u %s\n",
+		(rpmrc == RPMRC_FAIL ? _("rpmdb: skipping") : _("rpmdb: read")),
+			mi->mi_offset, (msg ? msg : ""));
 	    msg = _free(msg);
 
 	    /* Mark header checked. */
@@ -2431,8 +2470,12 @@ assert(data->data != NULL);
 	    }
 
 	    /* Skip damaged and inconsistent headers. */
-	    if (rpmrc == RPMRC_FAIL)
+	    if (rpmrc == RPMRC_FAIL) {
+		/* XXX Terminate immediately on failed lookup by instance. */
+		if (mi->mi_set == NULL && mi->mi_keyp != NULL && mi->mi_keylen == 4)
+		    return NULL;
 		goto top;
+	    }
 	}
     }
 
@@ -2447,7 +2490,7 @@ assert(data->data != NULL);
     mi->mi_h = headerCopyLoad(uh);
 #endif
     if (mi->mi_h == NULL || !headerIsEntry(mi->mi_h, RPMTAG_NAME)) {
-	rpmError(RPMERR_BADHEADER,
+	rpmlog(RPMLOG_ERR,
 		_("rpmdb: damaged header #%u retrieved -- skipping.\n"),
 		mi->mi_offset);
 	goto top;
@@ -2534,7 +2577,7 @@ static int rpmdbGrowIterator(/*@null@*/ rpmdbMatchIterator mi, int fpNum,
 
     if (rc) {			/* error/not found */
 	if (rc != DB_NOTFOUND)
-	    rpmError(RPMERR_DBGETINDEX,
+	    rpmlog(RPMLOG_ERR,
 		_("error(%d) getting \"%s\" records from %s index\n"),
 		rc, key->data, tagName(dbi->dbi_rpmtag));
 #ifdef	SQLITE_HACK
@@ -2676,15 +2719,15 @@ rpmdbMatchIterator rpmdbInitIterator(rpmdb db, rpmTag rpmtag,
 /*@-temptrans@*/
 key->data = (void *) keyp;
 /*@=temptrans@*/
-key->size = keylen;
-if (key->data && key->size == 0) key->size = strlen((char *)key->data);
+key->size = (u_int32_t) keylen;
+if (key->data && key->size == 0) key->size = (u_int32_t) strlen((char *)key->data);
 if (key->data && key->size == 0) key->size++;	/* XXX "/" fixup. */
 
 /*@-nullstate@*/
 	    rc = dbiGet(dbi, dbcursor, key, data, DB_SET);
 /*@=nullstate@*/
 	    if (rc > 0) {
-		rpmError(RPMERR_DBGETINDEX,
+		rpmlog(RPMLOG_ERR,
 			_("error(%d) getting \"%s\" records from %s index\n"),
 			rc, (key->data ? key->data : "???"), tagName(dbi->dbi_rpmtag));
 	    }
@@ -2762,12 +2805,12 @@ DBC * dbcursor = NULL;
 DBT * key = alloca(sizeof(*key));
 DBT * data = alloca(sizeof(*data));
 union _dbswap mi_offset;
-    HGE_t hge = (HGE_t)headerGetEntryMinMemory;
-    HFD_t hfd = headerFreeData;
+    HE_t he = memset(alloca(sizeof(*he)), 0, sizeof(*he));
     Header h;
     sigset_t signalMask;
     int ret = 0;
     int rc = 0;
+    int xx;
 
     if (db == NULL)
 	return 0;
@@ -2784,7 +2827,7 @@ memset(data, 0, sizeof(*data));
     }
 
     if (h == NULL) {
-	rpmError(RPMERR_DBCORRUPT, _("%s: cannot read header at 0x%x\n"),
+	rpmlog(RPMLOG_ERR, _("%s: cannot read header at 0x%x\n"),
 	      "rpmdbRemove", hdrNum);
 	return 1;
     }
@@ -2792,39 +2835,43 @@ memset(data, 0, sizeof(*data));
 #ifdef	DYING
     /* Add remove transaction id to header. */
     if (rid != 0 && rid != -1) {
-	int_32 tid = rid;
-	(void) headerAddEntry(h, RPMTAG_REMOVETID, RPM_INT32_TYPE, &tid, 1);
+	uint32_t tid = rid;
+	he->tag = RPMTAG_REMOVETID;
+	he->t = RPM_UINT32_TYPE;
+	he->p.ui32p = &tid;
+	he->c = 1;
+	xx = headerPut(h, he, 0);
     }
 #endif
 
-    {	const char * NVRA = NULL;
-	(void) headerGetExtension(h, RPMTAG_NVRA, NULL, &NVRA, NULL);
-	rpmMessage(RPMMESS_DEBUG, "  --- h#%8u %s\n", hdrNum, NVRA);
-	NVRA = _free(NVRA);
-    }
+    he->tag = RPMTAG_NVRA;
+    xx = headerGet(h, he, 0);
+    rpmlog(RPMLOG_DEBUG, "  --- h#%8u %s\n", hdrNum, he->p.str);
+    he->p.ptr = _free(he->p.ptr);
 
     (void) blockSignals(db, &signalMask);
 
-	/*@-nullpass -nullptrarith -nullderef @*/ /* FIX: rpmvals heartburn */
-    {	int dbix;
-	dbiIndexItem rec = dbiIndexNewItem(hdrNum, 0);
+/*@-nullpass -nullptrarith -nullderef @*/ /* FIX: rpmvals heartburn */
+    {	dbiIndexItem rec = dbiIndexNewItem(hdrNum, 0);
+	size_t dbix;
 
-	if (db->db_tagn != NULL)
+	if (db->db_tags != NULL)
 	for (dbix = 0; dbix < db->db_ndbi; dbix++) {
+	    tagStore_t dbiTag = db->db_tags + dbix;
+	    rpmTag rpmtag = dbiTag->tag;
+	    const char * dbiBN = (dbiTag->str != NULL
+		? dbiTag->str : tagName(rpmtag));
 	    dbiIndex dbi;
-	    const char *av[1];
-	    const char ** rpmvals = NULL;
-	    byte * bin = NULL;
-	    rpmTagType rpmtype = 0;
-	    int rpmcnt = 0;
-	    int rpmtag;
-	    int xx;
-	    int i, j;
+	    uint8_t * bin = NULL;
+	    int i;
 
 	    dbi = NULL;
-	    rpmtag = db->db_tagn[dbix];
+	    he->tag = rpmtag;
+	    he->t = 0;
+	    he->p.ptr = NULL;
+	    he->c = 0;
 
-	    switch (rpmtag) {
+	    switch (he->tag) {
 	    /* Filter out temporary databases */
 	    case RPMDBI_AVAILABLE:
 	    case RPMDBI_ADDED:
@@ -2835,7 +2882,7 @@ memset(data, 0, sizeof(*data));
 	    case RPMDBI_PACKAGES:
 		if (db->db_export != NULL)
 		    xx = db->db_export(db, h, 0);
-		dbi = dbiOpen(db, rpmtag, 0);
+		dbi = dbiOpen(db, he->tag, 0);
 		if (dbi == NULL)	/* XXX shouldn't happen */
 		    continue;
 	      
@@ -2845,14 +2892,14 @@ if (dbiByteSwapped(dbi) == 1)
     _DBSWAP(mi_offset);
 		key->data = &mi_offset;
 /*@=immediatetrans@*/
-		key->size = sizeof(mi_offset.ui);
+		key->size = (u_int32_t) sizeof(mi_offset.ui);
 
 		rc = dbiCopen(dbi, dbi->dbi_txnid, &dbcursor, DB_WRITECURSOR);
 		rc = dbiGet(dbi, dbcursor, key, data, DB_SET);
 		if (rc) {
-		    rpmError(RPMERR_DBGETINDEX,
+		    rpmlog(RPMLOG_ERR,
 			_("error(%d) setting header #%d record for %s removal\n"),
-			rc, hdrNum, tagName(dbi->dbi_rpmtag));
+			rc, hdrNum, dbiBN);
 		} else
 		    rc = dbiDel(dbi, dbcursor, key, data, 0);
 		xx = dbiCclose(dbi, dbcursor, DB_WRITECURSOR);
@@ -2861,31 +2908,32 @@ if (dbiByteSwapped(dbi) == 1)
 		    xx = dbiSync(dbi, 0);
 		continue;
 		/*@notreached@*/ /*@switchbreak@*/ break;
-	    case RPMTAG_NVRA:	/* XXX compound header extension. */
-		if (!headerGetExtension(h, rpmtag, (hTYP_t)&rpmtype, &rpmvals, &rpmcnt))
-		    continue;
-		/*@switchbreak@*/ break;
 	    default:
-		if (!hge(h, rpmtag, &rpmtype, &rpmvals, &rpmcnt))
+		xx = headerGet(h, he, 0);
+		if (!xx)
 		    continue;
 		/*@switchbreak@*/ break;
 
 	    }
 	
-	  dbi = dbiOpen(db, rpmtag, 0);
+	  dbi = dbiOpen(db, he->tag, 0);
 	  if (dbi != NULL) {
 	    int printed;
 
-	    if (rpmtype == RPM_STRING_TYPE) {
-		/* XXX force uniform headerGetEntry return */
-		av[0] = (const char *) rpmvals;
-		rpmvals = av;
-		rpmcnt = 1;
+	    /* XXX Coerce strings into header argv return. */
+	    if (he->t == RPM_STRING_TYPE) {
+		const char * s = he->p.str;
+		char * t;
+		he->c = 1;
+		he->p.argv = xcalloc(1, sizeof(*he->p.argv)+strlen(s)+1);
+		he->p.argv[0] = t = (char *) &he->p.argv[1];
+		(void) strcpy(t, s);
+		s = _free(s);
 	    }
 
 	    printed = 0;
 	    xx = dbiCopen(dbi, dbi->dbi_txnid, &dbcursor, DB_WRITECURSOR);
-	    for (i = 0; i < rpmcnt; i++) {
+	    for (i = 0; i < (unsigned) he->c; i++) {
 		dbiIndexSet set;
 		int stringvalued;
 
@@ -2893,7 +2941,7 @@ if (dbiByteSwapped(dbi) == 1)
 		switch (dbi->dbi_rpmtag) {
 		case RPMTAG_FILEDIGESTS:
 		    /* Filter out empty file digests. */
-		    if (!(rpmvals[i] && *rpmvals[i] != '\0'))
+		    if (!(he->p.argv[i] && *he->p.argv[i] != '\0'))
 			/*@innercontinue@*/ continue;
 		    /*@switchbreak@*/ break;
 		default:
@@ -2902,74 +2950,78 @@ if (dbiByteSwapped(dbi) == 1)
 
 		/* Identify value pointer and length. */
 		stringvalued = 0;
-		switch (rpmtype) {
-/*@-sizeoftype@*/
-		case RPM_CHAR_TYPE:
-		case RPM_INT8_TYPE:
-		    key->size = sizeof(RPM_CHAR_TYPE);
-		    key->data = rpmvals + i;
+		switch (he->t) {
+		case RPM_UINT8_TYPE:
+		    key->size = (u_int32_t) sizeof(*he->p.ui8p);
+/*@i@*/		    key->data = he->p.ui8p + i;
 		    /*@switchbreak@*/ break;
-		case RPM_INT16_TYPE:
-		    key->size = sizeof(int_16);
-		    key->data = rpmvals + i;
+		case RPM_UINT16_TYPE:
+		    key->size = (u_int32_t) sizeof(*he->p.ui16p);
+/*@i@*/		    key->data = he->p.ui16p + i;
 		    /*@switchbreak@*/ break;
-		case RPM_INT32_TYPE:
-		    key->size = sizeof(int_32);
-		    key->data = rpmvals + i;
+		case RPM_UINT32_TYPE:
+		    key->size = (u_int32_t) sizeof(*he->p.ui32p);
+/*@i@*/		    key->data = he->p.ui32p + i;
 		    /*@switchbreak@*/ break;
-/*@=sizeoftype@*/
+		case RPM_UINT64_TYPE:
+		    key->size = (u_int32_t) sizeof(*he->p.ui64p);
+/*@i@*/		    key->data = he->p.ui64p + i;
+		    /*@switchbreak@*/ break;
 		case RPM_BIN_TYPE:
-		    key->size = rpmcnt;
-		    key->data = rpmvals;
-		    rpmcnt = 1;		/* XXX break out of loop. */
+		    key->size = (u_int32_t) he->c;
+/*@i@*/		    key->data = he->p.ptr;
+		    he->c = 1;		/* XXX break out of loop. */
 		    /*@switchbreak@*/ break;
+		case RPM_I18NSTRING_TYPE:	/* XXX never occurs. */
 		case RPM_STRING_TYPE:
-		case RPM_I18NSTRING_TYPE:
-		    rpmcnt = 1;		/* XXX break out of loop. */
+		    he->c = 1;		/* XXX break out of loop. */
 		    /*@fallthrough@*/
 		case RPM_STRING_ARRAY_TYPE:
 		    /* Convert from hex to binary. */
 		    if (dbi->dbi_rpmtag == RPMTAG_FILEDIGESTS) {
-			const char * s = rpmvals[i];
+			const char * s = he->p.argv[i];
 			size_t dlen = strlen(s);
-			byte * t;
+			uint8_t * t;
+			unsigned j;
 assert((dlen & 1) == 0);
 			dlen /= 2;
 			bin = t = xcalloc(1, dlen);
-			for (j = 0; j < dlen; j++, t++, s += 2)
-			    *t = (nibble(s[0]) << 4) | nibble(s[1]);
+/*@-type@*/
+			for (j = 0; j < (unsigned) dlen; j++, t++, s += 2)
+			    *t = (uint8_t) (nibble(s[0]) << 4) | nibble(s[1]);
+/*@=type@*/
 			key->data = bin;
-			key->size = dlen;
+			key->size = (u_int32_t) dlen;
 			/*@switchbreak@*/ break;
 		    }
 		    /* Extract the pubkey id from the base64 blob. */
 		    if (dbi->dbi_rpmtag == RPMTAG_PUBKEYS) {
 			int nbin;
 			bin = xcalloc(1, 32);
-			nbin = pgpExtractPubkeyFingerprint(rpmvals[i], bin);
+			nbin = pgpExtractPubkeyFingerprint(he->p.argv[i], bin);
 			if (nbin <= 0)
 			    /*@innercontinue@*/ continue;
 			key->data = bin;
-			key->size = nbin;
+			key->size = (u_int32_t) nbin;
 			/*@switchbreak@*/ break;
 		    }
 		    /*@fallthrough@*/
 		default:
-/*@i@*/		    key->data = (void *) rpmvals[i];
-		    key->size = strlen(rpmvals[i]);
+/*@i@*/		    key->data = (void *) he->p.argv[i];
+		    key->size = (u_int32_t) strlen(he->p.argv[i]);
 		    stringvalued = 1;
 		    /*@switchbreak@*/ break;
 		}
 
 		if (!printed) {
-		    if (rpmcnt == 1 && stringvalued) {
-			rpmMessage(RPMMESS_DEBUG,
+		    if (he->c == 1 && stringvalued) {
+			rpmlog(RPMLOG_DEBUG,
 				D_("removing \"%s\" from %s index.\n"),
-				(char *)key->data, tagName(dbi->dbi_rpmtag));
+				(char *)key->data, dbiBN);
 		    } else {
-			rpmMessage(RPMMESS_DEBUG,
-				D_("removing %d entries from %s index.\n"),
-				rpmcnt, tagName(dbi->dbi_rpmtag));
+			rpmlog(RPMLOG_DEBUG,
+				D_("removing %u entries from %s index.\n"),
+				(unsigned) he->c, dbiBN);
 		    }
 		    printed++;
 		}
@@ -2985,7 +3037,7 @@ assert((dlen & 1) == 0);
 
 		set = NULL;
 
-if (key->size == 0) key->size = strlen((char *)key->data);
+if (key->size == 0) key->size = (u_int32_t) strlen((char *)key->data);
 if (key->size == 0) key->size++;	/* XXX "/" fixup. */
  
 /*@-compmempass@*/
@@ -2995,9 +3047,9 @@ if (key->size == 0) key->size++;	/* XXX "/" fixup. */
 		} else if (rc == DB_NOTFOUND) {	/* not found */
 		    /*@innercontinue@*/ continue;
 		} else {			/* error */
-		    rpmError(RPMERR_DBGETINDEX,
+		    rpmlog(RPMLOG_ERR,
 			_("error(%d) setting \"%s\" records from %s index\n"),
-			rc, key->data, tagName(dbi->dbi_rpmtag));
+			rc, key->data, dbiBN);
 		    ret += 1;
 		    /*@innercontinue@*/ continue;
 		}
@@ -3016,9 +3068,9 @@ if (key->size == 0) key->size++;	/* XXX "/" fixup. */
 		    (void) set2dbt(dbi, data, set);
 		    rc = dbiPut(dbi, dbcursor, key, data, DB_KEYLAST);
 		    if (rc) {
-			rpmError(RPMERR_DBPUTINDEX,
+			rpmlog(RPMLOG_ERR,
 				_("error(%d) storing record \"%s\" into %s\n"),
-				rc, key->data, tagName(dbi->dbi_rpmtag));
+				rc, key->data, dbiBN);
 			ret += 1;
 		    }
 		    data->data = _free(data->data);
@@ -3026,9 +3078,9 @@ if (key->size == 0) key->size++;	/* XXX "/" fixup. */
 		} else {
 		    rc = dbiDel(dbi, dbcursor, key, data, 0);
 		    if (rc) {
-			rpmError(RPMERR_DBPUTINDEX,
+			rpmlog(RPMLOG_ERR,
 				_("error(%d) removing record \"%s\" from %s\n"),
-				rc, key->data, tagName(dbi->dbi_rpmtag));
+				rc, key->data, dbiBN);
 			ret += 1;
 		    }
 		}
@@ -3043,21 +3095,16 @@ if (key->size == 0) key->size++;	/* XXX "/" fixup. */
 		xx = dbiSync(dbi, 0);
 	  }
 
-/*@-unqualifiedtrans@*/
-	    if (rpmtag == RPMTAG_NVRA)	/* XXX compound header extension. */
-		av[0] = _free(av[0]);
-/*@=unqualifiedtrans@*/
-	    else
-	    if (rpmtype != RPM_BIN_TYPE)	/* XXX WTFO? HACK ALERT */
-		rpmvals = hfd(rpmvals, rpmtype);
-	    rpmtype = 0;
-	    rpmcnt = 0;
+	    he->tag = 0;
+	    he->t = 0;
+	    he->p.ptr = _free(he->p.ptr);
+	    he->c = 0;
 	    bin = _free(bin);
 	}
 
 	rec = _free(rec);
     }
-    /*@=nullpass =nullptrarith =nullderef @*/
+/*@=nullpass =nullptrarith =nullderef @*/
 
     (void) unblockSignals(db, &signalMask);
 
@@ -3073,18 +3120,12 @@ int rpmdbAdd(rpmdb db, int iid, Header h, /*@unused@*/ rpmts ts)
 DBC * dbcursor = NULL;
 DBT * key = alloca(sizeof(*key));
 DBT * data = alloca(sizeof(*data));
-    HGE_t hge = (HGE_t) headerGetEntryMinMemory;
-    HAE_t hae = (HAE_t) headerAddEntry;
-    HFD_t hfd = headerFreeData;
+    HE_t he = memset(alloca(sizeof(*he)), 0, sizeof(*he));
     sigset_t signalMask;
-    const char ** baseNames;
-    rpmTagType bnt;
     const char ** dirNames;
-    int_32 * dirIndexes;
-    rpmTagType dit, dnt;
-    int count = 0;
+    uint32_t * dirIndexes;
     dbiIndex dbi;
-    int dbix;
+    size_t dbix;
     union _dbswap mi_offset;
     unsigned int hdrNum = 0;
     size_t nb;
@@ -3102,29 +3143,43 @@ memset(key, 0, sizeof(*key));
 memset(data, 0, sizeof(*data));
 
 #ifdef	NOTYET	/* XXX headerRemoveEntry() broken on dribbles. */
-    xx = headerRemoveEntry(h, RPMTAG_REMOVETID);
+    he->tag = RPMTAG_REMOVETID;
+    xx = headerDel(h, he, 0);
 #endif
     if (iid != 0 && iid != -1) {
-	int_32 tid = iid;
-	if (!headerIsEntry(h, RPMTAG_INSTALLTID))
-	   xx = hae(h, RPMTAG_INSTALLTID, RPM_INT32_TYPE, &tid, 1);
+	uint32_t tid = iid;
+	he->tag = RPMTAG_INSTALLTID;
+	he->t = RPM_UINT32_TYPE;
+	he->p.ui32p = &tid;
+	he->c = 1;
+	if (!headerIsEntry(h, he->tag))
+/*@-compmempass@*/
+	   xx = headerPut(h, he, 0);
+/*@=compmempass@*/
     }
 
     /* Add the package color if not present. */
     if (!headerIsEntry(h, RPMTAG_PACKAGECOLOR)) {
 	uint32_t hcolor = hGetColor(h);
-	xx = hae(h, RPMTAG_PACKAGECOLOR, RPM_INT32_TYPE, &hcolor, 1);
+	he->tag = RPMTAG_PACKAGECOLOR;
+	he->t = RPM_UINT32_TYPE;
+	he->p.ui32p = &hcolor;
+	he->c = 1;
+/*@-compmempass@*/
+	xx = headerPut(h, he, 0);
+/*@=compmempass@*/
     }
 
-    /*
-     * If old style filename tags is requested, the basenames need to be
-     * retrieved early, and the header needs to be converted before
-     * being written to the package header database.
-     */
-
-    xx = hge(h, RPMTAG_BASENAMES, &bnt, &baseNames, &count);
-    xx = hge(h, RPMTAG_DIRINDEXES, &dit, &dirIndexes, NULL);
-    xx = hge(h, RPMTAG_DIRNAMES, &dnt, &dirNames, NULL);
+    he->tag = RPMTAG_DIRNAMES;
+/*@-compmempass@*/
+    xx = headerGet(h, he, 0);
+/*@=compmempass@*/
+    dirNames = he->p.argv;
+    he->tag = RPMTAG_DIRINDEXES;
+/*@-compmempass@*/
+    xx = headerGet(h, he, 0);
+/*@=compmempass@*/
+    dirIndexes = he->p.ui32p;
 
     (void) blockSignals(db, &signalMask);
 
@@ -3151,9 +3206,9 @@ memset(data, 0, sizeof(*data));
 
 /*@-compmempass@*/
 	key->data = keyp;
-	key->size = keylen;
+	key->size = (u_int32_t) keylen;
 /*@i@*/	data->data = datap;
-	data->size = datalen;
+	data->size = (u_int32_t) datalen;
 	ret = dbiGet(dbi, dbcursor, key, data, DB_SET);
 	keyp = key->data;
 	keylen = key->size;
@@ -3166,7 +3221,7 @@ memset(data, 0, sizeof(*data));
 	    memcpy(&mi_offset, datap, sizeof(mi_offset.ui));
 	    if (dbiByteSwapped(dbi) == 1)
 		_DBSWAP(mi_offset);
-	    hdrNum = mi_offset.ui;
+	    hdrNum = (unsigned) mi_offset.ui;
 	}
 	++hdrNum;
 	mi_offset.ui = hdrNum;
@@ -3180,11 +3235,11 @@ memset(data, 0, sizeof(*data));
 	}
 
 	key->data = keyp;
-	key->size = keylen;
+	key->size = (u_int32_t) keylen;
 /*@-kepttrans@*/
 	data->data = datap;
 /*@=kepttrans@*/
-	data->size = datalen;
+	data->size = (u_int32_t) datalen;
 
 /*@-compmempass@*/
 	ret = dbiPut(dbi, dbcursor, key, data, DB_KEYLAST);
@@ -3198,7 +3253,7 @@ memset(data, 0, sizeof(*data));
     }
 
     if (ret) {
-	rpmError(RPMERR_DBCORRUPT,
+	rpmlog(RPMLOG_ERR,
 		_("error(%d) allocating new package instance\n"), ret);
 	goto exit;
     }
@@ -3206,30 +3261,30 @@ memset(data, 0, sizeof(*data));
     /* Now update the indexes */
 
     if (hdrNum)
-    {	
-	dbiIndexItem rec = dbiIndexNewItem(hdrNum, 0);
+    {	dbiIndexItem rec = dbiIndexNewItem(hdrNum, 0);
 
 	/* Save the header instance. */
 	(void) headerSetInstance(h, hdrNum);
 	
-	if (db->db_tagn != NULL)
+	if (db->db_tags != NULL)
 	for (dbix = 0; dbix < db->db_ndbi; dbix++) {
-	    const char *av[1];
-	    const char **rpmvals = NULL;
-	    byte * bin = NULL;
-	    rpmTagType rpmtype = 0;
-	    int rpmcnt = 0;
-	    int rpmtag;
-	    int_32 * requireFlags;
+	    tagStore_t dbiTags = db->db_tags + dbix;
+	    const char * dbiBN = (dbiTags->str != NULL
+			? dbiTags->str : tagName(dbiTags->tag));
+	    uint8_t * bin = NULL;
+	    rpmTagData requireFlags;
 	    rpmRC rpmrc;
-	    int i, j;
+	    int i;
 
 	    rpmrc = RPMRC_NOTFOUND;
+	    requireFlags.ptr = NULL;
 	    dbi = NULL;
-	    requireFlags = NULL;
-	    rpmtag = db->db_tagn[dbix];
+	    he->tag = dbiTags->tag;
+	    he->t = 0;
+	    he->p.ptr = NULL;
+	    he->c = 0;
 
-	    switch (rpmtag) {
+	    switch (he->tag) {
 	    /* Filter out temporary databases */
 	    case RPMDBI_AVAILABLE:
 	    case RPMDBI_ADDED:
@@ -3240,7 +3295,7 @@ memset(data, 0, sizeof(*data));
 	    case RPMDBI_PACKAGES:
 		if (db->db_export != NULL)
 		    xx = db->db_export(db, h, 1);
-		dbi = dbiOpen(db, rpmtag, 0);
+		dbi = dbiOpen(db, he->tag, 0);
 		if (dbi == NULL)	/* XXX shouldn't happen */
 		    continue;
 		xx = dbiCopen(dbi, dbi->dbi_txnid, &dbcursor, DB_WRITECURSOR);
@@ -3251,17 +3306,17 @@ if (dbiByteSwapped(dbi) == 1)
 /*@-immediatetrans@*/
 key->data = (void *) &mi_offset;
 /*@=immediatetrans@*/
-key->size = sizeof(mi_offset.ui);
-{   size_t len;
+key->size = (u_int32_t) sizeof(mi_offset.ui);
+ {  size_t len;
     nb = 0;
     (void) headerGetMagic(h, NULL, &nb);
     len = 0;
     data->data = headerUnload(h, &len);
-    data->size = len;	/* XXX data->size is uint32_t */
+    data->size = (u_int32_t) len;	/* XXX data->size is uint32_t */
 #ifdef	DYING	/* XXX this is needed iff headerSizeof() is used instead. */
     data->size -= nb;	/* XXX HEADER_MAGIC_NO */
 #endif
-}
+ }
 
 		/* Check header digest/signature on blob export. */
 		if (ts) {
@@ -3269,9 +3324,10 @@ key->size = sizeof(mi_offset.ui);
 		    int lvl;
 
 assert(data->data != NULL);
-		    rpmrc = headerCheck(ts, data->data, data->size, &msg);
-		    lvl = (rpmrc == RPMRC_FAIL ? RPMMESS_ERROR : RPMMESS_DEBUG);
-		    rpmMessage(lvl, "%s h#%8u %s",
+		    rpmrc = headerCheck(rpmtsDig(ts), data->data, data->size, &msg);
+		    rpmtsCleanDig(ts);
+		    lvl = (rpmrc == RPMRC_FAIL ? RPMLOG_ERR : RPMLOG_DEBUG);
+		    rpmlog(lvl, "%s h#%8u %s",
 			(rpmrc == RPMRC_FAIL ? _("rpmdbAdd: skipping") : "  +++"),
 				hdrNum, (msg ? msg : "\n"));
 		    msg = _free(msg);
@@ -3291,50 +3347,47 @@ data->size = 0;
 		    xx = dbiSync(dbi, 0);
 		continue;
 		/*@notreached@*/ /*@switchbreak@*/ break;
-	    case RPMTAG_BASENAMES:	/* XXX preserve legacy behavior */
-		rpmtype = bnt;
-		rpmvals = baseNames;
-		rpmcnt = count;
-		/*@switchbreak@*/ break;
 	    case RPMTAG_REQUIRENAME:
-		xx = hge(h, rpmtag, &rpmtype, &rpmvals, &rpmcnt);
-		xx = hge(h, RPMTAG_REQUIREFLAGS, NULL, &requireFlags, NULL);
-		/*@switchbreak@*/ break;
-	    case RPMTAG_NVRA:	/* XXX compound header extension. */
-		xx = headerGetExtension(h, rpmtag, (hTYP_t)&rpmtype, &rpmvals, &rpmcnt);
+		he->tag = RPMTAG_REQUIREFLAGS;
+/*@-compmempass@*/
+		xx = headerGet(h, he, 0);
+/*@=compmempass@*/
+		requireFlags.ptr = he->p.ptr;
+		he->tag = RPMTAG_REQUIRENAME;
+/*@-compmempass@*/
+		xx = headerGet(h, he, 0);
+/*@=compmempass@*/
 		/*@switchbreak@*/ break;
 	    default:
-		xx = hge(h, rpmtag, &rpmtype, &rpmvals, &rpmcnt);
+/*@-compmempass@*/
+		xx = headerGet(h, he, 0);
+/*@=compmempass@*/
 		/*@switchbreak@*/ break;
 	    }
 
-	    if (rpmcnt <= 0) {
-		if (rpmtag != RPMTAG_GROUP)
-		    continue;
+	    /* Anything to do? */
+	    if (he->c == 0)
+		continue;
 
-		/* XXX preserve legacy behavior */
-		rpmtype = RPM_STRING_TYPE;
-		rpmvals = (const char **) "Unknown";
-		rpmcnt = 1;
-	    }
-
-	  dbi = dbiOpen(db, rpmtag, 0);
+	  dbi = dbiOpen(db, he->tag, 0);
 	  if (dbi != NULL) {
 	    int printed;
 
-	    if (rpmtype == RPM_STRING_TYPE) {
-		/* XXX force uniform headerGetEntry return */
-		/*@-observertrans@*/
-		av[0] = (const char *) rpmvals;
-		/*@=observertrans@*/
-		rpmvals = av;
-		rpmcnt = 1;
+	    /* XXX Coerce strings into header argv return. */
+	    if (he->t == RPM_STRING_TYPE) {
+		const char * s = he->p.str;
+		char * t;
+		he->c = 1;
+		he->p.argv = xcalloc(1, sizeof(*he->p.argv)+strlen(s)+1);
+		he->p.argv[0] = t = (char *) &he->p.argv[1];
+		(void) strcpy(t, s);
+		s = _free(s);
 	    }
 
 	    printed = 0;
 	    xx = dbiCopen(dbi, dbi->dbi_txnid, &dbcursor, DB_WRITECURSOR);
 
-	    for (i = 0; i < rpmcnt; i++) {
+	    for (i = 0; i < (unsigned) he->c; i++) {
 		dbiIndexSet set;
 		int stringvalued;
 
@@ -3352,20 +3405,22 @@ data->size = 0;
 		    /*@switchbreak@*/ break;
 		case RPMTAG_PUBKEYS:
 		    /*@switchbreak@*/ break;
-		case RPMTAG_FILEMD5S:
+		case RPMTAG_FILEDIGESTS:
 		    /* Filter out empty MD5 strings. */
-		    if (!(rpmvals[i] && *rpmvals[i] != '\0'))
+		    if (!(he->p.argv[i] && *he->p.argv[i] != '\0'))
 			/*@innercontinue@*/ continue;
 		    /*@switchbreak@*/ break;
 		case RPMTAG_REQUIRENAME:
 		    /* Filter out install prerequisites. */
-		    if (requireFlags && isInstallPreReq(requireFlags[i]))
+		    if (requireFlags.ui32p
+		     && isInstallPreReq(requireFlags.ui32p[i]))
 			/*@innercontinue@*/ continue;
 		    /*@switchbreak@*/ break;
 		case RPMTAG_TRIGGERNAME:
 		    if (i) {	/* don't add duplicates */
+			int j;
 			for (j = 0; j < i; j++) {
-			    if (!strcmp(rpmvals[i], rpmvals[j]))
+			    if (!strcmp(he->p.argv[i], he->p.argv[j]))
 				/*@innerbreak@*/ break;
 			}
 			if (j < i)
@@ -3378,74 +3433,78 @@ data->size = 0;
 
 		/* Identify value pointer and length. */
 		stringvalued = 0;
-		switch (rpmtype) {
-/*@-sizeoftype@*/
-		case RPM_CHAR_TYPE:
-		case RPM_INT8_TYPE:
-		    key->size = sizeof(int_8);
-/*@i@*/		    key->data = rpmvals + i;
+		switch (he->t) {
+		case RPM_UINT8_TYPE:
+		    key->size = (u_int32_t) sizeof(*he->p.ui8p);
+/*@i@*/		    key->data = he->p.ui8p + i;
 		    /*@switchbreak@*/ break;
-		case RPM_INT16_TYPE:
-		    key->size = sizeof(int_16);
-/*@i@*/		    key->data = rpmvals + i;
+		case RPM_UINT16_TYPE:
+		    key->size = (u_int32_t) sizeof(*he->p.ui16p);
+/*@i@*/		    key->data = he->p.ui16p + i;
 		    /*@switchbreak@*/ break;
-		case RPM_INT32_TYPE:
-		    key->size = sizeof(int_32);
-/*@i@*/		    key->data = rpmvals + i;
+		case RPM_UINT32_TYPE:
+		    key->size = (u_int32_t) sizeof(*he->p.ui32p);
+/*@i@*/		    key->data = he->p.ui32p + i;
 		    /*@switchbreak@*/ break;
-/*@=sizeoftype@*/
+		case RPM_UINT64_TYPE:
+		    key->size = (u_int32_t) sizeof(*he->p.ui64p);
+/*@i@*/		    key->data = he->p.ui64p + i;
+		    /*@switchbreak@*/ break;
 		case RPM_BIN_TYPE:
-		    key->size = rpmcnt;
-/*@i@*/		    key->data = rpmvals;
-		    rpmcnt = 1;		/* XXX break out of loop. */
+		    key->size = (u_int32_t) he->c;
+/*@i@*/		    key->data = he->p.ptr;
+		    he->c = 1;		/* XXX break out of loop. */
 		    /*@switchbreak@*/ break;
+		case RPM_I18NSTRING_TYPE:	/* XXX never occurs */
 		case RPM_STRING_TYPE:
-		case RPM_I18NSTRING_TYPE:
-		    rpmcnt = 1;		/* XXX break out of loop. */
+		    he->c = 1;		/* XXX break out of loop. */
 		    /*@fallthrough@*/
 		case RPM_STRING_ARRAY_TYPE:
 		    /* Convert from hex to binary. */
 		    if (dbi->dbi_rpmtag == RPMTAG_FILEDIGESTS) {
-			const char * s = rpmvals[i];
+			const char * s = he->p.argv[i];
 			size_t dlen = strlen(s);
-			byte * t;
+			uint8_t * t;
+			unsigned j;
 assert((dlen & 1) == 0);
 			dlen /= 2;
 			bin = t = xcalloc(1, dlen);
-			for (j = 0; j < dlen; j++, t++, s += 2)
-			    *t = (nibble(s[0]) << 4) | nibble(s[1]);
+/*@-type@*/
+			for (j = 0; j < (unsigned) dlen; j++, t++, s += 2)
+			    *t = (uint8_t) (nibble(s[0]) << 4) | nibble(s[1]);
+/*@=type@*/
 			key->data = bin;
-			key->size = dlen;
+			key->size = (u_int32_t) dlen;
 			/*@switchbreak@*/ break;
 		    }
 		    /* Extract the pubkey id from the base64 blob. */
 		    if (dbi->dbi_rpmtag == RPMTAG_PUBKEYS) {
 			int nbin;
 			bin = xcalloc(1, 32);
-			nbin = pgpExtractPubkeyFingerprint(rpmvals[i], bin);
+			nbin = pgpExtractPubkeyFingerprint(he->p.argv[i], bin);
 			if (nbin <= 0)
 			    /*@innercontinue@*/ continue;
 			key->data = bin;
-			key->size = nbin;
+			key->size = (u_int32_t) nbin;
 			/*@switchbreak@*/ break;
 		    }
 		    /*@fallthrough@*/
 		default:
-/*@i@*/		    key->data = (void *) rpmvals[i];
-		    key->size = strlen(rpmvals[i]);
+/*@i@*/		    key->data = (void *) he->p.argv[i];
+		    key->size = (u_int32_t) strlen(he->p.argv[i]);
 		    stringvalued = 1;
 		    /*@switchbreak@*/ break;
 		}
 
 		if (!printed) {
-		    if (rpmcnt == 1 && stringvalued) {
-			rpmMessage(RPMMESS_DEBUG,
+		    if (he->c == 1 && stringvalued) {
+			rpmlog(RPMLOG_DEBUG,
 				D_("adding \"%s\" to %s index.\n"),
-				(char *)key->data, tagName(dbi->dbi_rpmtag));
+				(char *)key->data, dbiBN);
 		    } else {
-			rpmMessage(RPMMESS_DEBUG,
-				D_("adding %d entries to %s index.\n"),
-				rpmcnt, tagName(dbi->dbi_rpmtag));
+			rpmlog(RPMLOG_DEBUG,
+				D_("adding %u entries to %s index.\n"),
+				(unsigned)he->c, dbiBN);
 		    }
 		    printed++;
 		}
@@ -3454,7 +3513,7 @@ assert((dlen & 1) == 0);
 
 		set = NULL;
 
-if (key->size == 0) key->size = strlen((char *)key->data);
+if (key->size == 0) key->size = (u_int32_t) strlen((char *)key->data);
 if (key->size == 0) key->size++;	/* XXX "/" fixup. */
 
 /*@-compmempass@*/
@@ -3464,9 +3523,9 @@ if (key->size == 0) key->size++;	/* XXX "/" fixup. */
 		    if (!dbi->dbi_permit_dups)
 			(void) dbt2set(dbi, data, &set);
 		} else if (rc != DB_NOTFOUND) {	/* error */
-		    rpmError(RPMERR_DBGETINDEX,
+		    rpmlog(RPMLOG_ERR,
 			_("error(%d) getting \"%s\" records from %s index\n"),
-			rc, key->data, tagName(dbi->dbi_rpmtag));
+			rc, key->data, dbiBN);
 		    ret += 1;
 		    /*@innercontinue@*/ continue;
 		}
@@ -3483,9 +3542,9 @@ if (key->size == 0) key->size++;	/* XXX "/" fixup. */
 /*@=compmempass@*/
 
 		if (rc) {
-		    rpmError(RPMERR_DBPUTINDEX,
+		    rpmlog(RPMLOG_ERR,
 				_("error(%d) storing record %s into %s\n"),
-				rc, key->data, tagName(dbi->dbi_rpmtag));
+				rc, key->data, dbiBN);
 		    ret += 1;
 		}
 /*@-unqualifiedtrans@*/
@@ -3502,26 +3561,23 @@ if (key->size == 0) key->size++;	/* XXX "/" fixup. */
 		xx = dbiSync(dbi, 0);
 	  }
 
-/*@-modobserver -unqualifiedtrans@*/
-	    if (rpmtag == RPMTAG_NVRA)	/* XXX compound header extension. */
-		av[0] = _free(av[0]);
-/*@=modobserver =unqualifiedtrans@*/
-	    else
-	    if (rpmtype != RPM_BIN_TYPE)	/* XXX WTFO? HACK ALERT */
-		rpmvals = hfd(rpmvals, rpmtype);
-	    rpmtype = 0;
-	    rpmcnt = 0;
+	    he->tag = 0;
+	    he->t = 0;
+/*@-kepttrans -onlytrans@*/
+	    he->p.ptr = _free(he->p.ptr);
+/*@=kepttrans =onlytrans@*/
+	    he->c = 0;
 	    bin = _free(bin);
+	    requireFlags.ptr = _free(requireFlags.ptr);
 	}
-	/*@=nullpass =nullptrarith =nullderef @*/
 
 	rec = _free(rec);
     }
 
 exit:
     (void) unblockSignals(db, &signalMask);
-    dirIndexes = hfd(dirIndexes, dit);
-    dirNames = hfd(dirNames, dnt);
+    dirIndexes = _free(dirIndexes);
+    dirNames = _free(dirNames);
 
     return ret;
 }
@@ -3533,8 +3589,7 @@ int rpmdbFindFpList(rpmdb db, fingerPrint * fpList, dbiIndexSet * matchList,
 {
 DBT * key;
 DBT * data;
-    HGE_t hge = (HGE_t)headerGetEntryMinMemory;
-    HFD_t hfd = headerFreeData;
+    HE_t he = memset(alloca(sizeof(*he)), 0, sizeof(*he));
     rpmdbMatchIterator mi;
     fingerPrintCache fpc;
     Header h;
@@ -3552,14 +3607,14 @@ data = &mi->mi_data;
 
     /* Gather all installed headers with matching basename's. */
     for (i = 0; i < numItems; i++) {
-	   unsigned int tag;
+	unsigned int tag;
 
 	matchList[i] = xcalloc(1, sizeof(*(matchList[i])));
 
 /*@-dependenttrans@*/
 key->data = (void *) fpList[i].baseName;
 /*@=dependenttrans@*/
-key->size = strlen((char *)key->data);
+key->size = (u_int32_t) strlen((char *)key->data);
 if (key->size == 0) key->size++;	/* XXX "/" fixup. */
 
 	tag = (_db_tagged_file_indices ? taghash(fpList[i].entry->dirName) : 0);
@@ -3582,9 +3637,8 @@ if (key->size == 0) key->size++;	/* XXX "/" fixup. */
 	const char ** dirNames;
 	const char ** baseNames;
 	const char ** fullBaseNames;
-	rpmTagType bnt, dnt;
-	uint_32 * dirIndexes;
-	uint_32 * fullDirIndexes;
+	uint32_t * dirIndexes;
+	uint32_t * fullDirIndexes;
 	fingerPrint * fps;
 	dbiIndexItem im;
 	int start;
@@ -3602,9 +3656,15 @@ if (key->size == 0) key->size++;	/* XXX "/" fixup. */
 	num = end - start;
 
 	/* Compute fingerprints for this installed header's matches */
-	xx = hge(h, RPMTAG_BASENAMES, &bnt, &fullBaseNames, NULL);
-	xx = hge(h, RPMTAG_DIRNAMES, &dnt, &dirNames, NULL);
-	xx = hge(h, RPMTAG_DIRINDEXES, NULL, &fullDirIndexes, NULL);
+	he->tag = RPMTAG_BASENAMES;
+	xx = headerGet(h, he, 0);
+	fullBaseNames = he->p.argv;
+	he->tag = RPMTAG_DIRNAMES;
+	xx = headerGet(h, he, 0);
+	dirNames = he->p.argv;
+	he->tag = RPMTAG_DIRINDEXES;
+	xx = headerGet(h, he, 0);
+	fullDirIndexes = he->p.ui32p;
 
 	baseNames = xcalloc(num, sizeof(*baseNames));
 	dirIndexes = xcalloc(num, sizeof(*dirIndexes));
@@ -3626,8 +3686,11 @@ if (key->size == 0) key->size++;	/* XXX "/" fixup. */
 	}
 
 	fps = _free(fps);
-	dirNames = hfd(dirNames, dnt);
-	fullBaseNames = hfd(fullBaseNames, bnt);
+	fullBaseNames = _free(fullBaseNames);
+/*@-usereleased@*/
+	dirNames = _free(dirNames);
+/*@=usereleased@*/
+	fullDirIndexes = _free(fullDirIndexes);
 	baseNames = _free(baseNames);
 	dirIndexes = _free(dirIndexes);
 
@@ -3683,7 +3746,7 @@ static int rpmioFileExists(const char * urlfn)
 
 static int rpmdbRemoveDatabase(const char * prefix,
 		const char * dbpath, int _dbapi,
-		const int * dbiTags, int dbiTagsMax)
+		/*@null@*/ const tagStore_t dbiTags, size_t dbiNTags)
 	/*@globals rpmGlobalMacroContext, h_errno, fileSystem, internalState @*/
 	/*@modifies rpmGlobalMacroContext, fileSystem, internalState @*/
 { 
@@ -3696,11 +3759,13 @@ static int rpmdbRemoveDatabase(const char * prefix,
 	/*@fallthrough@*/
     case 3:
     {	char * suffix;
-	int i;
+	size_t i;
 
 	if (dbiTags != NULL)
-	for (i = 0; i < dbiTagsMax; i++) {
-	    fn = rpmGetPath(prefix, dbpath, "/", tagName(dbiTags[i]), NULL);
+	for (i = 0; i < dbiNTags; i++) {
+	    const char * dbiBN = (dbiTags[i].str != NULL
+                        ? dbiTags[i].str : tagName(dbiTags[i].tag));
+	    fn = rpmGetPath(prefix, dbpath, "/", dbiBN, NULL);
 	    if (rpmioFileExists(fn))
 		xx = Unlink(fn);
 	    fn = _free(fn);
@@ -3709,7 +3774,7 @@ static int rpmdbRemoveDatabase(const char * prefix,
 	fn = rpmGetPath(prefix, dbpath, "/", "__db.000", NULL);
 	suffix = (char *)(fn + strlen(fn) - (sizeof("000") - 1));
 	for (i = 0; i < 16; i++) {
-	    (void) snprintf(suffix, sizeof("000"), "%03d", i);
+	    (void) snprintf(suffix, sizeof("000"), "%03u", (unsigned)i);
 	    if (rpmioFileExists(fn))
 		xx = Unlink(fn);
 	}
@@ -3732,7 +3797,7 @@ static int rpmdbRemoveDatabase(const char * prefix,
 static int rpmdbMoveDatabase(const char * prefix,
 		const char * olddbpath, int _olddbapi,
 		const char * newdbpath, /*@unused@*/ int _newdbapi,
-		const int * dbiTags, int dbiTagsMax)
+		/*@null@*/ const tagStore_t dbiTags, size_t dbiNTags)
 	/*@globals rpmGlobalMacroContext, h_errno, fileSystem, internalState @*/
 	/*@modifies rpmGlobalMacroContext, fileSystem, internalState @*/
 {
@@ -3747,13 +3812,15 @@ static int rpmdbMoveDatabase(const char * prefix,
         /* Fall through */
     case 3:
     {	char *osuffix, *nsuffix;
-	int i;
+	size_t i;
 	if (dbiTags != NULL)
-	for (i = 0; i < dbiTagsMax; i++) {
-	    int rpmtag;
+	for (i = 0; i < dbiNTags; i++) {
+	    rpmTag rpmtag = dbiTags[i].tag;
+	    const char * dbiBN = (dbiTags[i].str != NULL
+                        ? dbiTags[i].str : tagName(rpmtag));
 
 	    /* Filter out temporary databases */
-	    switch ((rpmtag = dbiTags[i])) {
+	    switch (rpmtag) {
 	    case RPMDBI_AVAILABLE:
 	    case RPMDBI_ADDED:
 	    case RPMDBI_REMOVED:
@@ -3764,12 +3831,12 @@ static int rpmdbMoveDatabase(const char * prefix,
 		/*@switchbreak@*/ break;
 	    }
 
-	    ofn = rpmGetPath(prefix, olddbpath, "/", tagName(rpmtag), NULL);
-	    nfn = rpmGetPath(prefix, newdbpath, "/", tagName(rpmtag), NULL);
+	    ofn = rpmGetPath(prefix, olddbpath, "/", dbiBN, NULL);
+	    nfn = rpmGetPath(prefix, newdbpath, "/", dbiBN, NULL);
 
 	    if (!rpmioFileExists(ofn)) {
 	        if (rpmioFileExists(nfn)) {
-		    rpmMessage(RPMMESS_DEBUG, D_("removing file \"%s\"\n"), nfn);
+		    rpmlog(RPMLOG_DEBUG, D_("removing file \"%s\"\n"), nfn);
 		    xx = Unlink(nfn);
                 }
 		goto bottom;
@@ -3782,8 +3849,8 @@ static int rpmdbMoveDatabase(const char * prefix,
 	    if (Stat(nfn, nst) < 0 && Stat(ofn, nst) < 0)
 		goto bottom;
 
-	    rpmMessage(RPMMESS_DEBUG, D_("moving file from \"%s\"\n"), ofn);
-	    rpmMessage(RPMMESS_DEBUG, D_("moving file to   \"%s\"\n"), nfn);
+	    rpmlog(RPMLOG_DEBUG, D_("moving file from \"%s\"\n"), ofn);
+	    rpmlog(RPMLOG_DEBUG, D_("moving file to   \"%s\"\n"), nfn);
 	    if ((xx = Rename(ofn, nfn)) != 0) {
 		rc = 1;
 		goto bottom;
@@ -3797,7 +3864,7 @@ static int rpmdbMoveDatabase(const char * prefix,
 	    }
 bottom:
 	    ofn = _free(ofn);
-	    nfn = _free(ofn);
+	    nfn = _free(nfn);
 	}
 
 	ofn = rpmGetPath(prefix, olddbpath, "/", "__db.000", NULL);
@@ -3806,14 +3873,14 @@ bottom:
 	nsuffix = (char *)(nfn + strlen(nfn) - (sizeof("000") - 1));
 
 	for (i = 0; i < 16; i++) {
-	    (void) snprintf(osuffix, sizeof("000"), "%03d", i);
+	    (void) snprintf(osuffix, sizeof("000"), "%03u", (unsigned)i);
 	    if (rpmioFileExists(ofn)) {
-		rpmMessage(RPMMESS_DEBUG, D_("removing region file \"%s\"\n"), ofn);
+		rpmlog(RPMLOG_DEBUG, D_("removing region file \"%s\"\n"), ofn);
 		xx = Unlink(ofn);
 	    }
-	    (void) snprintf(nsuffix, sizeof("000"), "%03d", i);
+	    (void) snprintf(nsuffix, sizeof("000"), "%03u", (unsigned)i);
 	    if (rpmioFileExists(nfn)) {
-		rpmMessage(RPMMESS_DEBUG, D_("removing region file \"%s\"\n"), nfn);
+		rpmlog(RPMLOG_DEBUG, D_("removing region file \"%s\"\n"), nfn);
 		xx = Unlink(nfn);
 	    }
 	}
@@ -3832,6 +3899,7 @@ int rpmdbRebuild(const char * prefix, rpmts ts)
 	/*@globals _rebuildinprogress @*/
 	/*@modifies _rebuildinprogress @*/
 {
+    const char * myprefix;
     rpmdb olddb;
     const char * dbpath = NULL;
     const char * rootdbpath = NULL;
@@ -3845,29 +3913,37 @@ int rpmdbRebuild(const char * prefix, rpmts ts)
     int rc = 0, xx;
     int _dbapi;
     int _dbapi_rebuild;
-    int * dbiTags = NULL;
-    int dbiTagsMax = 0;
-
-    if (prefix == NULL) prefix = "/";
-    prefix = rpmGetPath(prefix, NULL);	/* strip trailing '/' */
+    tagStore_t dbiTags = NULL;
+    size_t dbiNTags = 0;
 
     _dbapi = rpmExpandNumeric("%{_dbapi}");
     _dbapi_rebuild = rpmExpandNumeric("%{_dbapi_rebuild}");
 
-    dbiTagsInit(&dbiTags, &dbiTagsMax);
+    dbiTagsInit(&dbiTags, &dbiNTags);
 
     /*@-nullpass@*/
     tfn = rpmGetPath("%{?_dbpath}", NULL);
     /*@=nullpass@*/
     if (!(tfn && tfn[0] != '\0'))
     {
-	rpmMessage(RPMMESS_DEBUG, D_("no dbpath has been set"));
+	rpmlog(RPMLOG_DEBUG, D_("no dbpath has been set"));
 	rc = 1;
 	goto exit;
     }
-    dbpath = rootdbpath = rpmGetPath(prefix, tfn, NULL);
-    if (!(prefix[0] == '/' && prefix[1] == '\0'))
-	dbpath += strlen(prefix) - 1;
+
+    /* Add --root prefix iff --dbpath is not a URL. */
+    switch (urlPath(tfn, NULL)) {
+    default:
+	myprefix = xstrdup("");
+	break;
+    case URL_IS_UNKNOWN:
+	myprefix = rpmGetPath((prefix ? prefix : "/"), NULL);
+	break;
+    }
+
+    dbpath = rootdbpath = rpmGetPath(myprefix, tfn, NULL);
+    if (!(myprefix[0] == '/' && myprefix[1] == '\0'))
+	dbpath += strlen(myprefix);
     tfn = _free(tfn);
 
     /*@-nullpass@*/
@@ -3884,24 +3960,24 @@ int rpmdbRebuild(const char * prefix, rpmts ts)
 	tfn = t;
 	nocleanup = 0;
     }
-    newdbpath = newrootdbpath = rpmGetPath(prefix, tfn, NULL);
-    if (!(prefix[0] == '/' && prefix[1] == '\0'))
-	newdbpath += strlen(prefix) - 1;
+    newdbpath = newrootdbpath = rpmGetPath(myprefix, tfn, NULL);
+    if (!(myprefix[0] == '/' && myprefix[1] == '\0'))
+	newdbpath += strlen(myprefix);
     tfn = _free(tfn);
 
-    rpmMessage(RPMMESS_DEBUG, D_("rebuilding database %s into %s\n"),
+    rpmlog(RPMLOG_DEBUG, D_("rebuilding database %s into %s\n"),
 	rootdbpath, newrootdbpath);
 
     if (!Access(newrootdbpath, F_OK)) {
-	rpmError(RPMERR_MKDIR, _("temporary database %s already exists\n"),
+	rpmlog(RPMLOG_ERR, _("temporary database %s already exists\n"),
 	      newrootdbpath);
 	rc = 1;
 	goto exit;
     }
 
-    rpmMessage(RPMMESS_DEBUG, D_("creating directory %s\n"), newrootdbpath);
+    rpmlog(RPMLOG_DEBUG, D_("creating directory %s\n"), newrootdbpath);
     if (Mkdir(newrootdbpath, 0755)) {
-	rpmError(RPMERR_MKDIR, _("creating directory %s: %s\n"),
+	rpmlog(RPMLOG_ERR, _("creating directory %s: %s\n"),
 	      newrootdbpath, strerror(errno));
 	rc = 1;
 	goto exit;
@@ -3910,19 +3986,19 @@ int rpmdbRebuild(const char * prefix, rpmts ts)
 
     _rebuildinprogress = 0;
 
-    rpmMessage(RPMMESS_DEBUG, D_("opening old database with dbapi %d\n"),
+    rpmlog(RPMLOG_DEBUG, D_("opening old database with dbapi %d\n"),
 		_dbapi);
-    if (rpmdbOpenDatabase(prefix, dbpath, _dbapi, &olddb, O_RDONLY, 0644, 
+    if (rpmdbOpenDatabase(myprefix, dbpath, _dbapi, &olddb, O_RDONLY, 0644, 
 		     RPMDB_FLAG_MINIMAL)) {
 	rc = 1;
 	goto exit;
     }
     _dbapi = olddb->db_api;
     _rebuildinprogress = 1;
-    rpmMessage(RPMMESS_DEBUG, D_("opening new database with dbapi %d\n"),
+    rpmlog(RPMLOG_DEBUG, D_("opening new database with dbapi %d\n"),
 		_dbapi_rebuild);
     (void) rpmDefineMacro(NULL, "_rpmdb_rebuild %{nil}", -1);
-    if (rpmdbOpenDatabase(prefix, newdbpath, _dbapi_rebuild, &newdb, O_RDWR | O_CREAT, 0644, 0)) {
+    if (rpmdbOpenDatabase(myprefix, newdbpath, _dbapi_rebuild, &newdb, O_RDWR | O_CREAT, 0644, 0)) {
 	rc = 1;
 	goto exit;
     }
@@ -3947,7 +4023,7 @@ int rpmdbRebuild(const char * prefix, rpmts ts)
 		headerIsEntry(h, RPMTAG_RELEASE) &&
 		headerIsEntry(h, RPMTAG_BUILDTIME)))
 	    {
-		rpmError(RPMERR_INTERNAL,
+		rpmlog(RPMLOG_WARNING,
 			_("header #%u in the database is bad -- skipping.\n"),
 			_RECNUM);
 		continue;
@@ -3955,7 +4031,7 @@ int rpmdbRebuild(const char * prefix, rpmts ts)
 	    if (!headerIsEntry(h, RPMTAG_SOURCERPM)
 	     &&  headerIsEntry(h, RPMTAG_ARCH))
 	    {
-		rpmError(RPMERR_INTERNAL,
+		rpmlog(RPMLOG_WARNING,
 			_("header #%u in the database is SRPM -- skipping.\n"),
 			_RECNUM);
 		continue;
@@ -3995,7 +4071,7 @@ int rpmdbRebuild(const char * prefix, rpmts ts)
 	    }
 
 	    if (rc) {
-		rpmError(RPMERR_INTERNAL,
+		rpmlog(RPMLOG_ERR,
 			_("cannot add record originally at %u\n"), _RECNUM);
 		failed = 1;
 		break;
@@ -4010,21 +4086,21 @@ int rpmdbRebuild(const char * prefix, rpmts ts)
     xx = rpmdbClose(newdb);
 
     if (failed) {
-	rpmMessage(RPMMESS_NORMAL, _("failed to rebuild database: original database "
+	rpmlog(RPMLOG_NOTICE, _("failed to rebuild database: original database "
 		"remains in place\n"));
 
-	xx = rpmdbRemoveDatabase(prefix, newdbpath, _dbapi_rebuild,
-			dbiTags, dbiTagsMax);
+	xx = rpmdbRemoveDatabase(myprefix, newdbpath, _dbapi_rebuild,
+			dbiTags, dbiNTags);
 	rc = 1;
 	goto exit;
     } else if (!nocleanup) {
-	xx = rpmdbMoveDatabase(prefix, newdbpath, _dbapi_rebuild, dbpath, _dbapi,
-			dbiTags, dbiTagsMax);
+	xx = rpmdbMoveDatabase(myprefix, newdbpath, _dbapi_rebuild, dbpath, _dbapi,
+			dbiTags, dbiNTags);
 
 	if (xx) {
-	    rpmMessage(RPMMESS_ERROR, _("failed to replace old database with new "
+	    rpmlog(RPMLOG_ERR, _("failed to replace old database with new "
 			"database!\n"));
-	    rpmMessage(RPMMESS_ERROR, _("replace files in %s with files from %s "
+	    rpmlog(RPMLOG_ERR, _("replace files in %s with files from %s "
 			"to recover"), dbpath, newdbpath);
 	    rc = 1;
 	    goto exit;
@@ -4034,15 +4110,15 @@ int rpmdbRebuild(const char * prefix, rpmts ts)
 
 exit:
     if (removedir && !(rc == 0 && nocleanup)) {
-	rpmMessage(RPMMESS_DEBUG, D_("removing directory %s\n"), newrootdbpath);
+	rpmlog(RPMLOG_DEBUG, D_("removing directory %s\n"), newrootdbpath);
 	if (Rmdir(newrootdbpath))
-	    rpmMessage(RPMMESS_ERROR, _("failed to remove directory %s: %s\n"),
+	    rpmlog(RPMLOG_ERR, _("failed to remove directory %s: %s\n"),
 			newrootdbpath, strerror(errno));
     }
     newrootdbpath = _free(newrootdbpath);
     rootdbpath = _free(rootdbpath);
-    dbiTags = _free(dbiTags);
-    prefix = _free(prefix);
+    dbiTags = tagStoreFree(dbiTags, dbiNTags);
+    myprefix = _free(myprefix);
 
     return rc;
 }
