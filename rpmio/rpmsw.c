@@ -113,12 +113,12 @@ rpmtime_t tvsub(/*@null@*/ const struct timeval * etv,
     secs = etv->tv_sec - btv->tv_sec;
     for (usecs = etv->tv_usec - btv->tv_usec; usecs < 0; usecs += 1000000)
 	secs--;
-    return ((secs * 1000000) + usecs);
+    return (rpmtime_t) ((secs * 1000000) + usecs);
 }
 
 rpmtime_t rpmswDiff(rpmsw end, rpmsw begin)
 {
-    unsigned long long ticks = 0;
+    uint64_t ticks = 0;
 
     if (end == NULL || begin == NULL)
 	return 0;
@@ -138,7 +138,7 @@ rpmtime_t rpmswDiff(rpmsw end, rpmsw begin)
 	ticks -= rpmsw_overhead;
     if (rpmsw_cycles > 1)
 	ticks /= rpmsw_cycles;
-    return ticks;
+    return (rpmtime_t) ticks;
 }
 
 #if defined(HP_TIMING_NOW)
@@ -184,7 +184,7 @@ rpmtime_t rpmswInit(void)
 #if defined(HP_TIMING_NOW)
     rpmtime_t cycles;
     rpmtime_t sum_usecs = 0;
-    unsigned long long sum_cycles = 0;
+    uint64_t sum_cycles = 0;
 #endif
     int i;
 
@@ -222,6 +222,7 @@ rpmtime_t rpmswInit(void)
 	rpmsw_type = 1;
 
 	/* Compute cycles/usec */
+	if (sum_usecs > 0)	/* XXX insure that time has passed. */
 	rpmsw_cycles = sum_cycles/sum_usecs;
 #else
 	rpmsw_type = 0;
