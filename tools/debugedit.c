@@ -589,11 +589,16 @@ edit_dwarf2_line (DSO *dso, uint_32 off, char *comp_dir, int phase)
 	}
       else
 	{
-	  memcpy (s, comp_dir, comp_dir_len);
-	  s[comp_dir_len] = '/';
-	  memcpy (s + comp_dir_len + 1, dirt[value], dir_len);
-	  s[comp_dir_len + 1 + dir_len] = '/';
-	  memcpy (s + comp_dir_len + 1 + dir_len + 1, file, file_len + 1);
+	  char *p = s;
+	  if (comp_dir_len != 0)
+	    {
+	      memcpy (s, comp_dir, comp_dir_len);
+	      s[comp_dir_len] = '/';
+	      p += comp_dir_len + 1;
+	    }
+	  memcpy (p, dirt[value], dir_len);
+	  p[dir_len] = '/';
+	  memcpy (p + dir_len + 1, file, file_len + 1);
 	}
       canonicalize_path (s, s);
       if (list_file_fd != -1)
@@ -850,6 +855,7 @@ edit_attributes (DSO *dso, unsigned char *ptr, struct abbrev_tag *t, int phase)
 
 	  switch (form)
 	    {
+	    case DW_FORM_ref_addr: /* ptr_size in DWARF 2, offset in DWARF 3 */
 	    case DW_FORM_addr:
 	      ptr += ptr_size;
 	      break;
@@ -875,7 +881,6 @@ edit_attributes (DSO *dso, unsigned char *ptr, struct abbrev_tag *t, int phase)
 	    case DW_FORM_udata:
 	      read_uleb128 (ptr);
 	      break;
-	    case DW_FORM_ref_addr:
 	    case DW_FORM_strp:
 	      ptr += 4;
 	      break;
@@ -913,6 +918,34 @@ edit_attributes (DSO *dso, unsigned char *ptr, struct abbrev_tag *t, int phase)
 	  break;
 	}
     }
+
+  /* Ensure the CU current directory will exist even if only empty.  Source
+     filenames possibly located in its parent directories refer relatively to
+     it and the debugger (GDB) cannot safely optimize out the missing
+     CU current dir subdirectories.  */
+  if (comp_dir && list_file_fd != -1)
+    {
+      char *p;
+      size_t size;
+
+      if (base_dir && has_prefix (comp_dir, base_dir))
+	p = comp_dir + strlen (base_dir);
+      else if (dest_dir && has_prefix (comp_dir, dest_dir))
+	p = comp_dir + strlen (dest_dir);
+      else
+	p = comp_dir;
+
+      size = strlen (p) + 1;
+      while (size > 0)
+	{
+	  ssize_t ret = write (list_file_fd, p, size);
+	  if (ret == -1)
+	    break;
+	  size -= ret;
+	  p += ret;
+	}
+    }
+
   if (found_list_offs && comp_dir)
     edit_dwarf2_line (dso, list_offs, comp_dir, phase);
 
