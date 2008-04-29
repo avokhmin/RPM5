@@ -1,20 +1,61 @@
+/**
+ * \file lib/misc.c
+ */
+
 #include "system.h"
 
-#include "rpmlib.h"
+/* just to put a marker in librpm.a */
+const char * RPMVERSION = VERSION;
 
+#include "rpmio_internal.h"
+#include <rpmurl.h>
+#include <rpmmacro.h>	/* XXX for rpmGetPath */
+#include <rpmlib.h>
+#include "legacy.h"
 #include "misc.h"
+#include "debug.h"
 
-char * RPMVERSION = VERSION;	/* just to put a marker in librpm.a */
+rpmRC rpmMkdirPath (const char * dpath, const char * dname)
+{
+    struct stat st;
+    int rc;
 
-char ** splitString(const char * str, int length, char sep) {
+    if ((rc = Stat(dpath, &st)) < 0) {
+	int ut = urlPath(dpath, NULL);
+	switch (ut) {
+	case URL_IS_PATH:
+	case URL_IS_UNKNOWN:
+	    if (errno != ENOENT)
+		break;
+	    /*@fallthrough@*/
+	case URL_IS_HTTPS:
+	case URL_IS_HTTP:
+	case URL_IS_FTP:
+	    rc = Mkdir(dpath, 0755);
+	    break;
+	case URL_IS_DASH:
+	case URL_IS_HKP:
+	    break;
+	}
+	if (rc < 0) {
+	    rpmError(RPMERR_CREATE, _("cannot create %%%s %s\n"), dname, dpath);
+	    return RPMRC_FAIL;
+	}
+    }
+    return RPMRC_OK;
+}
+
+/*@-bounds@*/
+char ** splitString(const char * str, int length, char sep)
+{
     const char * source;
     char * s, * dest;
     char ** list;
     int i;
     int fields;
-   
-    s = malloc(length + 1);
-    
+
+    s = xmalloc(length + 1);
+
     fields = 1;
     for (source = str, dest = s, i = 0; i < length; i++, source++, dest++) {
 	*dest = *source;
@@ -23,7 +64,7 @@ char ** splitString(const char * str, int length, char sep) {
 
     *dest = '\0';
 
-    list = malloc(sizeof(char *) * (fields + 1));
+    list = xmalloc(sizeof(*list) * (fields + 1));
 
     dest = s;
     list[0] = dest;
@@ -38,343 +79,163 @@ char ** splitString(const char * str, int length, char sep) {
 
     list[i] = NULL;
 
+/*@-nullret@*/ /* FIX: list[i] is NULL */
     return list;
+/*@=nullret@*/
+}
+/*@=bounds@*/
+
+void freeSplitString(char ** list)
+{
+    /*@-unqualifiedtrans@*/
+    list[0] = _free(list[0]);
+    /*@=unqualifiedtrans@*/
+    list = _free(list);
 }
 
-void freeSplitString(char ** list) {
-    free(list[0]);
-    free(list);
-}
-
-int rpmfileexists(const char * filespec) {
-    struct stat buf;
-
-    if (stat(filespec, &buf)) {
-	switch(errno) {
-	   case ENOENT:
-	   case EINVAL:
-		return 0;
-	}
-    }
-
-    return 1;
-}
-
-int rpmvercmp(const char * a, const char * b) {
-    int num1, num2;
-    char oldch1, oldch2;
-    char * str1, * str2;
-    char * one, * two;
-    int rc;
-    int isnum;
-    
-    if (!strcmp(a, b)) return 0;
-
-    str1 = alloca(strlen(a) + 1);
-    str2 = alloca(strlen(b) + 1);
-
-    strcpy(str1, a);
-    strcpy(str2, b);
-
-    one = str1;
-    two = str2;
-
-    while (*one && *two) {
-	while (*one && !isalnum(*one)) one++;
-	while (*two && !isalnum(*two)) two++;
-
-	str1 = one;
-	str2 = two;
-
-	if (isdigit(*str1)) {
-	    while (*str1 && isdigit(*str1)) str1++;
-	    while (*str2 && isdigit(*str2)) str2++;
-	    isnum = 1;
-	} else {
-	    while (*str1 && isalpha(*str1)) str1++;
-	    while (*str2 && isalpha(*str2)) str2++;
-	    isnum = 0;
-	}
-		
-	oldch1 = *str1;
-	*str1 = '\0';
-	oldch2 = *str2;
-	*str2 = '\0';
-
-	if (one == str1) return -1;	/* arbitrary */
-	if (two == str2) return -1;
-
-	if (isnum) {
-	    num1 = atoi(one);
-	    num2 = atoi(two);
-
-	    if (num1 < num2) 
-		return -1;
-	    else if (num1 > num2)
-		return 1;
-	} else {
-	    rc = strcmp(one, two);
-	    if (rc) return rc;
-	}
-	
-	*str1 = oldch1;
-	one = str1;
-	*str2 = oldch2;
-	two = str2;
-    }
-
-    if ((!*one) && (!*two)) return 0;
-
-    if (!*one) return -1; else return 1;
-}
-
-void stripTrailingSlashes(char * str) {
-    char * chptr;
-
-    chptr = str + strlen(str) - 1;
-    while (*chptr == '/' && chptr >= str) {
-	*chptr = '\0';
-	chptr--;
-    }
-}
-
-int doputenv(const char *str) {
+int doputenv(const char *str)
+{
     char * a;
-    
+
     /* FIXME: this leaks memory! */
-
-    a = malloc(strlen(str) + 1);
+    a = xmalloc(strlen(str) + 1);
     strcpy(a, str);
-
     return putenv(a);
 }
 
-int dosetenv(const char *name, const char *value, int overwrite) {
-    int i;
+int dosetenv(const char * name, const char * value, int overwrite)
+{
     char * a;
-
-    /* FIXME: this leaks memory! */
 
     if (!overwrite && getenv(name)) return 0;
 
-    i = strlen(name) + strlen(value) + 2;
-    a = malloc(i);
-    if (!a) return 1;
-    
-    strcpy(a, name);
-    strcat(a, "=");
-    strcat(a, value);
-    
+    /* FIXME: this leaks memory! */
+    a = xmalloc(strlen(name) + strlen(value) + sizeof("="));
+    (void) stpcpy( stpcpy( stpcpy( a, name), "="), value);
     return putenv(a);
 }
 
-/* unameToUid(), uidTouname() and the group variants are really poorly
-   implemented. They really ought to use hash tables. I just made the
-   guess that most files would be owned by root or the same person/group
-   who owned the last file. Those two values are cached, everything else
-   is looked up via getpw() and getgr() functions.  If this performs
-   too poorly I'll have to implement it properly :-( */
-
-int unameToUid(char * thisUname, uid_t * uid) {
-    static char * lastUname = NULL;
-    static int lastUnameLen = 0;
-    static int lastUnameAlloced;
-    static uid_t lastUid;
-    struct passwd * pwent;
-    int thisUnameLen;
-
-    if (!thisUname) {
-	lastUnameLen = 0;
-	return -1;
-    } else if (!strcmp(thisUname, "root")) {
-	*uid = 0;
-	return 0;
-    }
-
-    thisUnameLen = strlen(thisUname);
-    if (!lastUname || thisUnameLen != lastUnameLen || 
-	strcmp(thisUname, lastUname)) {
-	if (lastUnameAlloced < thisUnameLen + 1) {
-	    lastUnameAlloced = thisUnameLen + 10;
-	    lastUname = realloc(lastUname, lastUnameAlloced);
-	}
-	strcpy(lastUname, thisUname);
-
-	pwent = getpwnam(thisUname);
-	if (!pwent) {
-	    endpwent();
-	    pwent = getpwnam(thisUname);
-	    if (!pwent) return -1;
-	}
-
-	lastUid = pwent->pw_uid;
-    }
-
-    *uid = lastUid;
-
-    return 0;
-}
-
-int gnameToGid(char * thisGname, gid_t * gid) {
-    static char * lastGname = NULL;
-    static int lastGnameLen = 0;
-    static int lastGnameAlloced;
-    static uid_t lastGid;
-    int thisGnameLen;
-    struct group * grent;
-
-    if (!thisGname) {
-	lastGnameLen = 0;
-	return -1;
-    } else if (!strcmp(thisGname, "root")) {
-	*gid = 0;
-	return 0;
-    }
-   
-    thisGnameLen = strlen(thisGname);
-    if (!lastGname || thisGnameLen != lastGnameLen || 
-	strcmp(thisGname, lastGname)) {
-	if (lastGnameAlloced < thisGnameLen + 1) {
-	    lastGnameAlloced = thisGnameLen + 10;
-	    lastGname = realloc(lastGname, lastGnameAlloced);
-	}
-	strcpy(lastGname, thisGname);
-
-	grent = getgrnam(thisGname);
-	if (!grent) {
-	    endgrent();
-	    grent = getgrnam(thisGname);
-	    if (!grent) return -1;
-	}
-	lastGid = grent->gr_gid;
-    }
-
-    *gid = lastGid;
-
-    return 0;
-}
-
-char * uidToUname(uid_t uid) {
-    static int lastUid = -1;
-    static char * lastUname = NULL;
-    static int lastUnameLen = 0;
-    struct passwd * pwent;
-    int len;
-
-    if (uid == (uid_t) -1) {
-	lastUid = -1;
-	return NULL;
-    } else if (!uid) {
-	return "root";
-    } else if (uid == lastUid) {
-	return lastUname;
-    } else {
-	pwent = getpwuid(uid);
-	if (!pwent) return NULL;
-
-	lastUid = uid;
-	len = strlen(pwent->pw_name);
-	if (lastUnameLen < len + 1) {
-	    lastUnameLen = len + 20;
-	    lastUname = realloc(lastUname, lastUnameLen);
-	}
-	strcpy(lastUname, pwent->pw_name);
-
-	return lastUname;
-    }
-}
-
-char * gidToGname(gid_t gid) {
-    static int lastGid = -1;
-    static char * lastGname = NULL;
-    static int lastGnameLen = 0;
-    struct group * grent;
-    int len;
-
-    if (gid == (gid_t) -1) {
-	lastGid = -1;
-	return NULL;
-    } else if (!gid) {
-	return "root";
-    } else if (gid == lastGid) {
-	return lastGname;
-    } else {
-	grent = getgrgid(gid);
-	if (!grent) return NULL;
-
-	lastGid = gid;
-	len = strlen(grent->gr_name);
-	if (lastGnameLen < len + 1) {
-	    lastGnameLen = len + 20;
-	    lastGname = realloc(lastGname, lastGnameLen);
-	}
-	strcpy(lastGname, grent->gr_name);
-
-	return lastGname;
-    }
-}
-
-int makeTempFile(const char * prefix, const char ** fnptr, FD_t * fdptr) {
-    const char * fn;
-    FD_t fd;
+int makeTempFile(const char * prefix, const char ** fnptr, FD_t * fdptr)
+{
+    const char * tpmacro = "%{?_tmppath:%{_tmppath}}%{!?_tmppath:/var/tmp}";
+    const char * tempfn = NULL;
+    const char * tfn = NULL;
+    static int _initialized = 0;
+    int temput;
+    FD_t fd = NULL;
     int ran;
-    struct stat sb, sb2;
 
+    /*@-branchstate@*/
     if (!prefix) prefix = "";
+    /*@=branchstate@*/
 
-    fn = NULL;
+    /* Create the temp directory if it doesn't already exist. */
+    /*@-branchstate@*/
+    if (!_initialized) {
+	_initialized = 1;
+	tempfn = rpmGenPath(prefix, tpmacro, NULL);
+	if (rpmioMkpath(tempfn, 0755, (uid_t) -1, (gid_t) -1))
+	    goto errxit;
+    }
+    /*@=branchstate@*/
 
+    /* XXX should probably use mkstemp here */
     srand(time(NULL));
     ran = rand() % 100000;
 
-     /* maybe this should use link/stat? */
+    /* maybe this should use link/stat? */
 
     do {
-	char tfn[32];
-	sprintf(tfn, "rpm-tmp.%d", ran++);
-	if (fn)	xfree(fn);
-	fn = rpmGetPath(prefix, "%{_tmppath}/", tfn, NULL);
-	fd = fdOpen(fn, O_CREAT | O_RDWR | O_EXCL, 0700);
-    } while (fdFileno(fd) < 0 && errno == EEXIST);
+	char tfnbuf[64];
+#ifndef	NOTYET
+	sprintf(tfnbuf, "rpm-tmp.%d", ran++);
+	tempfn = _free(tempfn);
+	tempfn = rpmGenPath(prefix, tpmacro, tfnbuf);
+#else
+	strcpy(tfnbuf, "rpm-tmp.XXXXXX");
+	tempfn = _free(tempfn);
+	tempfn = rpmGenPath(prefix, tpmacro, mktemp(tfnbuf));
+#endif
 
-    if (!stat(fn, &sb) && S_ISLNK(sb.st_mode)) {
-	rpmError(RPMERR_SCRIPT, _("error creating temporary file %s"), fn);
-	xfree(fn);
-	return 1;
+	temput = urlPath(tempfn, &tfn);
+	if (*tfn == '\0') goto errxit;
+
+	switch (temput) {
+	case URL_IS_DASH:
+	case URL_IS_HKP:
+	    goto errxit;
+	    /*@notreached@*/ /*@switchbreak@*/ break;
+	case URL_IS_HTTPS:
+	case URL_IS_HTTP:
+	case URL_IS_FTP:
+	default:
+	    /*@switchbreak@*/ break;
+	}
+
+	fd = Fopen(tempfn, "w+x");
+	/* XXX FIXME: errno may not be correct for ufdio */
+    } while ((fd == NULL || Ferror(fd)) && errno == EEXIST);
+
+    if (fd == NULL || Ferror(fd)) {
+	rpmError(RPMERR_SCRIPT, _("error creating temporary file %s\n"), tempfn);
+	goto errxit;
     }
 
-    if (sb.st_nlink != 1) {
-	rpmError(RPMERR_SCRIPT, _("error creating temporary file %s"), fn);
-	xfree(fn);
-	return 1;
+    switch(temput) {
+    case URL_IS_PATH:
+    case URL_IS_UNKNOWN:
+      {	struct stat sb, sb2;
+	if (!stat(tfn, &sb) && S_ISLNK(sb.st_mode)) {
+	    rpmError(RPMERR_SCRIPT, _("error creating temporary file %s\n"), tfn);
+	    goto errxit;
+	}
+
+	if (sb.st_nlink != 1) {
+	    rpmError(RPMERR_SCRIPT, _("error creating temporary file %s\n"), tfn);
+	    goto errxit;
+	}
+
+	if (fstat(Fileno(fd), &sb2) == 0) {
+	    if (sb2.st_ino != sb.st_ino || sb2.st_dev != sb.st_dev) {
+		rpmError(RPMERR_SCRIPT, _("error creating temporary file %s\n"), tfn);
+		goto errxit;
+	    }
+	}
+      }	break;
+    default:
+	break;
     }
 
-    fstat(fdFileno(fd), &sb2);
-    if (sb2.st_ino != sb.st_ino || sb2.st_dev != sb.st_dev) {
-	rpmError(RPMERR_SCRIPT, _("error creating temporary file %s"), fn);
-	xfree(fn);
-	return 1;
-    }
-
+    /*@-branchstate@*/
     if (fnptr)
-	*fnptr = fn;
-    else
-	xfree(fn);
+	*fnptr = tempfn;
+    else 
+	tempfn = _free(tempfn);
+    /*@=branchstate@*/
     *fdptr = fd;
 
     return 0;
+
+errxit:
+    tempfn = _free(tempfn);
+    if (fnptr)
+	*fnptr = NULL;
+    /*@-usereleased@*/
+    if (fd != NULL) (void) Fclose(fd);
+    /*@=usereleased@*/
+    return 1;
 }
 
-char * currentDirectory(void) {
-    int currDirLen;
-    char * currDir;
+char * currentDirectory(void)
+{
+    int currDirLen = 0;
+    char * currDir = NULL;
 
-    currDirLen = 50;
-    currDir = malloc(currDirLen);
-    while (!getcwd(currDir, currDirLen) && errno == ERANGE) {
-	currDirLen += 50;
-	currDir = realloc(currDir, currDirLen);
-    }
+    do {
+	currDirLen += 128;
+	currDir = xrealloc(currDir, currDirLen);
+	memset(currDir, 0, currDirLen);
+    } while (getcwd(currDir, currDirLen) == NULL && errno == ERANGE);
 
     return currDir;
 }
