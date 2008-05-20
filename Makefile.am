@@ -6,7 +6,7 @@ LINT = splint
 
 EXTRA_DIST = CHANGES CREDITS Doxyheader INSTALL \
 	autodeps/none autodeps/*.prov autodeps/*.req autogen.sh \
-	db db3/configure \
+	db db3/configure xar \
 	lua/[A-Z]* lua/*.[ch] lua/local/l* \
 	file/src/[A-Z]* file/src/*.[ch] file/python file/magic file/doc file/[A-Z]* file/acinclude.m4 file/aclocal.m4 \
 	file/autogen.sh file/config* file/depcomp file/install-sh file/ltmain.sh file/missing file/mkinstalldirs \
@@ -47,6 +47,7 @@ SUBDIRS += \
 	@WITH_ZLIB_SUBDIR@ \
 	@WITH_LUA_SUBDIR@ \
 	@WITH_FILE_SUBDIR@ \
+	@WITH_XAR_SUBDIR@ \
 	misc \
 	rpmio \
 	rpmdb \
@@ -57,6 +58,7 @@ SUBDIRS += \
 	@WITH_PERL_SUBDIR@ \
 	tools \
 	scripts \
+	tests \
 	doc \
 	.
 
@@ -71,7 +73,8 @@ AM_CPPFLAGS = \
 	@WITH_DB_CPPFLAGS@ \
 	@WITH_ZLIB_CPPFLAGS@ \
 	@WITH_LUA_CPPFLAGS@ \
-	@WITH_FILE_CPPFLAGS@
+	@WITH_FILE_CPPFLAGS@ \
+	@WITH_XAR_CPPFLAGS@
 
 myLDADD = \
 	$(top_builddir)/build/librpmbuild.la \
@@ -126,9 +129,7 @@ lint:
 		`make -s sources -C lib` \
 		`make -s sources -C rpmdb` \
 		`make -s sources -C rpmio` \
-		`make -s sources -C beecrypt` \
-		`make -s sources -C file/src` \
-		`make -s sources -C popt`
+		`make -s sources -C file/src`
 
 CVSTAG = r$(subst .,-,$(VERSION))
 
@@ -138,7 +139,8 @@ DBPATH = @DBPATH@
 
 install-data-local:
 	@$(MKDIR_P) $(DESTDIR)$(DBPATH)
-	@for dir in BUILD RPMS SOURCES SPECS SRPMS TR; do\
+	@$(MKDIR_P) $(DESTDIR)$(varprefix)/spool/repackage
+	@for dir in BUILD RPMS SOURCES SPECS SRPMS; do\
 	    $(MKDIR_P) $(DESTDIR)$(pkgsrcdir)/$$dir;\
 	done
 	@case "@host_cpu@" in \
@@ -146,7 +148,9 @@ install-data-local:
 		$(MKDIR_P) $(DESTDIR)$(pkgsrcdir)/RPMS/i486 ;\
 		$(MKDIR_P) $(DESTDIR)$(pkgsrcdir)/RPMS/i586 ;\
 		$(MKDIR_P) $(DESTDIR)$(pkgsrcdir)/RPMS/i686 ;\
-		$(MKDIR_P) $(DESTDIR)$(pkgsrcdir)/RPMS/athlon ;;\
+		$(MKDIR_P) $(DESTDIR)$(pkgsrcdir)/RPMS/athlon ;\
+		$(MKDIR_P) $(DESTDIR)$(pkgsrcdir)/RPMS/pentium3 ;\
+		$(MKDIR_P) $(DESTDIR)$(pkgsrcdir)/RPMS/pentium4 ;;\
 	armv3l)	$(MKDIR_P) $(DESTDIR)$(pkgsrcdir)/RPMS/armv3l ;;\
 	armv4b)	$(MKDIR_P) $(DESTDIR)$(pkgsrcdir)/RPMS/armv4b ;;\
 	armv4l)	$(MKDIR_P) $(DESTDIR)$(pkgsrcdir)/RPMS/armv3l ;\
@@ -190,9 +194,11 @@ setperms:
 	done
 	@$(__CHOWN) ${RPMUSER}.${RPMGROUP} $(DESTDIR)$(pkglibdir)
 	@$(__CHOWN) -R ${RPMUSER}.${RPMGROUP} $(DESTDIR)$(varprefix)/lib/rpm
+	@$(__CHOWN) -R ${RPMUSER}.${RPMGROUP} $(DESTDIR)$(varprefix)/spool/repackage
 	-@$(__CHMOD) 0664 $(DESTDIR)$(varprefix)/lib/rpm/[A-Z]*
 	-@$(__CHMOD) 0775 $(DESTDIR)$(varprefix)/lib/rpm
 	-@$(__CHMOD) 0664 $(DESTDIR)$(varprefix)/lib/rpm/__db.*
+	-@$(__CHMOD) 0755 $(DESTDIR)$(varprefix)/spool/repackage
 
 .PHONY:	unsetgid
 unsetgid:
@@ -236,6 +242,37 @@ doxygen @WITH_APIDOCS_TARGET@: Doxyfile rpmpopt macros
 	rm -rf $@
 	mkdir -p $@
 	- [ X"@__DOXYGEN@" != Xno ] && @__DOXYGEN@
+
+.PHONY:	lcov-reset	# run lcov from scratch, always
+lcov-reset:
+	make lcov-run
+	make lcov-report
+
+# run lcov from scratch if the dir is not there
+lcov:
+	make lcov-reset
+
+.PHONY:	lcov-run	# reset run coverage tests
+lcov-run:
+	@-rm -rf lcov
+	find . -name "*.gcda" -exec rm {} \;
+	make check
+
+.PHONY:	lcov-report	# generate report based on current coverage data
+lcov-report:
+	mkdir lcov
+	-lcov -d rpmio -d rpmdb -d lib -d build -d tools -d . --capture --output-file lcov/lcov.info
+	lcov -l lcov/lcov.info | grep -v "`cd $(top_srcdir) && pwd`" | cut -d: -f1 > lcov/remove
+	lcov -r lcov/lcov.info `cat lcov/remove` > lcov/lcov.cleaned.info
+	rm lcov/remove
+	mv lcov/lcov.cleaned.info lcov/lcov.info
+	genhtml -t "$(PACKAGE_STRING)" -o lcov lcov/lcov.info
+
+#.PHONY:	lcov-upload
+#lcov-upload: lcov
+#	mkdir -p /var/ftp/pub/jbj/rpm-$(VERSION)-lcov
+#	tar -C lcov -cf - . | (cd /var/ftp/pub/jbj/rpm-$(VERSION)-lcov; tar xf -)
+#	rsync -rvz -e ssh --delete lcov/* ???
 
 cscope:
 	cscope -b -R
