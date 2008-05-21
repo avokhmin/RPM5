@@ -1,25 +1,320 @@
 /** \ingroup header
- * \file rpmdb/formats.c
+ * \file rpmdb/hdrfmt.c
  */
 
 #include "system.h"
 
+/* XXX todo: these should likely be in "system.h" */
+#if defined(HAVE_ICONV)
+#include <iconv.h>
+#if defined(__LCLINT__)
+/*@-declundef -incondefs @*/
+extern /*@only@*/ iconv_t iconv_open(const char *__tocode, const char *__fromcode)
+	/*@*/;
+
+extern size_t iconv(iconv_t __cd, /*@null@*/ char ** __inbuf,
+		    /*@out@*/ size_t * __inbytesleft,
+		    /*@out@*/ char ** __outbuf,
+		    /*@out@*/ size_t * __outbytesleft)
+	/*@modifies __cd,
+		*__inbuf, *__inbytesleft, *__outbuf, *__outbytesleft @*/;
+
+extern int iconv_close(/*@only@*/ iconv_t __cd)
+        /*@modifies __cd @*/;
+/*@=declundef =incondefs @*/
+#endif
+#endif
+#if defined(HAVE_LANGINFO_H)
+#include <langinfo.h>
+#if defined(__LCLINT__)
+/*@-declundef -incondefs @*/
+extern char *nl_langinfo (nl_item __item)
+	/*@*/;
+/*@=declundef =incondefs @*/
+#endif
+#endif
+
 #include "rpmio_internal.h"
-#include <rpmlib.h>
+#include <rpmbc.h>	/* XXX beecrypt base64 */
+#include <rpmcb.h>	/* XXX rpmIsVerbose */
 #include <rpmmacro.h>	/* XXX for %_i18ndomains */
+#include <rpmuuid.h>
+#include "argv.h"
+#include "ugid.h"
+
+#define	_RPMTAG_INTERNAL
+#include <rpmtag.h>
+
+#include <rpmlib.h>	/* XXX rpmfi, rpmMkdirPath */
+#include <rpmfi.h>	/* XXX RPMFILE_FOO */
 
 #define _RPMEVR_INTERNAL
 #include <rpmevr.h>	/* XXX RPMSENSE_FOO */
 
 #include "legacy.h"
-#include "argv.h"
 #include "misc.h"
 
 #include "debug.h"
 
+/*@unchecked@*/
+extern int _hdr_debug;
+
 /*@access pgpDig @*/
 /*@access pgpDigParams @*/
+/*@access headerSprintfExtension @*/
+/*@access headerTagTableEntry @*/
+/*@access Header @*/	/* XXX debugging msgs */
 
+/**
+ * Convert tag data representation.
+ * @param he		tag container
+ * @param av		paramater list (or NULL)
+ * @param fmt		output radix (NULL or "" assumes %d)
+ * @return		formatted string
+ */
+static char * intFormat(HE_t he, /*@null@*/ const char ** av,
+		/*@null@*/ const char *fmt)
+	/*@*/
+{
+    uint32_t ix = (he->ix > 0 ? he->ix : 0);
+    uint64_t ival = 0;
+    const char * istr = NULL;
+    char * b;
+    size_t nb = 0;
+    int xx;
+
+    if (fmt == NULL || *fmt == '\0')
+	fmt = "d";
+
+    switch (he->t) {
+    default:
+	return xstrdup(_("(not a number)"));
+	/*@notreached@*/ break;
+    case RPM_UINT8_TYPE:
+	ival = (uint64_t) he->p.ui8p[ix];
+	break;
+    case RPM_UINT16_TYPE:
+	ival = (uint64_t) he->p.ui16p[ix];
+	break;
+    case RPM_UINT32_TYPE:
+	ival = (uint64_t) he->p.ui32p[ix];
+	break;
+    case RPM_UINT64_TYPE:
+	ival = he->p.ui64p[ix];
+	break;
+    case RPM_STRING_TYPE:
+	istr = he->p.str;
+	break;
+    case RPM_STRING_ARRAY_TYPE:
+	istr = he->p.argv[ix];
+	break;
+    case RPM_BIN_TYPE:
+	{   static char hex[] = "0123456789abcdef";
+	    const char * s = he->p.str;
+	    rpmTagCount c = he->c;
+	    char * t;
+
+	    nb = 2 * c + 1;
+	    t = b = alloca(nb+1);
+	    while (c-- > 0) {
+		unsigned i;
+		i = (unsigned) *s++;
+		*t++ = hex[ (i >> 4) & 0xf ];
+		*t++ = hex[ (i     ) & 0xf ];
+	    }
+	    *t = '\0';
+	}   break;
+    }
+
+    if (istr) {		/* string */
+	b = (char *)istr;	/* NOCAST */
+    } else
+    if (nb == 0) {	/* number */
+	char myfmt[] = "%llX";
+	myfmt[3] = ((fmt != NULL && *fmt != '\0') ? *fmt : 'd');
+	nb = 64;
+	b = alloca(nb);
+/*@-formatconst@*/
+	xx = snprintf(b, nb, myfmt, ival);
+/*@=formatconst@*/
+	b[nb-1] = '\0';
+    }
+
+    return xstrdup(b);
+}
+
+/**
+ * Return octal formatted data.
+ * @param he		tag container
+ * @param av		paramater list (or NULL)
+ * @return		formatted string
+ */
+static char * octFormat(HE_t he, /*@null@*/ const char ** av)
+	/*@*/
+{
+    return intFormat(he, av, "o");
+}
+
+/**
+ * Return hex formatted data.
+ * @param he		tag container
+ * @param av		paramater list (or NULL)
+ * @return		formatted string
+ */
+static char * hexFormat(HE_t he, /*@null@*/ const char ** av)
+	/*@*/
+{
+    return intFormat(he, av, "x");
+}
+
+/**
+ * Return decimal formatted data.
+ * @param he		tag container
+ * @param av		paramater list (or NULL)
+ * @return		formatted string
+ */
+static char * decFormat(HE_t he, /*@null@*/ const char ** av)
+	/*@*/
+{
+    return intFormat(he, av, "d");
+}
+
+/**
+ * Return strftime formatted data.
+ * @param he		tag container
+ * @param av		paramater list (or NULL)
+ * @param strftimeFormat strftime(3) format
+ * @return		formatted string
+ */
+static char * realDateFormat(HE_t he, /*@null@*/ const char ** av,
+		const char * strftimeFormat)
+	/*@*/
+{
+    char * val;
+
+    if (he->t != RPM_UINT64_TYPE) {
+	val = xstrdup(_("(not a number)"));
+    } else {
+	struct tm * tstruct;
+	char buf[50];
+
+	/* this is important if sizeof(uint64_t) ! sizeof(time_t) */
+	{   time_t dateint = he->p.ui64p[0];
+	    tstruct = localtime(&dateint);
+	}
+	buf[0] = '\0';
+	if (tstruct)
+	    (void) strftime(buf, sizeof(buf) - 1, strftimeFormat, tstruct);
+	buf[sizeof(buf) - 1] = '\0';
+	val = xstrdup(buf);
+    }
+
+    return val;
+}
+
+/**
+ * Return date formatted data.
+ * @param he		tag container
+ * @param av		paramater list (or NULL)
+ * @return		formatted string
+ */
+static char * dateFormat(HE_t he, /*@null@*/ const char ** av)
+	/*@*/
+{
+    return realDateFormat(he, av, _("%c"));
+}
+
+/**
+ * Return day formatted data.
+ * @param he		tag container
+ * @param av		paramater list (or NULL)
+ * @return		formatted string
+ */
+static char * dayFormat(HE_t he, /*@null@*/ const char ** av)
+	/*@*/
+{
+    return realDateFormat(he, av, _("%a %b %d %Y"));
+}
+
+/**
+ * Return shell escape formatted data.
+ * @param he		tag container
+ * @param av		paramater list (or NULL)
+ * @return		formatted string
+ */
+static char * shescapeFormat(HE_t he, /*@null@*/ const char ** av)
+	/*@*/
+{
+    char * val;
+    size_t nb;
+    int xx;
+
+    /* XXX one of these integer types is unnecessary. */
+    if (he->t == RPM_UINT32_TYPE) {
+	nb = 20;
+	val = xmalloc(nb);
+	xx = snprintf(val, nb, "%u", (unsigned) he->p.ui32p[0]);
+	val[nb-1] = '\0';
+    } else if (he->t == RPM_UINT64_TYPE) {
+	nb = 40;
+	val = xmalloc(40);
+/*@-duplicatequals@*/
+	xx = snprintf(val, nb, "%llu", (unsigned long long)he->p.ui64p[0]);
+/*@=duplicatequals@*/
+	val[nb-1] = '\0';
+    } else if (he->t == RPM_STRING_TYPE) {
+	const char * s = he->p.str;
+	char * t;
+	int c;
+
+	nb = 0;
+	for (s = he->p.str; (c = (int)*s) != 0; s++)  {
+	    nb++;
+	    if (c == (int)'\'')
+		nb += 3;
+	}
+	nb += 3;
+	t = val = xmalloc(nb);
+	*t++ = '\'';
+	for (s = he->p.str; (c = (int)*s) != 0; s++)  {
+	    if (c == (int)'\'') {
+		*t++ = '\'';
+		*t++ = '\\';
+		*t++ = '\'';
+	    }
+	    *t++ = (char) c;
+	}
+	*t++ = '\'';
+	*t = '\0';
+    } else
+	val = xstrdup(_("invalid type"));
+
+    return val;
+}
+
+/*@-type@*/ /* FIX: cast? */
+static struct headerSprintfExtension_s _headerDefaultFormats[] = {
+    { HEADER_EXT_FORMAT, "octal",
+	{ .fmtFunction = octFormat } },
+    { HEADER_EXT_FORMAT, "oct",
+	{ .fmtFunction = octFormat } },
+    { HEADER_EXT_FORMAT, "hex",
+	{ .fmtFunction = hexFormat } },
+    { HEADER_EXT_FORMAT, "decimal",
+	{ .fmtFunction = decFormat } },
+    { HEADER_EXT_FORMAT, "dec",
+	{ .fmtFunction = decFormat } },
+    { HEADER_EXT_FORMAT, "date",
+	{ .fmtFunction = dateFormat } },
+    { HEADER_EXT_FORMAT, "day",
+	{ .fmtFunction = dayFormat } },
+    { HEADER_EXT_FORMAT, "shescape",
+	{ .fmtFunction = shescapeFormat } },
+    { HEADER_EXT_LAST, NULL, { NULL } }
+};
+/*@=type@*/
+
+headerSprintfExtension headerDefaultFormats = &_headerDefaultFormats[0];
 /* XXX FIXME: static for now, refactor from manifest.c later. */
 static char * rpmPermsString(int mode)
 	/*@*/
@@ -68,65 +363,54 @@ static char * rpmPermsString(int mode)
 
     return perms;
 }
+
 /**
  * Identify type of trigger.
- * @param type		tag type
- * @param data		tag value
- * @param formatPrefix	(unused)
- * @param padding	(unused)
- * @param element	(unused)
+ * @param he		tag container
+ * @param av		paramater list (or NULL)
  * @return		formatted string
  */
-static /*@only@*/ char * triggertypeFormat(int_32 type, const void * data,
-		/*@unused@*/ char * formatPrefix, /*@unused@*/ int padding,
-		/*@unused@*/ int element)
-	/*@requires maxRead(data) >= 0 @*/
+static /*@only@*/ char * triggertypeFormat(HE_t he, /*@null@*/ const char ** av)
 {
-    const int_32 * item = data;
+    int ix = (he->ix > 0 ? he->ix : 0);
     char * val;
 
-    if (type != RPM_INT32_TYPE)
+assert(ix == 0);
+    if (he->t != RPM_UINT64_TYPE)
 	val = xstrdup(_("(invalid type)"));
-    else if (*item & RPMSENSE_TRIGGERPREIN)
-	val = xstrdup("prein");
-    else if (*item & RPMSENSE_TRIGGERIN)
-	val = xstrdup("in");
-    else if (*item & RPMSENSE_TRIGGERUN)
-	val = xstrdup("un");
-    else if (*item & RPMSENSE_TRIGGERPOSTUN)
-	val = xstrdup("postun");
-    else
-	val = xstrdup("");
+    else {
+	uint64_t anint = he->p.ui64p[ix];
+	if (anint & RPMSENSE_TRIGGERPREIN)
+	    val = xstrdup("prein");
+	else if (anint & RPMSENSE_TRIGGERIN)
+	    val = xstrdup("in");
+	else if (anint & RPMSENSE_TRIGGERUN)
+	    val = xstrdup("un");
+	else if (anint & RPMSENSE_TRIGGERPOSTUN)
+	    val = xstrdup("postun");
+	else
+	    val = xstrdup("");
+    }
     return val;
 }
 
 /**
  * Format file permissions for display.
- * @param type		tag type
- * @param data		tag value
- * @param formatPrefix
- * @param padding
- * @param element	(unused)
+ * @param he		tag container
+ * @param av		paramater list (or NULL)
  * @return		formatted string
  */
-static /*@only@*/ char * permsFormat(int_32 type, const void * data,
-		char * formatPrefix, int padding, /*@unused@*/ int element)
-	/*@modifies formatPrefix @*/
-	/*@requires maxRead(data) >= 0 @*/
+static /*@only@*/ char * permsFormat(HE_t he, /*@null@*/ const char ** av)
 {
+    int ix = (he->ix > 0 ? he->ix : 0);
     char * val;
-    char * buf;
 
-    if (type != RPM_INT32_TYPE) {
+assert(ix == 0);
+    if (he->t != RPM_UINT64_TYPE) {
 	val = xstrdup(_("(invalid type)"));
     } else {
-	val = xmalloc(15 + padding);
-	strcat(formatPrefix, "s");
-	buf = rpmPermsString(*((int_32 *) data));
-	/*@-formatconst@*/
-	sprintf(val, formatPrefix, buf);
-	/*@=formatconst@*/
-	buf = _free(buf);
+	uint64_t anint = he->p.ui64p[0];
+	val = rpmPermsString((int)anint);
     }
 
     return val;
@@ -134,25 +418,21 @@ static /*@only@*/ char * permsFormat(int_32 type, const void * data,
 
 /**
  * Format file flags for display.
- * @param type		tag type
- * @param data		tag value
- * @param formatPrefix
- * @param padding
- * @param element	(unused)
+ * @param he		tag container
+ * @param av		paramater list (or NULL)
  * @return		formatted string
  */
-static /*@only@*/ char * fflagsFormat(int_32 type, const void * data,
-		char * formatPrefix, int padding, /*@unused@*/ int element)
-	/*@modifies formatPrefix @*/
-	/*@requires maxRead(data) >= 0 @*/
+static /*@only@*/ char * fflagsFormat(HE_t he, /*@null@*/ const char ** av)
 {
+    int ix = (he->ix >= 0 ? he->ix : 0);
     char * val;
-    char buf[15];
-    int anint = *((int_32 *) data);
 
-    if (type != RPM_INT32_TYPE) {
+assert(ix == 0);
+    if (he->t != RPM_UINT64_TYPE) {
 	val = xstrdup(_("(invalid type)"));
     } else {
+	char buf[15];
+	uint64_t anint = he->p.ui64p[ix];
 	buf[0] = '\0';
 	if (anint & RPMFILE_DOC)
 	    strcat(buf, "d");
@@ -170,12 +450,7 @@ static /*@only@*/ char * fflagsFormat(int_32 type, const void * data,
 	    strcat(buf, "l");
 	if (anint & RPMFILE_README)
 	    strcat(buf, "r");
-
-	val = xmalloc(5 + padding);
-	strcat(formatPrefix, "s");
-	/*@-formatconst@*/
-	sprintf(val, formatPrefix, buf);
-	/*@=formatconst@*/
+	val = xstrdup(buf);
     }
 
     return val;
@@ -184,36 +459,30 @@ static /*@only@*/ char * fflagsFormat(int_32 type, const void * data,
 /**
  * Wrap a pubkey in ascii armor for display.
  * @todo Permit selectable display formats (i.e. binary).
- * @param type		tag type
- * @param data		tag value
- * @param formatPrefix	(unused)
- * @param padding	(unused)
- * @param element	no. bytes of binary data
+ * @param he		tag container
+ * @param av		paramater list (or NULL)
  * @return		formatted string
  */
-static /*@only@*/ char * armorFormat(int_32 type, const void * data,
-		/*@unused@*/ char * formatPrefix, /*@unused@*/ int padding,
-		int element)
+static /*@only@*/ char * armorFormat(HE_t he, /*@null@*/ const char ** av)
 	/*@*/
 {
+    int ix = (he->ix > 0 ? he->ix : 0);
     const char * enc;
     const unsigned char * s;
     size_t ns;
     int atype;
     char * val;
 
-    switch (type) {
-    case RPM_OPENPGP_TYPE:
-    case RPM_ASN1_TYPE:		/* XXX WRONG */
+assert(ix == 0);
+    switch (he->t) {
     case RPM_BIN_TYPE:
-	s = data;
-	/* XXX HACK ALERT: element field abused as no. bytes of binary data. */
-	ns = element;
+	s = (unsigned char *) he->p.ui8p;
+	ns = he->c;
 	atype = PGPARMOR_SIGNATURE;	/* XXX check pkt for signature */
 	break;
     case RPM_STRING_TYPE:
     case RPM_STRING_ARRAY_TYPE:
-	enc = data;
+	enc = he->p.str;
 	s = NULL;
 	ns = 0;
 /*@-moduncon@*/
@@ -222,19 +491,16 @@ static /*@only@*/ char * armorFormat(int_32 type, const void * data,
 /*@=moduncon@*/
 	atype = PGPARMOR_PUBKEY;	/* XXX check pkt for pubkey */
 	break;
-    case RPM_NULL_TYPE:
-    case RPM_CHAR_TYPE:
-    case RPM_INT8_TYPE:
-    case RPM_INT16_TYPE:
-    case RPM_INT32_TYPE:
-    case RPM_INT64_TYPE:
+    case RPM_UINT8_TYPE:
+    case RPM_UINT16_TYPE:
+    case RPM_UINT32_TYPE:
+    case RPM_UINT64_TYPE:
     case RPM_I18NSTRING_TYPE:
     default:
 	return xstrdup(_("(invalid type)"));
 	/*@notreached@*/ break;
     }
 
-    /* XXX this doesn't use padding directly, assumes enough slop in retval. */
     val = pgpArmorWrap(atype, s, ns);
     if (atype == PGPARMOR_PUBKEY)
 	s = _free(s);
@@ -244,45 +510,56 @@ static /*@only@*/ char * armorFormat(int_32 type, const void * data,
 /**
  * Encode binary data in base64 for display.
  * @todo Permit selectable display formats (i.e. binary).
- * @param type		tag type
- * @param data		tag value
- * @param formatPrefix	(unused)
- * @param padding
- * @param element
+ * @param he		tag container
+ * @param av		paramater list (or NULL)
  * @return		formatted string
  */
-static /*@only@*/ char * base64Format(int_32 type, const void * data,
-		/*@unused@*/ char * formatPrefix, int padding, int element)
+static /*@only@*/ char * base64Format(HE_t he, /*@null@*/ const char ** av)
 	/*@*/
 {
+    int ix = (he->ix > 0 ? he->ix : 0);
     char * val;
+    const char * enc;
+    char * t;
+    int lc;
+    size_t ns;
+    size_t nt;
 
-    if (!(type == RPM_BIN_TYPE || type == RPM_ASN1_TYPE || type == RPM_OPENPGP_TYPE)) {
-	val = xstrdup(_("(not a blob)"));
-    } else {
-	const char * enc;
-	char * t;
-	int lc;
-	/* XXX HACK ALERT: element field abused as no. bytes of binary data. */
-	size_t ns = element;
-	size_t nt = ((ns + 2) / 3) * 4;
+assert(ix == 0);
+    switch(he->t) {
+    default:
+	val = xstrdup(_("(invalid type :base64)"));
+	goto exit;
+	/*@notreached@*/ break;
+    case RPM_UINT64_TYPE:
+	ns = sizeof(he->p.ui64p[0]);
+	break;
+    case RPM_STRING_TYPE:
+	ns = strlen(he->p.str);
+	break;
+    case RPM_BIN_TYPE:
+	ns = he->c;
+	break;
+    }
 
-	/*@-globs@*/
-	/* Add additional bytes necessary for eol string(s). */
-	if (b64encode_chars_per_line > 0 && b64encode_eolstr != NULL) {
-	    lc = (nt + b64encode_chars_per_line - 1) / b64encode_chars_per_line;
+    nt = ((ns + 2) / 3) * 4;
+
+/*@-globs@*/
+    /* Add additional bytes necessary for eol string(s). */
+    if (b64encode_chars_per_line > 0 && b64encode_eolstr != NULL) {
+	lc = (nt + b64encode_chars_per_line - 1) / b64encode_chars_per_line;
 	if (((nt + b64encode_chars_per_line - 1) % b64encode_chars_per_line) != 0)
 	    ++lc;
-	    nt += lc * strlen(b64encode_eolstr);
-	}
-	/*@=globs@*/
+	nt += lc * strlen(b64encode_eolstr);
+    }
+/*@=globs@*/
 
-	val = t = xcalloc(1, nt + padding + 1);
-	*t = '\0';
+    val = t = xcalloc(1, nt + 1);
+    *t = '\0';
 
     /* XXX b64encode accesses uninitialized memory. */
     { 	unsigned char * _data = xcalloc(1, ns+1);
-	memcpy(_data, data, ns);
+	memcpy(_data, he->p.ptr, ns);
 /*@-moduncon@*/
 	if ((enc = b64encode(_data, ns)) != NULL) {
 	    t = stpcpy(t, enc);
@@ -291,8 +568,8 @@ static /*@only@*/ char * base64Format(int_32 type, const void * data,
 /*@=moduncon@*/
 	_data = _free(_data);
     }
-    }
 
+exit:
 /*@-globstate@*/
     return val;
 /*@=globstate@*/
@@ -309,7 +586,7 @@ static size_t xmlstrlen(const char * s)
     size_t len = 0;
     int c;
 
-    while ((c = *s++) != '\0')
+    while ((c = (int) *s++) != (int) '\0')
     {
 	switch (c) {
 	case '<':
@@ -333,80 +610,227 @@ static char * xmlstrcpy(/*@returned@*/ char * t, const char * s)
     char * te = t;
     int c;
 
-    while ((c = *s++) != '\0') {
+    while ((c = (int) *s++) != (int) '\0') {
 	switch (c) {
 	case '<':	te = stpcpy(te, "&lt;");	/*@switchbreak@*/ break;
 	case '>':	te = stpcpy(te, "&gt;");	/*@switchbreak@*/ break;
 	case '&':	te = stpcpy(te, "&amp;");	/*@switchbreak@*/ break;
-	default:	*te++ = c;			/*@switchbreak@*/ break;
+	default:	*te++ = (char) c;		/*@switchbreak@*/ break;
 	}
     }
     *te = '\0';
     return t;
 }
 
+static /*@only@*/ /*@null@*/ char *
+strdup_locale_convert (/*@null@*/ const char * buffer,
+		/*@null@*/ const char * tocode)
+	/*@*/
+{
+    char *dest_str;
+#if defined(HAVE_ICONV)
+    char *fromcode = NULL;
+    iconv_t fd;
+
+    if (buffer == NULL)
+	return NULL;
+
+    if (tocode == NULL)
+	tocode = "UTF-8";
+
+#ifdef HAVE_LANGINFO_H
+/*@-type@*/
+    fromcode = nl_langinfo (CODESET);
+/*@=type@*/
+#endif
+
+    if (fromcode != NULL && strcmp(tocode, fromcode) != 0
+     && (fd = iconv_open(tocode, fromcode)) != (iconv_t)-1)
+    {
+	const char *pin = buffer;
+	char *pout = NULL;
+	size_t ib, ob, dest_size;
+	int done;
+	int is_error;
+	size_t err;
+	const char *shift_pin = NULL;
+	int xx;
+
+	err = iconv(fd, NULL, &ib, &pout, &ob);
+	dest_size = ob = ib = strlen(buffer);
+	dest_str = pout = malloc((dest_size + 1) * sizeof(*dest_str));
+	if (dest_str)
+	    *dest_str = '\0';
+	done = is_error = 0;
+	if (pout != NULL)
+	while (done == 0 && is_error == 0) {
+	    err = iconv(fd, (char **)&pin, &ib, &pout, &ob);
+
+	    if (err == (size_t)-1) {
+		switch (errno) {
+		case EINVAL:
+		    done = 1;
+		    /*@switchbreak@*/ break;
+		case E2BIG:
+		{   size_t used = (size_t)(pout - dest_str);
+		    dest_size *= 2;
+		    dest_str = realloc(dest_str, (dest_size + 1) * sizeof(*dest_str));
+		    if (dest_str == NULL) {
+			is_error = 1;
+			continue;
+		    }
+		    pout = dest_str + used;
+		    ob = dest_size - used;
+		}   /*@switchbreak@*/ break;
+		case EILSEQ:
+		    is_error = 1;
+		    /*@switchbreak@*/ break;
+		default:
+		    is_error = 1;
+		    /*@switchbreak@*/ break;
+		}
+	    } else {
+		if (shift_pin == NULL) {
+		    shift_pin = pin;
+		    pin = NULL;
+		    ib = 0;
+		} else {
+		    done = 1;
+		}
+	    }
+	}
+	xx = iconv_close(fd);
+	if (pout)
+	    *pout = '\0';
+	if (dest_str != NULL)
+	    dest_str = xstrdup(dest_str);
+    } else
+#endif
+    {
+	dest_str = xstrdup((buffer ? buffer : ""));
+    }
+
+    return dest_str;
+}
+
 /**
- * Wrap tag data in simple header xml markup.
- * @param type		tag type
- * @param data		tag value
- * @param formatPrefix
- * @param padding
- * @param element	(unused)
+ * Encode string for use in XML CDATA.
+ * @param he		tag container
+ * @param av		paramater list (or NULL)
  * @return		formatted string
  */
-static /*@only@*/ char * xmlFormat(int_32 type, const void * data,
-		char * formatPrefix, int padding,
-		/*@unused@*/ int element)
-	/*@modifies formatPrefix @*/
+static /*@only@*/ char * cdataFormat(HE_t he, /*@null@*/ const char ** av)
+	/*@*/
 {
+    int ix = (he->ix > 0 ? he->ix : 0);
+    char * val;
+
+assert(ix == 0);
+    if (he->t != RPM_STRING_TYPE) {
+	val = xstrdup(_("(not a string)"));
+    } else {
+	const char * s = strdup_locale_convert(he->p.str, (av ? av[0] : NULL));
+	size_t nb = xmlstrlen(s);
+	char * t;
+
+	val = t = xcalloc(1, nb + 1);
+	t = xmlstrcpy(t, s);	t += strlen(t);
+	*t = '\0';
+	s = _free(s);
+    }
+
+/*@-globstate@*/
+    return val;
+/*@=globstate@*/
+}
+
+/**
+ * Convert string encoding.
+ * @param he		tag container
+ * @param av		paramater list (NULL assumes UTF-8)
+ * @return		formatted string
+ */
+static /*@only@*/ char * iconvFormat(HE_t he, /*@null@*/ const char ** av)
+	/*@*/
+{
+    int ix = (he->ix > 0 ? he->ix : 0);
+    char * val;
+
+assert(ix == 0);
+    if (he->t != RPM_STRING_TYPE) {
+	val = xstrdup(_("(not a string)"));
+    } else {
+	val = strdup_locale_convert(he->p.str, (av ? av[0] : NULL));
+    }
+
+/*@-globstate@*/
+    return val;
+/*@=globstate@*/
+}
+
+/**
+ * Wrap tag data in simple header xml markup.
+ * @param he		tag container
+ * @param av		paramater list (or NULL)
+ * @return		formatted string
+ */
+static /*@only@*/ char * xmlFormat(HE_t he, /*@null@*/ const char ** av)
+	/*@*/
+{
+    int ix = (he->ix > 0 ? he->ix : 0);
     const char * xtag = NULL;
     size_t nb;
     char * val;
     const char * s = NULL;
     char * t, * te;
-    unsigned long long anint = 0;
+    uint64_t anint = 0;
     int freeit = 0;
     int xx;
 
-    switch (type) {
-    case RPM_I18NSTRING_TYPE:
-    case RPM_STRING_TYPE:
-	s = data;
+assert(ix == 0);
+assert(he->t == RPM_STRING_TYPE || he->t == RPM_UINT64_TYPE || he->t == RPM_BIN_TYPE);
+    switch (he->t) {
+    case RPM_STRING_ARRAY_TYPE:	/* XXX currently never happens */
+	s = he->p.argv[ix];
 	xtag = "string";
 	/* XXX Force utf8 strings. */
 	s = xstrdup(s);
 	s = xstrtolocale(s);
 	freeit = 1;
 	break;
-    case RPM_OPENPGP_TYPE:
-    case RPM_ASN1_TYPE:
+    case RPM_I18NSTRING_TYPE:	/* XXX currently never happens */
+    case RPM_STRING_TYPE:
+	s = he->p.str;
+	xtag = "string";
+	/* XXX Force utf8 strings. */
+	s = xstrdup(s);
+	s = xstrtolocale(s);
+	freeit = 1;
+	break;
     case RPM_BIN_TYPE:
 /*@-globs -mods@*/
     {	int cpl = b64encode_chars_per_line;
 	b64encode_chars_per_line = 0;
 /*@-formatconst@*/
-	s = base64Format(type, data, formatPrefix, padding, element);
+	s = base64Format(he, NULL);
 /*@=formatconst@*/
 	b64encode_chars_per_line = cpl;
 	xtag = "base64";
 	freeit = 1;
     }	break;
 /*@=globs =mods@*/
-    case RPM_CHAR_TYPE:
-    case RPM_INT8_TYPE:
-	anint = *((uint_8 *) data);
+    case RPM_UINT8_TYPE:
+	anint = he->p.ui8p[ix];
 	break;
-    case RPM_INT16_TYPE:
-	anint = *((uint_16 *) data);
+    case RPM_UINT16_TYPE:
+	anint = he->p.ui16p[ix];
 	break;
-    case RPM_INT32_TYPE:
-	anint = *((uint_32 *) data);
+    case RPM_UINT32_TYPE:
+	anint = he->p.ui32p[ix];
 	break;
-    case RPM_INT64_TYPE:
-	anint = *((uint_64 *) data);
+    case RPM_UINT64_TYPE:
+	anint = he->p.ui64p[ix];
 	break;
-    case RPM_NULL_TYPE:
-    case RPM_STRING_ARRAY_TYPE:
     default:
 	return xstrdup(_("(invalid xml type)"));
 	/*@notreached@*/ break;
@@ -417,7 +841,7 @@ static /*@only@*/ char * xmlFormat(int_32 type, const void * data,
 	t = memset(alloca(tlen+1), 0, tlen+1);
 /*@-duplicatequals@*/
 	if (anint != 0)
-	    xx = snprintf(t, tlen, "%llu", anint);
+	    xx = snprintf(t, tlen, "%llu", (unsigned long long)anint);
 /*@=duplicatequals@*/
 	s = t;
 	xtag = "integer";
@@ -440,13 +864,7 @@ static /*@only@*/ char * xmlFormat(int_32 type, const void * data,
     if (freeit)
 	s = _free(s);
 
-    nb += padding;
-    val = xmalloc(nb+1);
-    strcat(formatPrefix, "s");
-/*@-formatconst@*/
-    xx = snprintf(val, nb, formatPrefix, t);
-/*@=formatconst@*/
-    val[nb] = '\0';
+    val = xstrdup(t);
 
     return val;
 }
@@ -464,13 +882,13 @@ static size_t yamlstrlen(const char * s, int lvl)
     int indent = (lvl > 0);
     int c;
 
-    while ((c = *s++) != '\0')
+    while ((c = (int) *s++) != (int) '\0')
     {
 	if (indent) {
 	    len += 2 * lvl;
 	    indent = 0;
 	}
-	if (c == '\n')
+	if (c == (int) '\n')
 	    indent = (lvl > 0);
 	len++;
     }
@@ -491,7 +909,7 @@ static char * yamlstrcpy(/*@out@*/ /*@returned@*/ char * t, const char * s, int 
     int indent = (lvl > 0);
     int c;
 
-    while ((c = *s++) != '\0') {
+    while ((c = (int) *s++) != (int) '\0') {
 	if (indent) {
 	    int i;
 	    for (i = 0; i < lvl; i++) {
@@ -500,9 +918,9 @@ static char * yamlstrcpy(/*@out@*/ /*@returned@*/ char * t, const char * s, int 
 	    }
 	    indent = 0;
 	}
-	if (c == '\n')
+	if (c == (int) '\n')
 	    indent = (lvl > 0);
-	*te++ = c;
+	*te++ = (char) c;
     }
     *te = '\0';
     return t;
@@ -510,39 +928,38 @@ static char * yamlstrcpy(/*@out@*/ /*@returned@*/ char * t, const char * s, int 
 
 /**
  * Wrap tag data in simple header yaml markup.
- * @param type		tag type
- * @param data		tag value
- * @param formatPrefix
- * @param padding
- * @param element	element index (or -1 for non-array).
+ * @param he		tag container
+ * @param av		paramater list (or NULL)
  * @return		formatted string
  */
-static /*@only@*/ char * yamlFormat(int_32 type, const void * data,
-		char * formatPrefix, int padding,
-		int element)
-	/*@modifies formatPrefix @*/
+static /*@only@*/ char * yamlFormat(HE_t he, /*@null@*/ const char ** av)
+	/*@*/
 {
+    int element = he->ix;
+    int ix = (he->ix > 0 ? he->ix : 0);
     const char * xtag = NULL;
-    const char * ytag = NULL;
     size_t nb;
     char * val;
     const char * s = NULL;
     char * t, * te;
-    unsigned long long anint = 0;
+    uint64_t anint = 0;
     int freeit = 0;
     int lvl = 0;
     int xx;
     int c;
 
-    switch (type) {
-    case RPM_I18NSTRING_TYPE:
+assert(ix == 0);
+assert(he->t == RPM_STRING_TYPE || he->t == RPM_UINT64_TYPE || he->t == RPM_BIN_TYPE);
+    xx = 0;
+    switch (he->t) {
+    case RPM_STRING_ARRAY_TYPE:	/* XXX currently never happens */
+    case RPM_I18NSTRING_TYPE:	/* XXX currently never happens */
     case RPM_STRING_TYPE:
-	xx = 0;
-	s = data;
+	s = (he->t == RPM_STRING_ARRAY_TYPE ? he->p.argv[ix] : he->p.str);
 	if (strchr("[", s[0]))	/* leading [ */
 	    xx = 1;
 	if (xx == 0)
-	while ((c = *s++) != '\0') {
+	while ((c = (int) *s++) != (int) '\0') {
 	    switch (c) {
 	    default:
 		continue;
@@ -565,46 +982,42 @@ static /*@only@*/ char * yamlFormat(int_32 type, const void * data,
 	    } else {
 		xtag = "|-\n";
 		lvl = 2;
+		if (he->ix < 0) lvl++;	/* XXX extra indent for array[1] */
 	    }
 	} else {
 	    xtag = (element >= 0 ? "- " : NULL);
 	}
 
 	/* XXX Force utf8 strings. */
-	s = xstrdup(data);
+	s = xstrdup(he->p.str);
 	s = xstrtolocale(s);
 	freeit = 1;
 	break;
-    case RPM_OPENPGP_TYPE:
-    case RPM_ASN1_TYPE:
     case RPM_BIN_TYPE:
 /*@-globs -mods@*/
     {	int cpl = b64encode_chars_per_line;
 	b64encode_chars_per_line = 0;
 /*@-formatconst@*/
-	s = base64Format(type, data, formatPrefix, padding, element);
-	element = -element;	/* XXX skip "    " indent. */
+	s = base64Format(he, NULL);
+	element = -element; 	/* XXX skip "    " indent. */
 /*@=formatconst@*/
 	b64encode_chars_per_line = cpl;
 	xtag = "!!binary ";
 	freeit = 1;
     }	break;
 /*@=globs =mods@*/
-    case RPM_CHAR_TYPE:
-    case RPM_INT8_TYPE:
-	anint = *((uint_8 *) data);
+    case RPM_UINT8_TYPE:
+	anint = he->p.ui8p[ix];
 	break;
-    case RPM_INT16_TYPE:
-	anint = *((uint_16 *) data);
+    case RPM_UINT16_TYPE:
+	anint = he->p.ui16p[ix];
 	break;
-    case RPM_INT32_TYPE:
-	anint = *((uint_32 *) data);
+    case RPM_UINT32_TYPE:
+	anint = he->p.ui32p[ix];
 	break;
-    case RPM_INT64_TYPE:
-	anint = *((uint_64 *) data);
+    case RPM_UINT64_TYPE:
+	anint = he->p.ui64p[ix];
 	break;
-    case RPM_NULL_TYPE:
-    case RPM_STRING_ARRAY_TYPE:
     default:
 	return xstrdup(_("(invalid yaml type)"));
 	/*@notreached@*/ break;
@@ -614,7 +1027,7 @@ static /*@only@*/ char * yamlFormat(int_32 type, const void * data,
 	int tlen = 64;
 	t = memset(alloca(tlen+1), 0, tlen+1);
 /*@-duplicatequals@*/
-	xx = snprintf(t, tlen, "%llu", anint);
+	xx = snprintf(t, tlen, "%llu", (unsigned long long)anint);
 /*@=duplicatequals@*/
 	s = t;
 	xtag = (element >= 0 ? "- " : NULL);
@@ -635,8 +1048,6 @@ static /*@only@*/ char * yamlFormat(int_32 type, const void * data,
 	    nb += sizeof("    ") - 1;
 	if (xtag)
 	    nb += strlen(xtag);
-	if (ytag)
-	    nb += strlen(ytag);
 	nb++;
 	te = t = alloca(nb);
 	if (element >= 0)
@@ -645,48 +1056,37 @@ static /*@only@*/ char * yamlFormat(int_32 type, const void * data,
 	    te = stpcpy(te, xtag);
 	te = yamlstrcpy(te, s, lvl);
 	te += strlen(te);
-	if (ytag)
-	    te = stpcpy(te, ytag);
     }
 
     /* XXX s was malloc'd */
     if (freeit)
 	s = _free(s);
 
-    nb += padding;
-    val = xmalloc(nb+1);
-    strcat(formatPrefix, "s");
-/*@-formatconst@*/
-    xx = snprintf(val, nb, formatPrefix, t);
-/*@=formatconst@*/
-    val[nb] = '\0';
+    val = xstrdup(t);
 
     return val;
 }
 
 /**
  * Display signature fingerprint and time.
- * @param type		tag type
- * @param data		tag value
- * @param formatPrefix	(unused)
- * @param padding
- * @param element	(unused)
+ * @param he		tag container
+ * @param av		paramater list (or NULL)
  * @return		formatted string
  */
-static /*@only@*/ char * pgpsigFormat(int_32 type, const void * data,
-		/*@unused@*/ char * formatPrefix, /*@unused@*/ int padding,
-		/*@unused@*/ int element)
+static /*@only@*/ char * pgpsigFormat(HE_t he, /*@null@*/ const char ** av)
 	/*@globals fileSystem, internalState @*/
 	/*@modifies fileSystem, internalState @*/
 {
+    int ix = (he->ix > 0 ? he->ix : 0);
     char * val, * t;
 
-    if (!(type == RPM_BIN_TYPE || type == RPM_ASN1_TYPE || type == RPM_OPENPGP_TYPE)) {
+assert(ix == 0);
+    if (!(he->t == RPM_BIN_TYPE)) {
 	val = xstrdup(_("(not a blob)"));
     } else {
-	unsigned char * pkt = (byte *) data;
+	unsigned char * pkt = (unsigned char *) he->p.ui8p;
 	unsigned int pktlen = 0;
-	unsigned int v = *pkt;
+	unsigned int v = (unsigned int) *pkt;
 	pgpTag tag = 0;
 	unsigned int plen;
 	unsigned int hlen = 0;
@@ -694,11 +1094,11 @@ static /*@only@*/ char * pgpsigFormat(int_32 type, const void * data,
 	if (v & 0x80) {
 	    if (v & 0x40) {
 		tag = (v & 0x3f);
-		plen = pgpLen(pkt+1, &hlen);
+		plen = pgpLen((byte *)pkt+1, &hlen);
 	    } else {
 		tag = (v >> 2) & 0xf;
 		plen = (1 << (v & 0x3));
-		hlen = pgpGrab(pkt+1, plen);
+		hlen = pgpGrab((byte *)pkt+1, plen);
 	    }
 	
 	    pktlen = 1 + plen + hlen;
@@ -707,12 +1107,12 @@ static /*@only@*/ char * pgpsigFormat(int_32 type, const void * data,
 	if (pktlen == 0 || tag != PGPTAG_SIGNATURE) {
 	    val = xstrdup(_("(not an OpenPGP signature)"));
 	} else {
-	    pgpDig dig = pgpNewDig(0);
+	    pgpDig dig = pgpDigNew(0);
 	    pgpDigParams sigp = pgpGetSignature(dig);
 	    size_t nb = 0;
 	    const char *tempstr;
 
-	    (void) pgpPrtPkts(pkt, pktlen, dig, 0);
+	    (void) pgpPrtPkts((byte *)pkt, pktlen, dig, 0);
 
 	    val = NULL;
 	again:
@@ -727,7 +1127,7 @@ static /*@only@*/ char * pgpsigFormat(int_32 type, const void * data,
 		t = stpcpy(t, "RSA");
 		break;
 	    default:
-		(void) snprintf(t, nb - (t - val), "%d", sigp->pubkey_algo);
+		(void) snprintf(t, nb - (t - val), "%u", (unsigned)sigp->pubkey_algo);
 		t += strlen(t);
 		break;
 	    }
@@ -742,7 +1142,7 @@ static /*@only@*/ char * pgpsigFormat(int_32 type, const void * data,
 		t = stpcpy(t, "SHA1");
 		break;
 	    default:
-		(void) snprintf(t, nb - (t - val), "%d", sigp->hash_algo);
+		(void) snprintf(t, nb - (t - val), "%u", (unsigned)sigp->hash_algo);
 		t += strlen(t);
 		break;
 	    }
@@ -751,7 +1151,7 @@ static /*@only@*/ char * pgpsigFormat(int_32 type, const void * data,
 
 	    t = stpcpy(t, ", ");
 
-	    /* this is important if sizeof(int_32) ! sizeof(time_t) */
+	    /* this is important if sizeof(uint32_t) ! sizeof(time_t) */
 	    {	time_t dateint = pgpGrab(sigp->time, sizeof(sigp->time));
 		struct tm * tstruct = localtime(&dateint);
 		if (tstruct)
@@ -766,7 +1166,7 @@ static /*@only@*/ char * pgpsigFormat(int_32 type, const void * data,
 		goto again;
 	    t = stpcpy(t, tempstr);
 
-	    dig = pgpFreeDig(dig);
+	    dig = pgpDigFree(dig);
 	}
     }
 
@@ -775,24 +1175,21 @@ static /*@only@*/ char * pgpsigFormat(int_32 type, const void * data,
 
 /**
  * Format dependency flags for display.
- * @param type		tag type
- * @param data		tag value
- * @param formatPrefix
- * @param padding
- * @param element	(unused)
+ * @param he		tag container
+ * @param av		paramater list (or NULL)
  * @return		formatted string
  */
-static /*@only@*/ char * depflagsFormat(int_32 type, const void * data,
-		char * formatPrefix, int padding, /*@unused@*/ int element)
-	/*@modifies formatPrefix @*/
-	/*@requires maxRead(data) >= 0 @*/
+static /*@only@*/ char * depflagsFormat(HE_t he, /*@null@*/ const char ** av)
+	/*@*/
 {
+    int ix = (he->ix > 0 ? he->ix : 0);
     char * val;
 
-    if (type != RPM_INT32_TYPE) {
+assert(ix == 0);
+    if (he->t != RPM_UINT64_TYPE) {
 	val = xstrdup(_("(invalid type)"));
     } else {
-	int anint = *((int_32 *) data);
+	uint64_t anint = he->p.ui64p[ix];
 	char *t, *buf;
 
 	t = buf = alloca(32);
@@ -801,11 +1198,11 @@ static /*@only@*/ char * depflagsFormat(int_32 type, const void * data,
 #ifdef	NOTYET	/* XXX appending markers breaks :depflags format. */
 	if (anint & RPMSENSE_SCRIPT_PRE)
 	    t = stpcpy(t, "(pre)");
-	if (anint & RPMSENSE_SCRIPT_POST)
+	else if (anint & RPMSENSE_SCRIPT_POST)
 	    t = stpcpy(t, "(post)");
-	if (anint & RPMSENSE_SCRIPT_PREUN)
+	else if (anint & RPMSENSE_SCRIPT_PREUN)
 	    t = stpcpy(t, "(preun)");
-	if (anint & RPMSENSE_SCRIPT_POSTUN)
+	else if (anint & RPMSENSE_SCRIPT_POSTUN)
 	    t = stpcpy(t, "(postun)");
 #endif
 	if (anint & RPMSENSE_SENSEMASK)
@@ -820,11 +1217,7 @@ static /*@only@*/ char * depflagsFormat(int_32 type, const void * data,
 	    *t++ = ' ';
 	*t = '\0';
 
-	val = xmalloc(5 + padding);
-	strcat(formatPrefix, "s");
-	/*@-formatconst@*/
-	sprintf(val, formatPrefix, buf);
-	/*@=formatconst@*/
+	val = xstrdup(buf);
     }
 
     return val;
@@ -833,98 +1226,384 @@ static /*@only@*/ char * depflagsFormat(int_32 type, const void * data,
 /**
  * Retrieve install prefixes.
  * @param h		header
- * @retval *type	tag type
- * @retval *data	tag value
- * @retval *count	no. of data items
- * @retval *freeData	data-was-malloc'ed indicator
+ * @retval *he		tag container
  * @return		0 on success
  */
-static int instprefixTag(Header h, /*@null@*/ /*@out@*/ rpmTagType * type,
-		/*@null@*/ /*@out@*/ const void ** data,
-		/*@null@*/ /*@out@*/ int_32 * count,
-		/*@null@*/ /*@out@*/ int * freeData)
-	/*@modifies *type, *data, *freeData @*/
-	/*@requires maxSet(type) >= 0 /\ maxSet(data) >= 0
-		/\ maxSet(count) >= 0 /\ maxSet(freeData) >= 0 @*/
+static int instprefixTag(Header h, HE_t he)
+	/*@modifies he @*/
 {
-    HGE_t hge = (HGE_t)headerGetEntryMinMemory;
-    HFD_t hfd = headerFreeData;
-    rpmTagType ipt;
-    char ** array;
-
-    if (hge(h, RPMTAG_INSTALLPREFIX, type, data, count)) {
-	if (freeData) *freeData = 0;
+    he->tag = RPMTAG_INSTALLPREFIX;
+    if (headerGet(h, he, 0))
 	return 0;
-    } else if (hge(h, RPMTAG_INSTPREFIXES, &ipt, &array, count)) {
-	if (type) *type = RPM_STRING_TYPE;
-	if (data) *data = xstrdup(array[0]);
-	if (freeData) *freeData = 1;
-	array = hfd(array, ipt);
+
+    he->tag = RPMTAG_INSTPREFIXES;
+    if (headerGet(h, he, 0)) {
+	rpmTagData array = { .argv = he->p.argv };
+	he->t = RPM_STRING_TYPE;
+	he->c = 1;
+	he->p.str = xstrdup(array.argv[0]);
+	he->freeData = 1;
+	array.ptr = _free(array.ptr);
 	return 0;
     }
-
     return 1;
+}
+
+/**
+ * Convert unix timeval to UUIDv1.
+ * @param h		header
+ * @retval *he		tag container
+ * @param tv		unix timeval
+ * @return		0 on success
+ */
+static int tv2uuidv1(Header h, HE_t he, struct timeval *tv)
+	/*@modifies he @*/
+{
+    uint64_t uuid_time = ((uint64_t)tv->tv_sec * 10000000) +
+			(tv->tv_usec * 10) + 0x01B21DD213814000ULL;
+
+    he->t = RPM_BIN_TYPE;
+    he->c = 128/8;
+    he->p.ptr = xcalloc(1, he->c);
+    he->freeData = 1;
+    if (rpmuuidMake(1, NULL, NULL, NULL, (unsigned char *)he->p.ui8p)) {
+	he->p.ptr = _free(he->p.ptr);
+	he->freeData = 0;
+	return 1;
+    }
+
+    he->p.ui8p[6] &= 0xf0;	/* preserve version, clear time_hi nibble */
+    he->p.ui8p[8] &= 0x3f;	/* preserve reserved, clear clock */
+    he->p.ui8p[9] &= 0x00;
+
+    he->p.ui8p[3] = (uuid_time >>  0);
+    he->p.ui8p[2] = (uuid_time >>  8);
+    he->p.ui8p[1] = (uuid_time >> 16);
+    he->p.ui8p[0] = (uuid_time >> 24);
+    he->p.ui8p[5] = (uuid_time >> 32);
+    he->p.ui8p[4] = (uuid_time >> 40);
+    he->p.ui8p[6] |= (uuid_time >> 56) & 0x0f;
+
+#ifdef	NOTYET
+    /* XXX Jigger up a non-zero (but constant) clock value. Is this needed? */
+    he->p.ui8p[8] |= (he->p.ui8p[2] & 0x3f);
+    he->p.ui8p[9] |= he->p.ui8p[3]
+#endif
+
+    return 0;
+}
+
+/**
+ * Retrieve time and convert to UUIDv1.
+ * @param h		header
+ * @retval *he		tag container
+ * @return		0 on success
+ */
+static int tag2uuidv1(Header h, HE_t he)
+	/*@modifies he @*/
+{
+    struct timeval tv;
+
+    if (!headerGet(h, he, 0))
+	return 1;
+    tv.tv_sec = he->p.ui32p[0];
+    tv.tv_usec = (he->c > 1 ? he->p.ui32p[1] : 0);
+    he->p.ptr = _free(he->p.ptr);
+    return tv2uuidv1(h, he, &tv);
+}
+
+/**
+ * Retrieve install time and convert to UUIDv1.
+ * @param h		header
+ * @retval *he		tag container
+ * @return		0 on success
+ */
+static int installtime_uuidTag(Header h, HE_t he)
+	/*@modifies he @*/
+{
+    he->tag = RPMTAG_INSTALLTIME;
+    return tag2uuidv1(h, he);
+}
+
+/**
+ * Retrieve build time and convert to UUIDv1.
+ * @param h		header
+ * @retval *he		tag container
+ * @return		0 on success
+ */
+static int buildtime_uuidTag(Header h, HE_t he)
+	/*@modifies he @*/
+{
+    he->tag = RPMTAG_BUILDTIME;
+    return tag2uuidv1(h, he);
+}
+
+/**
+ * Retrieve origin time and convert to UUIDv1.
+ * @param h		header
+ * @retval *he		tag container
+ * @return		0 on success
+ */
+static int origintime_uuidTag(Header h, HE_t he)
+	/*@modifies he @*/
+{
+    he->tag = RPMTAG_ORIGINTIME;
+    return tag2uuidv1(h, he);
+}
+
+/**
+ * Retrieve install tid and convert to UUIDv1.
+ * @param h		header
+ * @retval *he		tag container
+ * @return		0 on success
+ */
+static int installtid_uuidTag(Header h, HE_t he)
+	/*@modifies he @*/
+{
+    he->tag = RPMTAG_INSTALLTID;
+    return tag2uuidv1(h, he);
+}
+
+/**
+ * Retrieve remove tid and convert to UUIDv1.
+ * @param h		header
+ * @retval *he		tag container
+ * @return		0 on success
+ */
+static int removetid_uuidTag(Header h, HE_t he)
+	/*@modifies he @*/
+{
+    he->tag = RPMTAG_REMOVETID;
+    return tag2uuidv1(h, he);
+}
+
+/**
+ * Retrieve origin tid and convert to UUIDv1.
+ * @param h		header
+ * @retval *he		tag container
+ * @return		0 on success
+ */
+static int origintid_uuidTag(Header h, HE_t he)
+	/*@modifies he @*/
+{
+    he->tag = RPMTAG_ORIGINTID;
+    return tag2uuidv1(h, he);
+}
+
+/*@unchecked@*/ /*@observer@*/
+static const char uuid_ns[] = "ns:URL";
+/*@unchecked@*/ /*@observer@*/
+static const char uuid_url[] = "http://rpm5.org/";
+/*@unchecked@*/ /*@observer@*/
+static int uuid_version = 5;
+
+/**
+ * Convert tag string to UUID.
+ * @param he		tag container
+ * @param av		paramater list (or NULL)
+ * @praram version	UUID version
+ * @retval val		UUID string
+ * @return		0 on success
+ */
+static int str2uuid(HE_t he, /*@null@*/ const char ** av,
+		int version, /*@null@*/ char * val)
+	/*@modifies he @*/
+{
+    const char * ns = NULL;
+    const char * s = NULL;
+    int rc;
+
+    switch (version) {
+    default:
+	version = uuid_version;
+	/*@fallthrough@*/
+    case 3:
+    case 5:
+assert(he->t == RPM_STRING_TYPE);
+	ns = uuid_ns;
+	s = rpmExpand(uuid_url, he->p.str, NULL);
+	/*@fallthrough@*/
+    case 4:
+	break;
+    }
+    he->p.ptr = _free(he->p.ptr);
+    he->t = RPM_BIN_TYPE;
+    he->c = 128/8;
+    he->p.ptr = xcalloc(1, he->c);
+    he->freeData = 1;
+    rc = rpmuuidMake(version, ns, s, val, (unsigned char *)he->p.ui8p);
+    if (rc) {
+	he->p.ptr = _free(he->p.ptr);
+	he->freeData = 0;
+    }
+    s = _free(s);
+    return rc;
+}
+
+/**
+ * Retrieve tag and convert to UUIDv5.
+ * @param h		header
+ * @retval *he		tag container
+ * @return		0 on success
+ */
+static int tag2uuidv5(Header h, HE_t he)
+	/*@modifies he @*/
+{
+    if (!headerGet(h, he, 0))
+	return 1;
+    switch (he->t) {
+    default:
+assert(0);
+	/*@notreached@*/ break;
+    case RPM_BIN_TYPE:	{	/* Convert RPMTAG_PKGID from binary => hex. */
+	static const char hex[] = "0123456789abcdef";
+	char * t;
+	char * te;
+	uint32_t i;
+
+	t = te = xmalloc (2*he->c + 1);
+	for (i = 0; i < he->c; i++) {
+	    *te++ = hex[ ((he->p.ui8p[i] >> 4) & 0x0f) ];
+	    *te++ = hex[ ((he->p.ui8p[i]     ) & 0x0f) ];
+	}
+	*te = '\0';
+	he->p.ptr = _free(he->p.ptr);
+	he->t = RPM_STRING_TYPE;
+	he->p.ptr = t;
+	he->c = 1;
+	he->freeData = 1;
+    }	break;
+    case RPM_STRING_TYPE:
+	break;
+    }
+    return str2uuid(he, NULL, 0, NULL);
+}
+
+/**
+ * Retrieve pkgid and convert to UUIDv5.
+ * @param h		header
+ * @retval *he		tag container
+ * @return		0 on success
+ */
+static int pkguuidTag(Header h, HE_t he)
+	/*@modifies he @*/
+{
+    he->tag = RPMTAG_PKGID;
+    return tag2uuidv5(h, he);
+}
+
+/**
+ * Retrieve sourcepkgid and convert to UUIDv5.
+ * @param h		header
+ * @retval *he		tag container
+ * @return		0 on success
+ */
+static int sourcepkguuidTag(Header h, HE_t he)
+	/*@modifies he @*/
+{
+    he->tag = RPMTAG_SOURCEPKGID;
+    return tag2uuidv5(h, he);
+}
+
+/**
+ * Retrieve hdrid and convert to UUIDv5.
+ * @param h		header
+ * @retval *he		tag container
+ * @return		0 on success
+ */
+static int hdruuidTag(Header h, HE_t he)
+	/*@modifies he @*/
+{
+    he->tag = RPMTAG_HDRID;
+    return tag2uuidv5(h, he);
 }
 
 /**
  * Retrieve trigger info.
  * @param h		header
- * @retval *type	tag type
- * @retval *data	tag value
- * @retval *count	no. of data items
- * @retval *freeData	data-was-malloc'ed indicator
+ * @retval *he		tag container
  * @return		0 on success
  */
-static int triggercondsTag(Header h, /*@out@*/ rpmTagType * type,
-		/*@out@*/ const void ** data, /*@out@*/ int_32 * count,
-		/*@out@*/ int * freeData)
-	/*@modifies *type, *data, *count, *freeData @*/
-	/*@requires maxSet(type) >= 0 /\ maxSet(data) >= 0
-		/\ maxSet(count) >= 0 /\ maxSet(freeData) >= 0 @*/
+static int triggercondsTag(Header h, HE_t he)
+	/*@modifies he @*/
 {
-    HGE_t hge = (HGE_t)headerGetEntryMinMemory;
-    HFD_t hfd = headerFreeData;
-    rpmTagType tnt, tvt, tst;
-    int_32 * indices, * flags;
-    char ** names, ** versions;
-    int numNames, numScripts;
-    char ** conds, ** s;
-    char * item, * flagsStr;
-    char * chptr;
-    int i, j, xx;
-    char buf[5];
+    HE_t _he = memset(alloca(sizeof(*_he)), 0, sizeof(*_he));
+    rpmTagData flags = { .ptr = NULL };
+    rpmTagData indices = { .ptr = NULL };
+    rpmTagData names = { .ptr = NULL };
+    rpmTagData versions = { .ptr = NULL };
+    rpmTagData s = { .ptr = NULL };
+    rpmTagCount numNames;
+    rpmTagCount numScripts;
+    unsigned i, j;
+    int rc = 1;		/* assume failure */
+    int xx;
 
-    if (!hge(h, RPMTAG_TRIGGERNAME, &tnt, &names, &numNames)) {
-	*freeData = 0;
-	return 0;
+    he->freeData = 0;
+
+/*@-compmempass@*/
+    _he->tag = RPMTAG_TRIGGERNAME;
+    xx = headerGet(h, _he, 0);
+    names.argv = _he->p.argv;
+    numNames = _he->c;
+    if (!xx) {		/* no triggers, succeed anyways */
+	rc = 0;
+	goto exit;
     }
 
-    xx = hge(h, RPMTAG_TRIGGERINDEX, NULL, &indices, NULL);
-    xx = hge(h, RPMTAG_TRIGGERFLAGS, NULL, &flags, NULL);
-    xx = hge(h, RPMTAG_TRIGGERVERSION, &tvt, &versions, NULL);
-    xx = hge(h, RPMTAG_TRIGGERSCRIPTS, &tst, &s, &numScripts);
-    s = hfd(s, tst);
+    _he->tag = RPMTAG_TRIGGERINDEX;
+    xx = headerGet(h, _he, 0);
+    if (!xx) goto exit;
+    indices.ui32p = _he->p.ui32p;
 
-    *freeData = 1;
-    *data = conds = xmalloc(sizeof(*conds) * numScripts);
-    *count = numScripts;
-    *type = RPM_STRING_ARRAY_TYPE;
-    for (i = 0; i < numScripts; i++) {
+    _he->tag = RPMTAG_TRIGGERFLAGS;
+    xx = headerGet(h, _he, 0);
+    if (!xx) goto exit;
+    flags.ui32p = _he->p.ui32p;
+
+    _he->tag = RPMTAG_TRIGGERVERSION;
+    xx = headerGet(h, _he, 0);
+    if (!xx) goto exit;
+    versions.argv = _he->p.argv;
+
+    _he->tag = RPMTAG_TRIGGERSCRIPTS;
+    xx = headerGet(h, _he, 0);
+    if (!xx) goto exit;
+    s.argv = _he->p.argv;
+    numScripts = _he->c;
+/*@=compmempass@*/
+
+    _he->tag = he->tag;
+    _he->t = RPM_UINT32_TYPE;
+    _he->p.ui32p = NULL;
+    _he->c = 1;
+    _he->freeData = 0;
+
+    he->t = RPM_STRING_ARRAY_TYPE;
+    he->c = numScripts;
+
+    he->freeData = 1;
+    he->p.argv = xmalloc(sizeof(*he->p.argv) * he->c);
+    for (i = 0; i < (unsigned) he->c; i++) {
+	char * item, * flagsStr;
+	char * chptr;
+
 	chptr = xstrdup("");
 
-	for (j = 0; j < numNames; j++) {
-	    if (indices[j] != i)
+	for (j = 0; j < (unsigned) numNames; j++) {
+	    if (indices.ui32p[j] != i)
 		/*@innercontinue@*/ continue;
 
-	    item = xmalloc(strlen(names[j]) + strlen(versions[j]) + 20);
-	    if (flags[j] & RPMSENSE_SENSEMASK) {
-		buf[0] = '%', buf[1] = '\0';
-		flagsStr = depflagsFormat(RPM_INT32_TYPE, flags, buf, 0, j);
-		sprintf(item, "%s %s %s", names[j], flagsStr, versions[j]);
+	    item = xmalloc(strlen(names.argv[j]) + strlen(versions.argv[j]) + 20);
+/*@-compmempass@*/
+	    if (flags.ui32p[j] & RPMSENSE_SENSEMASK) {
+		_he->p.ui32p = &flags.ui32p[j];
+		flagsStr = depflagsFormat(_he, NULL);
+		sprintf(item, "%s %s %s", names.argv[j], flagsStr, versions.argv[j]);
 		flagsStr = _free(flagsStr);
-	    } else {
-		strcpy(item, names[j]);
-	    }
+	    } else
+		strcpy(item, names.argv[j]);
+/*@=compmempass@*/
 
 	    chptr = xrealloc(chptr, strlen(chptr) + strlen(item) + 5);
 	    if (*chptr != '\0') strcat(chptr, ", ");
@@ -932,72 +1611,90 @@ static int triggercondsTag(Header h, /*@out@*/ rpmTagType * type,
 	    item = _free(item);
 	}
 
-	conds[i] = chptr;
+	he->p.argv[i] = chptr;
     }
+    rc = 0;
 
-    names = hfd(names, tnt);
-    versions = hfd(versions, tvt);
+exit:
+    indices.ptr = _free(indices.ptr);
+    flags.ptr = _free(flags.ptr);
+    names.ptr = _free(names.ptr);
+    versions.ptr = _free(versions.ptr);
+    s.ptr = _free(s.ptr);
 
-    return 0;
+    return rc;
 }
 
 /**
  * Retrieve trigger type info.
  * @param h		header
- * @retval *type	tag type
- * @retval *data	tag value
- * @retval *count	no. of data items
- * @retval *freeData	data-was-malloc'ed indicator
+ * @retval *he		tag container
  * @return		0 on success
  */
-static int triggertypeTag(Header h, /*@out@*/ rpmTagType * type,
-		/*@out@*/ const void ** data, /*@out@*/ int_32 * count,
-		/*@out@*/ int * freeData)
-	/*@modifies *type, *data, *count, *freeData @*/
-	/*@requires maxSet(type) >= 0 /\ maxSet(data) >= 0
-		/\ maxSet(count) >= 0 /\ maxSet(freeData) >= 0 @*/
+static int triggertypeTag(Header h, HE_t he)
+	/*@modifies he @*/
 {
-    HGE_t hge = (HGE_t)headerGetEntryMinMemory;
-    HFD_t hfd = headerFreeData;
-    rpmTagType tst;
-    int_32 * indices, * flags;
-    const char ** conds;
-    const char ** s;
-    int i, j, xx;
-    int numScripts, numNames;
+    HE_t _he = memset(alloca(sizeof(*_he)), 0, sizeof(*_he));
+    rpmTagData indices = { .ptr = NULL };
+    rpmTagData flags = { .ptr = NULL };
+    rpmTagData s = { .ptr = NULL };
+    rpmTagCount numNames;
+    rpmTagCount numScripts;
+    unsigned i, j;
+    int rc = 1;		/* assume failure */
+    int xx;
 
-    if (!hge(h, RPMTAG_TRIGGERINDEX, NULL, &indices, &numNames)) {
-	*freeData = 0;
-	return 1;
-    }
+    he->freeData = 0;
 
-    xx = hge(h, RPMTAG_TRIGGERFLAGS, NULL, &flags, NULL);
-    xx = hge(h, RPMTAG_TRIGGERSCRIPTS, &tst, &s, &numScripts);
-    s = hfd(s, tst);
+/*@-compmempass@*/
+    _he->tag = RPMTAG_TRIGGERINDEX;
+    xx = headerGet(h, _he, 0);
+    if (!xx) goto exit;
+    indices.ui32p = _he->p.ui32p;
+    numNames = _he->c;
 
-    *freeData = 1;
-    *data = conds = xmalloc(sizeof(*conds) * numScripts);
-    *count = numScripts;
-    *type = RPM_STRING_ARRAY_TYPE;
-    for (i = 0; i < numScripts; i++) {
-	for (j = 0; j < numNames; j++) {
-	    if (indices[j] != i)
+    _he->tag = RPMTAG_TRIGGERFLAGS;
+    xx = headerGet(h, _he, 0);
+    if (!xx) goto exit;
+    flags.ui32p = _he->p.ui32p;
+
+    _he->tag = RPMTAG_TRIGGERSCRIPTS;
+    xx = headerGet(h, _he, 0);
+    if (!xx) goto exit;
+    s.argv = _he->p.argv;
+    numScripts = _he->c;
+/*@=compmempass@*/
+
+    he->t = RPM_STRING_ARRAY_TYPE;
+    he->c = numScripts;
+
+    he->freeData = 1;
+    he->p.argv = xmalloc(sizeof(*he->p.argv) * he->c);
+    for (i = 0; i < (unsigned) he->c; i++) {
+	for (j = 0; j < (unsigned) numNames; j++) {
+	    if (indices.ui32p[j] != i)
 		/*@innercontinue@*/ continue;
 
-	    if (flags[j] & RPMSENSE_TRIGGERPREIN)
-		conds[i] = xstrdup("prein");
-	    else if (flags[j] & RPMSENSE_TRIGGERIN)
-		conds[i] = xstrdup("in");
-	    else if (flags[j] & RPMSENSE_TRIGGERUN)
-		conds[i] = xstrdup("un");
-	    else if (flags[j] & RPMSENSE_TRIGGERPOSTUN)
-		conds[i] = xstrdup("postun");
+	    /* XXX FIXME: there's memory leaks here. */
+	    if (flags.ui32p[j] & RPMSENSE_TRIGGERPREIN)
+		he->p.argv[i] = xstrdup("prein");
+	    else if (flags.ui32p[j] & RPMSENSE_TRIGGERIN)
+		he->p.argv[i] = xstrdup("in");
+	    else if (flags.ui32p[j] & RPMSENSE_TRIGGERUN)
+		he->p.argv[i] = xstrdup("un");
+	    else if (flags.ui32p[j] & RPMSENSE_TRIGGERPOSTUN)
+		he->p.argv[i] = xstrdup("postun");
 	    else
-		conds[i] = xstrdup("");
+		he->p.argv[i] = xstrdup("");
 	    /*@innerbreak@*/ break;
 	}
     }
+    rc = 0;
 
+exit:
+    indices.ptr = _free(indices.ptr);
+    flags.ptr = _free(flags.ptr);
+    s.ptr = _free(s.ptr);
     return 0;
 }
 
@@ -1018,29 +1715,20 @@ static const char * _macro_i18ndomains = "%{?_i18ndomains}";
 /**
  * Retrieve i18n text.
  * @param h		header
- * @param tag		tag
- * @retval *type	tag type
- * @retval *data	tag value
- * @retval *count	no. of data items
- * @retval *freeData	data-was-malloc'ed indicator
+ * @retval *he		tag container
  * @return		0 on success
  */
-static int i18nTag(Header h, int_32 tag, /*@out@*/ rpmTagType * type,
-		/*@out@*/ const void ** data, /*@out@*/ int_32 * count,
-		/*@out@*/ int * freeData)
+static int i18nTag(Header h, HE_t he)
 	/*@globals rpmGlobalMacroContext, h_errno @*/
-	/*@modifies *type, *data, *count, *freeData, rpmGlobalMacroContext @*/
-	/*@requires maxSet(type) >= 0 /\ maxSet(data) >= 0
-		/\ maxSet(count) >= 0 /\ maxSet(freeData) >= 0 @*/
+	/*@modifies he, rpmGlobalMacroContext @*/
 {
-    HGE_t hge = (HGE_t)headerGetEntryMinMemory;
     char * dstring = rpmExpand(_macro_i18ndomains, NULL);
-    int rc;
+    int rc = 1;		/* assume failure */
 
-    *type = RPM_STRING_TYPE;
-    *data = NULL;
-    *count = 0;
-    *freeData = 0;
+    he->t = RPM_STRING_TYPE;
+    he->p.str = NULL;
+    he->c = 0;
+    he->freeData = 0;
 
     if (dstring && *dstring) {
 	char *domain, *de;
@@ -1048,16 +1736,18 @@ static int i18nTag(Header h, int_32 tag, /*@out@*/ rpmTagType * type,
 	const char * msgkey;
 	const char * msgid;
 
-	{   const char * tn = tagName(tag);
-	    const char * n = NULL;
+	{   HE_t nhe = memset(alloca(sizeof(*nhe)), 0, sizeof(*nhe));
+	    const char * tn = tagName(he->tag);
 	    char * mk;
 	    size_t nb = sizeof("()");
-	    int xx = headerGetEntry(h, RPMTAG_NAME, NULL, &n, NULL);
-	    xx = 0;	/* XXX keep gcc quiet */
+	    int xx;
+	    nhe->tag = RPMTAG_NAME;
+	    xx = headerGet(h, nhe, 0);
 	    if (tn)	nb += strlen(tn);
-	    if (n)	nb += strlen(n);
+	    if (nhe->p.str)	nb += strlen(nhe->p.str);
 	    mk = alloca(nb);
-	    sprintf(mk, "%s(%s)", (n?n:""), (tn?tn:""));
+	    sprintf(mk, "%s(%s)", (nhe->p.str ? nhe->p.str : ""), (tn ? tn : ""));
+	    nhe->p.ptr = _free(nhe->p.ptr);
 	    msgkey = mk;
 	}
 
@@ -1086,193 +1776,319 @@ static int i18nTag(Header h, int_32 tag, /*@out@*/ rpmTagType * type,
 #endif
 
 	if (domain && msgid) {
-	    *data = /*@-unrecog@*/ dgettext(domain, msgid) /*@=unrecog@*/;
-	    *data = xstrdup(*data);	/* XXX xstrdup has side effects. */
-	    *count = 1;
-	    *freeData = 1;
+	    const char * s = /*@-unrecog@*/ dgettext(domain, msgid) /*@=unrecog@*/;
+	    if (s) {
+		rc = 0;
+		he->p.str = xstrdup(s);
+		he->c = 1;
+		he->freeData = 1;
+	    }
 	}
-	dstring = _free(dstring);
-	if (*data)
-	    return 0;
     }
 
+/*@-dependenttrans@*/
     dstring = _free(dstring);
+/*@=dependenttrans@*/
+    if (!rc)
+	return rc;
 
-    rc = hge(h, tag, type, (void **)data, count);
-
-    if (rc && (*data) != NULL) {
-	*data = xstrdup(*data);
-	*data = xstrtolocale(*data);
-	*freeData = 1;
-	return 0;
+    rc = headerGet(h, he, HEADERGET_NOEXTENSION);
+    if (rc) {
+	rc = 0;
+	he->p.str = xstrtolocale(he->p.str);
+	he->freeData = 1;
+/*@-nullstate@*/
+	return rc;
+/*@=nullstate@*/
     }
 
-    *freeData = 0;
-    *data = NULL;
-    *count = 0;
+    he->t = RPM_STRING_TYPE;
+    he->p.str = NULL;
+    he->c = 0;
+    he->freeData = 0;
+
     return 1;
 }
 
 /**
  * Retrieve text and convert to locale.
  */
-static int localeTag(Header h, int_32 tag, /*@out@*/ rpmTagType * type,
-		/*@out@*/ const void ** data, /*@out@*/ int_32 * count,
-		/*@out@*/ int * freeData)
-	/*@modifies *type, *data, *count, *freeData @*/
+static int localeTag(Header h, HE_t he)
+	/*@modifies he @*/
 {
-    HGE_t hge = (HGE_t)headerGetEntryMinMemory;
-    rpmTagType t;
-    char **d, **d2, *dp;
-    int rc, i, l;
+    int rc;
 
-    rc = hge(h, tag, &t, &d, count);
-    if (!rc || d == NULL || *count == 0) {
-	*freeData = 0;
-	*data = NULL;
-	*count = 0;
+    rc = headerGet(h, he, HEADERGET_NOEXTENSION);
+    if (!rc || he->p.str == NULL || he->c == 0) {
+	he->t = RPM_STRING_TYPE;
+	he->freeData = 0;
 	return 1;
     }
-    if (type)
-	*type = t;
-    if (t == RPM_STRING_TYPE) {
-	d = (char **)xstrdup((char *)d);
-	d = (char **)xstrtolocale((char *)d);
-	*freeData = 1;
-    } else if (t == RPM_STRING_ARRAY_TYPE) {
-	l = 0;
-	for (i = 0; i < *count; i++) {
-	    d[i] = xstrdup(d[i]);
-	    d[i] = (char *)xstrtolocale(d[i]);
-assert(d[i] != NULL);
-	    l += strlen(d[i]) + 1;
+
+    switch (he->t) {
+    default:
+	he->freeData = 0;
+	break;
+    case RPM_STRING_TYPE:
+	he->p.str = xstrtolocale(he->p.str);
+	he->freeData = 1;
+	break;
+    case RPM_STRING_ARRAY_TYPE:
+    {	const char ** argv;
+	char * te;
+	size_t l = 0;
+	unsigned i;
+	for (i = 0; i < (unsigned) he->c; i++) {
+	    he->p.argv[i] = xstrdup(he->p.argv[i]);
+	    he->p.argv[i] = xstrtolocale(he->p.argv[i]);
+assert(he->p.argv[i] != NULL);
+	    l += strlen(he->p.argv[i]) + 1;
 	}
-	d2 = xmalloc(*count * sizeof(*d2) + l);
-	dp = (char *)(d2 + *count);
-	for (i = 0; i < *count; i++) {
-	    d2[i] = dp;
-	    strcpy(dp, d[i]);
-	    dp += strlen(dp) + 1;
-	    d[i] = _free(d[i]);
+	argv = xmalloc(he->c * sizeof(*argv) + l);
+	te = (char *)&argv[he->c];
+	for (i = 0; i < (unsigned) he->c; i++) {
+	    argv[i] = te;
+	    te = stpcpy(te, he->p.argv[i]);
+	    te++;
+	    he->p.argv[i] = _free(he->p.argv[i]);
 	}
-	d = _free(d);
-	d = d2;
-	*freeData = 1;
-    } else
-	*freeData = 0;
-    *data = (void **)d;
+	he->p.ptr = _free(he->p.ptr);
+	he->p.argv = argv;
+	he->freeData = 1;
+    }	break;
+    }
+
     return 0;
 }
 
 /**
  * Retrieve summary text.
  * @param h		header
- * @retval *type	tag type
- * @retval *data	tag value
- * @retval *count	no. of data items
- * @retval *freeData	data-was-malloc'ed indicator
+ * @retval *he		tag container
  * @return		0 on success
  */
-static int summaryTag(Header h, /*@out@*/ rpmTagType * type,
-		/*@out@*/ const void ** data, /*@out@*/ int_32 * count,
-		/*@out@*/ int * freeData)
+static int summaryTag(Header h, HE_t he)
 	/*@globals rpmGlobalMacroContext, h_errno @*/
-	/*@modifies *type, *data, *count, *freeData, rpmGlobalMacroContext @*/
-	/*@requires maxSet(type) >= 0 /\ maxSet(data) >= 0
-		/\ maxSet(count) >= 0 /\ maxSet(freeData) >= 0 @*/
+	/*@modifies he, rpmGlobalMacroContext @*/
 {
-    return i18nTag(h, RPMTAG_SUMMARY, type, data, count, freeData);
+    he->tag = RPMTAG_SUMMARY;
+    return i18nTag(h, he);
 }
 
 /**
  * Retrieve description text.
  * @param h		header
- * @retval *type	tag type
- * @retval *data	tag value
- * @retval *count	no. of data items
- * @retval *freeData	data-was-malloc'ed indicator
+ * @retval *he		tag container
  * @return		0 on success
  */
-static int descriptionTag(Header h, /*@out@*/ rpmTagType * type,
-		/*@out@*/ const void ** data, /*@out@*/ int_32 * count,
-		/*@out@*/ int * freeData)
+static int descriptionTag(Header h, HE_t he)
 	/*@globals rpmGlobalMacroContext, h_errno @*/
-	/*@modifies *type, *data, *count, *freeData, rpmGlobalMacroContext @*/
-	/*@requires maxSet(type) >= 0 /\ maxSet(data) >= 0
-		/\ maxSet(count) >= 0 /\ maxSet(freeData) >= 0 @*/
+	/*@modifies he, rpmGlobalMacroContext @*/
 {
-    return i18nTag(h, RPMTAG_DESCRIPTION, type, data, count, freeData);
+    he->tag = RPMTAG_DESCRIPTION;
+    return i18nTag(h, he);
 }
 
-static int changelognameTag(Header h, /*@out@*/ rpmTagType * type,
-		/*@out@*/ const void ** data, /*@out@*/ int_32 * count,
-		/*@out@*/ int * freeData)
-	/*@modifies *type, *data, *count, *freeData @*/
-	/*@requires maxSet(type) >= 0 /\ maxSet(data) >= 0
-		/\ maxSet(count) >= 0 /\ maxSet(freeData) >= 0 @*/
+static int changelognameTag(Header h, HE_t he)
+	/*@modifies he @*/
 {
-    return localeTag(h, RPMTAG_CHANGELOGNAME, type, data, count, freeData);
+    he->tag = RPMTAG_CHANGELOGNAME;
+    return localeTag(h, he);
 }
 
-static int changelogtextTag(Header h, /*@out@*/ rpmTagType * type,
-		/*@out@*/ const void ** data, /*@out@*/ int_32 * count,
-		/*@out@*/ int * freeData)
-	/*@modifies *type, *data, *count, *freeData @*/
-	/*@requires maxSet(type) >= 0 /\ maxSet(data) >= 0
-		/\ maxSet(count) >= 0 /\ maxSet(freeData) >= 0 @*/
+static int changelogtextTag(Header h, HE_t he)
+	/*@modifies he @*/
 {
-    return localeTag(h, RPMTAG_CHANGELOGTEXT, type, data, count, freeData);
+    he->tag = RPMTAG_CHANGELOGTEXT;
+    return localeTag(h, he);
 }
 
 /**
  * Retrieve group text.
  * @param h		header
- * @retval *type	tag type
- * @retval *data	tag value
- * @retval *count	no. of data items
- * @retval *freeData	data-was-malloc'ed indicator
+ * @retval *he		tag container
  * @return		0 on success
  */
-static int groupTag(Header h, /*@out@*/ rpmTagType * type,
-		/*@out@*/ const void ** data, /*@out@*/ int_32 * count,
-		/*@out@*/ int * freeData)
+static int groupTag(Header h, HE_t he)
 	/*@globals rpmGlobalMacroContext, h_errno @*/
-	/*@modifies *type, *data, *count, *freeData, rpmGlobalMacroContext @*/
-	/*@requires maxSet(type) >= 0 /\ maxSet(data) >= 0
-		/\ maxSet(count) >= 0 /\ maxSet(freeData) >= 0 @*/
+	/*@modifies he, rpmGlobalMacroContext @*/
 {
-    return i18nTag(h, RPMTAG_GROUP, type, data, count, freeData);
+    he->tag = RPMTAG_GROUP;
+    return i18nTag(h, he);
 }
 
 /**
  * Retrieve db instance from header.
  * @param h		header
- * @retval *type	tag type
- * @retval *data	tag value
- * @retval *count	no. of data items
- * @retval *freeData	data-was-malloc'ed indicator
+ * @retval *he		tag container
  * @return		0 on success
  */
 /*@-globuse@*/
-static int dbinstanceTag(Header h, /*@out@*/ rpmTagType * type,
-		/*@out@*/ const void ** data, /*@out@*/ int_32 * count,
-		/*@out@*/ int * freeData)
+static int dbinstanceTag(Header h, HE_t he)
 	/*@globals rpmGlobalMacroContext, h_errno,
 		fileSystem, internalState @*/
-	/*@modifies *type, *data, *count, *freeData, rpmGlobalMacroContext,
+	/*@modifies he, rpmGlobalMacroContext,
 		fileSystem, internalState @*/
-	/*@requires maxSet(type) >= 0 /\ maxSet(data) >= 0
-		/\ maxSet(count) >= 0 /\ maxSet(freeData) >= 0 @*/
 {
-    int_32 * valuep = xcalloc(1, sizeof(*valuep));
+    he->tag = RPMTAG_DBINSTANCE;
+    he->t = RPM_UINT32_TYPE;
+    he->p.ui32p = xmalloc(sizeof(*he->p.ui32p));
+    he->p.ui32p[0] = headerGetInstance(h);
+    he->freeData = 1;
+    he->c = 1;
+    return 0;
+}
+/*@=globuse@*/
 
-    *valuep = headerGetInstance(h);
+/**
+ * Retrieve starting byte offset of header.
+ * @param h		header
+ * @retval *he		tag container
+ * @return		0 on success
+ */
+/*@-globuse@*/
+static int headerstartoffTag(Header h, HE_t he)
+	/*@globals rpmGlobalMacroContext, h_errno,
+		fileSystem, internalState @*/
+	/*@modifies he, rpmGlobalMacroContext,
+		fileSystem, internalState @*/
+{
+    he->tag = RPMTAG_HEADERSTARTOFF;
+    he->t = RPM_UINT64_TYPE;
+    he->p.ui64p = xmalloc(sizeof(*he->p.ui64p));
+    he->p.ui64p[0] = headerGetStartOff(h);
+    he->freeData = 1;
+    he->c = 1;
+    return 0;
+}
+/*@=globuse@*/
 
-    *type = RPM_INT32_TYPE;
-    *data = valuep;
-    *count = 1;
-    *freeData = 1;
+/**
+ * Retrieve ending byte offset of header.
+ * @param h		header
+ * @retval *he		tag container
+ * @return		0 on success
+ */
+/*@-globuse@*/
+static int headerendoffTag(Header h, HE_t he)
+	/*@globals rpmGlobalMacroContext, h_errno,
+		fileSystem, internalState @*/
+	/*@modifies he, rpmGlobalMacroContext,
+		fileSystem, internalState @*/
+{
+    he->tag = RPMTAG_HEADERENDOFF;
+    he->t = RPM_UINT64_TYPE;
+    he->p.ui64p = xmalloc(sizeof(*he->p.ui64p));
+    he->p.ui64p[0] = headerGetEndOff(h);
+    he->freeData = 1;
+    he->c = 1;
+    return 0;
+}
+/*@=globuse@*/
 
+/**
+ * Retrieve package origin from header.
+ * @param h		header
+ * @retval *he		tag container
+ * @return		0 on success
+ */
+/*@-globuse@*/
+static int pkgoriginTag(Header h, HE_t he)
+	/*@globals rpmGlobalMacroContext, h_errno,
+		fileSystem, internalState @*/
+	/*@modifies he, rpmGlobalMacroContext,
+		fileSystem, internalState @*/
+{
+    const char * origin;
+    int rc = 1;
+
+    he->tag = RPMTAG_PACKAGEORIGIN;
+    if (!headerGet(h, he, HEADERGET_NOEXTENSION)
+     && (origin = headerGetOrigin(h)) != NULL)
+    {
+	he->t = RPM_STRING_TYPE;
+	he->p.str = xstrdup(origin);
+	he->c = 1;
+	he->freeData = 1;
+	rc = 0;
+    }
+    return rc;
+}
+/*@=globuse@*/
+
+/**
+ * Retrieve package digest from header.
+ * @param h		header
+ * @retval *he		tag container
+ * @return		0 on success
+ */
+/*@-globuse@*/
+static int pkgdigestTag(Header h, HE_t he)
+	/*@globals rpmGlobalMacroContext, h_errno,
+		fileSystem, internalState @*/
+	/*@modifies he, rpmGlobalMacroContext,
+		fileSystem, internalState @*/
+{
+    const char * digest;
+    int rc = 1;
+
+    he->tag = RPMTAG_PACKAGEDIGEST;
+    if ((digest = headerGetDigest(h)) != NULL)
+    {
+	he->t = RPM_STRING_TYPE;
+	he->p.str = xstrdup(digest);
+	he->c = 1;
+	he->freeData = 1;
+	rc = 0;
+    }
+    return rc;
+}
+/*@=globuse@*/
+
+/**
+ * Retrieve *.rpm package st->st_mtime from header.
+ * @param h		header
+ * @retval *he		tag container
+ * @return		0 on success
+ */
+/*@-globuse@*/
+static int pkgmtimeTag(Header h, HE_t he)
+	/*@globals rpmGlobalMacroContext, h_errno,
+		fileSystem, internalState @*/
+	/*@modifies he, rpmGlobalMacroContext,
+		fileSystem, internalState @*/
+{
+    struct stat * st = headerGetStatbuf(h);
+    he->tag = RPMTAG_PACKAGETIME;
+    he->t = RPM_UINT64_TYPE;
+    he->p.ui64p = xmalloc(sizeof(*he->p.ui64p));
+    he->p.ui64p[0] = st->st_mtime;
+    he->freeData = 1;
+    he->c = 1;
+    return 0;
+}
+/*@=globuse@*/
+
+/**
+ * Retrieve *.rpm package st->st_size from header.
+ * @param h		header
+ * @retval *he		tag container
+ * @return		0 on success
+ */
+/*@-globuse@*/
+static int pkgsizeTag(Header h, HE_t he)
+	/*@globals rpmGlobalMacroContext, h_errno,
+		fileSystem, internalState @*/
+	/*@modifies he, rpmGlobalMacroContext,
+		fileSystem, internalState @*/
+{
+    struct stat * st = headerGetStatbuf(h);
+    he->tag = RPMTAG_PACKAGESIZE;
+    he->t = RPM_UINT64_TYPE;
+    he->p.ui64p = xmalloc(sizeof(*he->p.ui64p));
+    he->p.ui64p[0] = st->st_size;
+    he->freeData = 1;
+    he->c = 1;
     return 0;
 }
 /*@=globuse@*/
@@ -1297,42 +2113,54 @@ static char * hGetNVRA(Header h)
     if (N)	nb += strlen(N);
     if (V)	nb += strlen(V) + 1;
     if (R)	nb += strlen(R) + 1;
+#if defined(RPM_VENDOR_OPENPKG) /* no-architecture-expose */
+    /* do not expose the architecture as this is too less
+       information, as in OpenPKG the "platform" is described by the
+       architecture+operating-system combination. But as the whole
+       "platform" information is actually overkill, just revert to the
+       RPM 4 behaviour and do not expose any such information at all. */
+#else
     if (A)	nb += strlen(A) + 1;
+#endif
     nb++;
     NVRA = t = xmalloc(nb);
     *t = '\0';
     if (N)	t = stpcpy(t, N);
     if (V)	t = stpcpy( stpcpy(t, "-"), V);
     if (R)	t = stpcpy( stpcpy(t, "-"), R);
+#if defined(RPM_VENDOR_OPENPKG) /* no-architecture-expose */
+    /* do not expose the architecture as this is too less
+       information, as in OpenPKG the "platform" is described by the
+       architecture+operating-system combination. But as the whole
+       "platform" information is actually overkill, just revert to the
+       RPM 4 behaviour and do not expose any such information at all. */
+#else
     if (A)	t = stpcpy( stpcpy(t, "."), A);
+#endif
+    N = _free(N);
+    V = _free(V);
+    R = _free(R);
+    A = _free(A);
     return NVRA;
 }
 
 /**
  * Retrieve N-V-R.A compound string from header.
  * @param h		header
- * @retval *type	tag type
- * @retval *data	tag value
- * @retval *count	no. of data items
- * @retval *freeData	data-was-malloc'ed indicator
+ * @retval *he		tag container
  * @return		0 on success
  */
 /*@-globuse@*/
-static int nvraTag(Header h, /*@out@*/ rpmTagType * type,
-		/*@out@*/ const void ** data, /*@out@*/ int_32 * count,
-		/*@out@*/ int * freeData)
+static int nvraTag(Header h, HE_t he)
 	/*@globals rpmGlobalMacroContext, h_errno,
 		fileSystem, internalState @*/
-	/*@modifies h, *type, *data, *count, *freeData, rpmGlobalMacroContext,
+	/*@modifies h, he, rpmGlobalMacroContext,
 		fileSystem, internalState @*/
-	/*@requires maxSet(type) >= 0 /\ maxSet(data) >= 0
-		/\ maxSet(count) >= 0 /\ maxSet(freeData) >= 0 @*/
 {
-    if (type) *type = RPM_STRING_TYPE;
-    if (data) *data = hGetNVRA(h);
-    if (count) *count = 1;
-    if (freeData) *freeData = 1;
-
+    he->t = RPM_STRING_TYPE;
+    he->p.str = hGetNVRA(h);
+    he->c = 1;
+    he->freeData = 1;
     return 0;
 }
 /*@=globuse@*/
@@ -1344,7 +2172,7 @@ static int nvraTag(Header h, /*@out@*/ rpmTagType * type,
  * Originally, file names were stored as an array of absolute paths.
  * In rpm-4.0, file names are stored as separate arrays of dirname's and
  * basename's, * with a dirname index to associate the correct dirname
- * with each basname.
+ * with each basename.
  *
  * This function is used to retrieve file names independent of how the
  * file names are represented in the package header.
@@ -1355,22 +2183,25 @@ static int nvraTag(Header h, /*@out@*/ rpmTagType * type,
  * @retval *fcp		number of files
  */
 static void rpmfiBuildFNames(Header h, rpmTag tagN,
-		/*@out@*/ const char *** fnp, /*@out@*/ int * fcp)
+		/*@null@*/ /*@out@*/ const char *** fnp,
+		/*@null@*/ /*@out@*/ rpmTagCount * fcp)
 	/*@modifies *fnp, *fcp @*/
 {
-    HGE_t hge = (HGE_t)headerGetEntryMinMemory;
-    HFD_t hfd = headerFreeData;
-    const char ** baseNames;
-    const char ** dirNames;
-    int * dirIndexes;
-    int count;
-    const char ** fileNames;
-    int size;
+    HE_t he = memset(alloca(sizeof(*he)), 0, sizeof(*he));
     rpmTag dirNameTag = 0;
     rpmTag dirIndexesTag = 0;
-    rpmTagType bnt, dnt;
+    rpmTagData baseNames = { .ptr = NULL };
+    rpmTagData dirNames = { .ptr = NULL };
+    rpmTagData dirIndexes = { .ptr = NULL };
+    rpmTagData fileNames;
+    rpmTagCount count;
+    size_t size;
+    int isSource =
+	(headerIsEntry(h, RPMTAG_SOURCERPM) == 0 &&
+	 headerIsEntry(h, RPMTAG_ARCH) != 0);
     char * t;
-    int i, xx;
+    unsigned i;
+    int xx;
 
     if (tagN == RPMTAG_BASENAMES) {
 	dirNameTag = RPMTAG_DIRNAMES;
@@ -1378,110 +2209,2914 @@ static void rpmfiBuildFNames(Header h, rpmTag tagN,
     } else if (tagN == RPMTAG_ORIGBASENAMES) {
 	dirNameTag = RPMTAG_ORIGDIRNAMES;
 	dirIndexesTag = RPMTAG_ORIGDIRINDEXES;
+    } else {
+	if (fnp) *fnp = NULL;
+	if (fcp) *fcp = 0;
+	return;		/* programmer error */
     }
 
-    if (!hge(h, tagN, &bnt, &baseNames, &count)) {
+/*@-compmempass@*/
+    he->tag = tagN;
+    xx = headerGet(h, he, 0);
+    /* XXX 3.0.x SRPM's can be used, relative fn's at RPMTAG_OLDFILENAMES. */
+    if (xx == 0 && isSource) {
+	he->tag = RPMTAG_OLDFILENAMES;
+	xx = headerGet(h, he, 0);
+	if (xx) {
+	    dirNames.argv = xcalloc(3, sizeof(*dirNames.argv));
+	    dirNames.argv[0] = (const char *)&dirNames.argv[2];
+	    dirIndexes.ui32p  = xcalloc(he->c, sizeof(*dirIndexes.ui32p));
+	}
+    }
+    baseNames.argv = he->p.argv;
+    count = he->c;
+
+    if (!xx) {
 	if (fnp) *fnp = NULL;
 	if (fcp) *fcp = 0;
 	return;		/* no file list */
     }
 
-    xx = hge(h, dirNameTag, &dnt, &dirNames, NULL);
-    xx = hge(h, dirIndexesTag, NULL, &dirIndexes, &count);
+    he->tag = dirNameTag;
+    if ((xx = headerGet(h, he, 0)) != 0)
+	dirNames.argv = he->p.argv;
 
-    size = sizeof(*fileNames) * count;
-    for (i = 0; i < count; i++) {
+    he->tag = dirIndexesTag;
+    if ((xx = headerGet(h, he, 0)) != 0)
+	dirIndexes.ui32p = he->p.ui32p;
+/*@=compmempass@*/
+
+    size = sizeof(*fileNames.argv) * count;
+    for (i = 0; i < (unsigned)count; i++) {
 	const char * dn = NULL;
-	(void) urlPath(dirNames[dirIndexes[i]], &dn);
-	size += strlen(baseNames[i]) + strlen(dn) + 1;
+	(void) urlPath(dirNames.argv[dirIndexes.ui32p[i]], &dn);
+	size += strlen(baseNames.argv[i]) + strlen(dn) + 1;
     }
 
-    fileNames = xmalloc(size);
-    t = ((char *) fileNames) + (sizeof(*fileNames) * count);
-    for (i = 0; i < count; i++) {
+    fileNames.argv = xmalloc(size);
+    t = (char *)&fileNames.argv[count];
+    for (i = 0; i < (unsigned)count; i++) {
 	const char * dn = NULL;
-	fileNames[i] = t;
-	(void) urlPath(dirNames[dirIndexes[i]], &dn);
-	t = stpcpy( stpcpy(t, dn), baseNames[i]);
+	(void) urlPath(dirNames.argv[dirIndexes.ui32p[i]], &dn);
+	fileNames.argv[i] = t;
+	t = stpcpy( stpcpy(t, dn), baseNames.argv[i]);
 	*t++ = '\0';
     }
-    baseNames = hfd(baseNames, bnt);
-    dirNames = hfd(dirNames, dnt);
+    baseNames.ptr = _free(baseNames.ptr);
+    dirNames.ptr = _free(dirNames.ptr);
+    dirIndexes.ptr = _free(dirIndexes.ptr);
 
+/*@-onlytrans@*/
     if (fnp)
-	*fnp = fileNames;
+	*fnp = fileNames.argv;
     else
-	fileNames = _free(fileNames);
+	fileNames.ptr = _free(fileNames.ptr);
+/*@=onlytrans@*/
     if (fcp) *fcp = count;
 }
 
 /**
  * Retrieve file paths.
  * @param h		header
- * @retval *type	tag type
- * @retval *data	tag value
- * @retval *count	no. of data items
- * @retval *freeData	data-was-malloc'ed indicator
+ * @retval *he		tag container
  * @return		0 on success
  */
-static int _fnTag(Header h, rpmTag tag, /*@out@*/ rpmTagType * type,
-		/*@out@*/ const void ** data, /*@out@*/ int_32 * count,
-		/*@out@*/ int * freeData)
-	/*@modifies *type, *data, *count, *freeData @*/
-	/*@requires maxSet(type) >= 0 /\ maxSet(data) >= 0
-		/\ maxSet(count) >= 0 /\ maxSet(freeData) >= 0 @*/
+static int _fnTag(Header h, HE_t he)
+	/*@modifies he @*/
 {
-    if (type) *type = RPM_STRING_ARRAY_TYPE;
-    rpmfiBuildFNames(h, tag, (const char ***) data, count);
-    if (freeData) *freeData = 1;
+    he->t = RPM_STRING_ARRAY_TYPE;
+    rpmfiBuildFNames(h, he->tag, &he->p.argv, &he->c);
+    he->freeData = 1;
     return 0;
 }
 
-static int filepathsTag(Header h, /*@out@*/ rpmTagType * type,
-		/*@out@*/ const void ** data, /*@out@*/ int_32 * count,
-		/*@out@*/ int * freeData)
-	/*@modifies *type, *data, *count, *freeData @*/
-	/*@requires maxSet(type) >= 0 /\ maxSet(data) >= 0
-		/\ maxSet(count) >= 0 /\ maxSet(freeData) >= 0 @*/
+static int filepathsTag(Header h, HE_t he)
+	/*@modifies he @*/
 {
-    return _fnTag(h, RPMTAG_BASENAMES, type, data, count, freeData);
+    he->tag = RPMTAG_BASENAMES;
+    return _fnTag(h, he);
 }
 
-static int origpathsTag(Header h, /*@out@*/ rpmTagType * type,
-		/*@out@*/ const void ** data, /*@out@*/ int_32 * count,
-		/*@out@*/ int * freeData)
-	/*@modifies *type, *data, *count, *freeData @*/
-	/*@requires maxSet(type) >= 0 /\ maxSet(data) >= 0
-		/\ maxSet(count) >= 0 /\ maxSet(freeData) >= 0 @*/
+static int origpathsTag(Header h, HE_t he)
+	/*@modifies he @*/
 {
-    return _fnTag(h, RPMTAG_ORIGBASENAMES, type, data, count, freeData);
+    he->tag = RPMTAG_ORIGBASENAMES;
+    return _fnTag(h, he);
+}
+
+static int filestatTag(Header h, HE_t he)
+	/*@modifies he @*/
+{
+    rpmTagData paths = { .ptr = NULL };
+    /* _dev */
+    rpmTagData _ino = { .ptr = NULL };
+    rpmTagData _mode = { .ptr = NULL };
+    /* _nlink */
+    /* _uid */
+    /* _gid */
+    rpmTagData _rdev = { .ptr = NULL };
+    rpmTagData _size = { .ptr = NULL };
+    /* _blksize */
+    /* _blocks */
+    /* _atime */
+    rpmTagData _mtime = { .ptr = NULL };
+    /* st_ctime */
+    int rc;
+
+    he->tag = RPMTAG_BASENAMES;
+    if ((rc = _fnTag(h, he)) != 0 || he->c == 0)
+	goto exit;
+
+exit:
+    paths.ptr = _free(paths.ptr);
+    _ino.ptr = _free(_ino.ptr);
+    _mode.ptr = _free(_mode.ptr);
+    _rdev.ptr = _free(_rdev.ptr);
+    _size.ptr = _free(_size.ptr);
+    _mtime.ptr = _free(_mtime.ptr);
+    return rc;
+}
+
+static int PRCOSkip(rpmTag tag, rpmTagData N, rpmTagData EVR, rpmTagData F,
+		uint32_t i)
+	/*@*/
+{
+    int a = -2, b = -2;
+
+    if (N.argv[i] == NULL || *N.argv[i] == '\0')
+	return 1;
+    if (tag == RPMTAG_REQUIRENAME && i > 0
+     && !(a=strcmp(N.argv[i], N.argv[i-1]))
+     && !(b=strcmp(EVR.argv[i], EVR.argv[i-1]))
+     && (F.ui32p[i] & 0x4e) == ((F.ui32p[i-1] & 0x4e)))
+	return 1;
+    return 0;
+}
+
+static int PRCOxmlTag(Header h, HE_t he, rpmTag EVRtag, rpmTag Ftag)
+	/*@modifies he @*/
+{
+    rpmTag tag = he->tag;
+    rpmTagData N = { .ptr = NULL };
+    rpmTagData EVR = { .ptr = NULL };
+    rpmTagData F = { .ptr = NULL };
+    size_t nb;
+    uint32_t ac;
+    uint32_t c;
+    uint32_t i;
+    char *t;
+    int rc = 1;		/* assume failure */
+    int xx;
+
+    xx = headerGet(h, he, 0);
+    if (xx == 0) goto exit;
+    N.argv = he->p.argv;
+    c = he->c;
+
+    he->tag = EVRtag;
+    xx = headerGet(h, he, 0);
+    if (xx == 0) goto exit;
+    EVR.argv = he->p.argv;
+
+    he->tag = Ftag;
+    xx = headerGet(h, he, 0);
+    if (xx == 0) goto exit;
+    F.ui32p = he->p.ui32p;
+
+    nb = sizeof(*he->p.argv);
+    ac = 0;
+    for (i = 0; i < c; i++) {
+	if (PRCOSkip(tag, N, EVR, F, i))
+	    continue;
+	ac++;
+	nb += sizeof(*he->p.argv);
+	nb += sizeof("<rpm:entry name=\"\"/>");
+	if (*N.argv[i] == '/')
+	    nb += xmlstrlen(N.argv[i]);
+	else
+	    nb += strlen(N.argv[i]);
+	if (EVR.argv != NULL && EVR.argv[i] != NULL && *EVR.argv[i] != '\0') {
+	    nb += sizeof(" flags=\"EQ\" epoch=\"0\" ver=\"\"") - 1;
+	    nb += strlen(EVR.argv[i]);
+	    if (strchr(EVR.argv[i], ':') != NULL)
+		nb -= 2;
+	    if (strchr(EVR.argv[i], '-') != NULL)
+		nb += sizeof(" rel=\"\"") - 2;
+	}
+#ifdef	NOTNOW
+	if (tag == RPMTAG_REQUIRENAME && (F.ui32p[i] & 0x40))
+	    nb += sizeof(" pre=\"1\"") - 1;
+#endif
+    }
+
+    he->t = RPM_STRING_ARRAY_TYPE;
+    he->c = ac;
+    he->freeData = 1;
+    he->p.argv = xmalloc(nb + BUFSIZ);	/* XXX hack: leave slop */
+    t = (char *) &he->p.argv[he->c + 1];
+    ac = 0;
+    for (i = 0; i < c; i++) {
+	if (PRCOSkip(tag, N, EVR, F, i))
+	    continue;
+	he->p.argv[ac++] = t;
+	t = stpcpy(t, "<rpm:entry");
+	t = stpcpy(t, " name=\"");
+	if (*N.argv[i] == '/') {
+	    t = xmlstrcpy(t, N.argv[i]);	t += strlen(t);
+	} else
+	    t = stpcpy(t, N.argv[i]);
+	t = stpcpy(t, "\"");
+	if (EVR.argv != NULL && EVR.argv[i] != NULL && *EVR.argv[i] != '\0') {
+	    static char *Fstr[] = { "?0","LT","GT","?3","EQ","LE","GE","?7" };
+	    int Fx = ((F.ui32p[i] >> 1) & 0x7);
+	    const char *E, *V, *R;
+	    char *f, *fe;
+	    t = stpcpy( stpcpy( stpcpy(t, " flags=\""), Fstr[Fx]), "\"");
+	    f = (char *) EVR.argv[i];
+	    for (fe = f; *fe != '\0' && *fe >= '0' && *fe <= '9'; fe++);
+	    if (*fe == ':') { *fe++ = '\0'; E = f; f = fe; } else E = NULL;
+	    V = f;
+	    for (fe = f; *fe != '\0' && *fe != '-'; fe++);
+	    if (*fe == '-') { *fe++ = '\0'; R = fe; } else R = NULL;
+	    t = stpcpy( stpcpy( stpcpy(t, " epoch=\""), (E && *E ? E : "0")), "\"");
+	    t = stpcpy( stpcpy( stpcpy(t, " ver=\""), V), "\"");
+	    if (R != NULL)
+		t = stpcpy( stpcpy( stpcpy(t, " rel=\""), R), "\"");
+	}
+#ifdef	NOTNOW
+	if (tag == RPMTAG_REQUIRENAME && (F.ui32p[i] & 0x40))
+	    t = stpcpy(t, " pre=\"1\"");
+#endif
+	t = stpcpy(t, "/>");
+	*t++ = '\0';
+    }
+    he->p.argv[he->c] = NULL;
+    rc = 0;
+
+exit:
+    N.argv = _free(N.argv);
+    EVR.argv = _free(EVR.argv);
+    F.ui32p = _free(F.ui32p);
+    return rc;
+}
+
+static int PxmlTag(Header h, HE_t he)
+	/*@modifies he @*/
+{
+    he->tag = RPMTAG_PROVIDENAME;
+    return PRCOxmlTag(h, he, RPMTAG_PROVIDEVERSION, RPMTAG_PROVIDEFLAGS);
+}
+
+static int RxmlTag(Header h, HE_t he)
+	/*@modifies he @*/
+{
+    he->tag = RPMTAG_REQUIRENAME;
+    return PRCOxmlTag(h, he, RPMTAG_REQUIREVERSION, RPMTAG_REQUIREFLAGS);
+}
+
+static int CxmlTag(Header h, HE_t he)
+	/*@modifies he @*/
+{
+    he->tag = RPMTAG_CONFLICTNAME;
+    return PRCOxmlTag(h, he, RPMTAG_CONFLICTVERSION, RPMTAG_CONFLICTFLAGS);
+}
+
+static int OxmlTag(Header h, HE_t he)
+	/*@modifies he @*/
+{
+    he->tag = RPMTAG_OBSOLETENAME;
+    return PRCOxmlTag(h, he, RPMTAG_OBSOLETEVERSION, RPMTAG_OBSOLETEFLAGS);
+}
+
+/**
+ * Return length of string represented with single quotes doubled.
+ * @param s		string
+ * @return		length of sql string
+ */
+static size_t sqlstrlen(const char * s)
+	/*@*/
+{
+    size_t len = 0;
+    int c;
+
+    while ((c = (int) *s++) != (int) '\0')
+    {
+	switch (c) {
+	case '\'':	len += 1;			/*@fallthrough@*/
+	default:	len += 1;			/*@switchbreak@*/ break;
+	}
+    }
+    return len;
+}
+
+/**
+ * Copy source string to target, doubling single quotes.
+ * @param t		target sql string
+ * @param s		source string
+ * @return		target sql string
+ */
+static char * sqlstrcpy(/*@returned@*/ char * t, const char * s)
+	/*@modifies t @*/
+{
+    char * te = t;
+    int c;
+
+    while ((c = (int) *s++) != (int) '\0') {
+	switch (c) {
+	case '\'':	*te++ = (char) c;		/*@fallthrough@*/
+	default:	*te++ = (char) c;		/*@switchbreak@*/ break;
+	}
+    }
+    *te = '\0';
+    return t;
+}
+
+/**
+ * Encode string for use in SQL statements.
+ * @param he		tag container
+ * @param av		paramater list (or NULL)
+ * @return		formatted string
+ */
+static /*@only@*/ char * sqlescapeFormat(HE_t he, /*@null@*/ const char ** av)
+	/*@*/
+{
+    int ix = (he->ix > 0 ? he->ix : 0);
+    char * val;
+
+assert(ix == 0);
+    if (he->t != RPM_STRING_TYPE) {
+	val = xstrdup(_("(not a string)"));
+    } else {
+	const char * s = strdup_locale_convert(he->p.str, (av ? av[0] : NULL));
+	size_t nb = sqlstrlen(s);
+	char * t;
+
+	val = t = xcalloc(1, nb + 1);
+	t = sqlstrcpy(t, s);	t += strlen(t);
+	*t = '\0';
+	s = _free(s);
+    }
+
+/*@-globstate@*/
+    return val;
+/*@=globstate@*/
+}
+
+static int PRCOsqlTag(Header h, HE_t he, rpmTag EVRtag, rpmTag Ftag)
+	/*@modifies he @*/
+{
+    rpmTag tag = he->tag;
+    rpmTagData N = { .ptr = NULL };
+    rpmTagData EVR = { .ptr = NULL };
+    rpmTagData F = { .ptr = NULL };
+    char instance[64];
+    size_t nb;
+    uint32_t ac;
+    uint32_t c;
+    uint32_t i;
+    char *t;
+    int rc = 1;		/* assume failure */
+    int xx;
+
+    xx = headerGet(h, he, 0);
+    if (xx == 0) goto exit;
+    N.argv = he->p.argv;
+    c = he->c;
+
+    he->tag = EVRtag;
+    xx = headerGet(h, he, 0);
+    if (xx == 0) goto exit;
+    EVR.argv = he->p.argv;
+
+    he->tag = Ftag;
+    xx = headerGet(h, he, 0);
+    if (xx == 0) goto exit;
+    F.ui32p = he->p.ui32p;
+
+    xx = snprintf(instance, sizeof(instance), "'%d'", headerGetInstance(h));
+    nb = sizeof(*he->p.argv);
+    ac = 0;
+    for (i = 0; i < c; i++) {
+	if (PRCOSkip(tag, N, EVR, F, i))
+	    continue;
+	ac++;
+	nb += sizeof(*he->p.argv);
+	nb += strlen(instance) + sizeof(", '', '', '', '', ''");
+	if (tag == RPMTAG_REQUIRENAME)
+	    nb += sizeof(", ''") - 1;
+	nb += strlen(N.argv[i]);
+	if (EVR.argv != NULL && EVR.argv[i] != NULL && *EVR.argv[i] != '\0') {
+	    nb += strlen(EVR.argv[i]);
+	    nb += sizeof("EQ0") - 1;
+	}
+#ifdef	NOTNOW
+	if (tag == RPMTAG_REQUIRENAME && (F.ui32p[i] & 0x40))
+	    nb += sizeof("1") - 1;
+#endif
+    }
+
+    he->t = RPM_STRING_ARRAY_TYPE;
+    he->c = ac;
+    he->freeData = 1;
+    he->p.argv = xmalloc(nb + BUFSIZ);	/* XXX hack: leave slop */
+    t = (char *) &he->p.argv[he->c + 1];
+    ac = 0;
+    for (i = 0; i < c; i++) {
+	if (PRCOSkip(tag, N, EVR, F, i))
+	    continue;
+	he->p.argv[ac++] = t;
+	t = stpcpy(t, instance);
+	t = stpcpy( stpcpy( stpcpy(t, ", '"), N.argv[i]), "'");
+	if (EVR.argv != NULL && EVR.argv[i] != NULL && *EVR.argv[i] != '\0') {
+	    static char *Fstr[] = { "?0","LT","GT","?3","EQ","LE","GE","?7" };
+	    int Fx = ((F.ui32p[i] >> 1) & 0x7);
+	    const char *E, *V, *R;
+	    char *f, *fe;
+	    t = stpcpy( stpcpy( stpcpy(t, ", '"), Fstr[Fx]), "'");
+	    f = (char *) EVR.argv[i];
+	    for (fe = f; *fe != '\0' && *fe >= '0' && *fe <= '9'; fe++);
+	    if (*fe == ':') { *fe++ = '\0'; E = f; f = fe; } else E = NULL;
+	    V = f;
+	    for (fe = f; *fe != '\0' && *fe != '-'; fe++);
+	    if (*fe == '-') { *fe++ = '\0'; R = fe; } else R = NULL;
+	    t = stpcpy( stpcpy( stpcpy(t, ", '"), (E && *E ? E : "0")), "'");
+	    t = stpcpy( stpcpy( stpcpy(t, ", '"), V), "'");
+	    t = stpcpy( stpcpy( stpcpy(t, ", '"), (R ? R : "")), "'");
+	} else
+	    t = stpcpy(t, ", '', '', '', ''");
+#ifdef	NOTNOW
+	if (tag == RPMTAG_REQUIRENAME)
+	    t = stpcpy(stpcpy(stpcpy(t, ", '"),(F.ui32p[i] & 0x40) ? "1" : "0"), "'");
+#endif
+	*t++ = '\0';
+    }
+    he->p.argv[he->c] = NULL;
+    rc = 0;
+
+exit:
+    N.argv = _free(N.argv);
+    EVR.argv = _free(EVR.argv);
+    F.ui32p = _free(F.ui32p);
+    return rc;
+}
+
+static int PsqlTag(Header h, HE_t he)
+	/*@modifies he @*/
+{
+    he->tag = RPMTAG_PROVIDENAME;
+    return PRCOsqlTag(h, he, RPMTAG_PROVIDEVERSION, RPMTAG_PROVIDEFLAGS);
+}
+
+static int RsqlTag(Header h, HE_t he)
+	/*@modifies he @*/
+{
+    he->tag = RPMTAG_REQUIRENAME;
+    return PRCOsqlTag(h, he, RPMTAG_REQUIREVERSION, RPMTAG_REQUIREFLAGS);
+}
+
+static int CsqlTag(Header h, HE_t he)
+	/*@modifies he @*/
+{
+    he->tag = RPMTAG_CONFLICTNAME;
+    return PRCOsqlTag(h, he, RPMTAG_CONFLICTVERSION, RPMTAG_CONFLICTFLAGS);
+}
+
+static int OsqlTag(Header h, HE_t he)
+	/*@modifies he @*/
+{
+    he->tag = RPMTAG_OBSOLETENAME;
+    return PRCOsqlTag(h, he, RPMTAG_OBSOLETEVERSION, RPMTAG_OBSOLETEFLAGS);
+}
+
+static int FDGSkip(rpmTagData DN, rpmTagData BN, rpmTagData DI, uint32_t i)
+	/*@*/
+{
+    const char * dn = DN.argv[DI.ui32p[i]];
+    size_t dnlen = strlen(dn);
+
+    if (strstr(dn, "bin/") != NULL)
+	return 1;
+    if (dnlen >= sizeof("/etc/")-1 && !strncmp(dn, "/etc/", dnlen))
+	return 1;
+    if (!strcmp(dn, "/usr/lib/") && !strcmp(BN.argv[i], "sendmail"))
+	return 1;
+    return 2;
+}
+
+static int FDGxmlTag(Header h, HE_t he, int lvl)
+	/*@modifies he @*/
+{
+    rpmTagData BN = { .ptr = NULL };
+    rpmTagData DN = { .ptr = NULL };
+    rpmTagData DI = { .ptr = NULL };
+    rpmTagData FMODES = { .ptr = NULL };
+    rpmTagData FFLAGS = { .ptr = NULL };
+    size_t nb;
+    uint32_t ac;
+    uint32_t c;
+    uint32_t i;
+    char *t;
+    int rc = 1;		/* assume failure */
+    int xx;
+
+    he->tag = RPMTAG_BASENAMES;
+    xx = headerGet(h, he, 0);
+    if (xx == 0) goto exit;
+    BN.argv = he->p.argv;
+    c = he->c;
+
+    he->tag = RPMTAG_DIRNAMES;
+    xx = headerGet(h, he, 0);
+    if (xx == 0) goto exit;
+    DN.argv = he->p.argv;
+
+    he->tag = RPMTAG_DIRINDEXES;
+    xx = headerGet(h, he, 0);
+    if (xx == 0) goto exit;
+    DI.ui32p = he->p.ui32p;
+
+    he->tag = RPMTAG_FILEMODES;
+    xx = headerGet(h, he, 0);
+    if (xx == 0) goto exit;
+    FMODES.ui16p = he->p.ui16p;
+
+    he->tag = RPMTAG_FILEFLAGS;
+    xx = headerGet(h, he, 0);
+    if (xx == 0) goto exit;
+    FFLAGS.ui32p = he->p.ui32p;
+
+    nb = sizeof(*he->p.argv);
+    ac = 0;
+    for (i = 0; i < c; i++) {
+	if (lvl > 0 && FDGSkip(DN, BN, DI, i) != lvl)
+	    continue;
+	ac++;
+	nb += sizeof(*he->p.argv);
+	nb += sizeof("<file></file>");
+	nb += xmlstrlen(DN.argv[DI.ui32p[i]]);
+	nb += xmlstrlen(BN.argv[i]);
+	if (FFLAGS.ui32p[i] & 0x40)	/* XXX RPMFILE_GHOST */
+	    nb += sizeof(" type=\"ghost\"") - 1;
+	else if (S_ISDIR(FMODES.ui16p[i]))
+	    nb += sizeof(" type=\"dir\"") - 1;
+    }
+
+    he->t = RPM_STRING_ARRAY_TYPE;
+    he->c = ac;
+    he->freeData = 1;
+    he->p.argv = xmalloc(nb);
+    t = (char *) &he->p.argv[he->c + 1];
+    ac = 0;
+    /* FIXME: Files, then dirs, finally ghosts breaks sort order.  */
+    for (i = 0; i < c; i++) {
+	if (lvl > 0 && FDGSkip(DN, BN, DI, i) != lvl)
+	    continue;
+	if (FFLAGS.ui32p[i] & 0x40)	/* XXX RPMFILE_GHOST */
+	    continue;
+	if (S_ISDIR(FMODES.ui16p[i]))
+	    continue;
+	he->p.argv[ac++] = t;
+	t = stpcpy(t, "<file>");
+	t = xmlstrcpy(t, DN.argv[DI.ui32p[i]]); t += strlen(t);
+	t = xmlstrcpy(t, BN.argv[i]);		t += strlen(t);
+	t = stpcpy(t, "</file>");
+	*t++ = '\0';
+    }
+    for (i = 0; i < c; i++) {
+	if (lvl > 0 && FDGSkip(DN, BN, DI, i) != lvl)
+	    continue;
+	if (FFLAGS.ui32p[i] & 0x40)	/* XXX RPMFILE_GHOST */
+	    continue;
+	if (!S_ISDIR(FMODES.ui16p[i]))
+	    continue;
+	he->p.argv[ac++] = t;
+	t = stpcpy(t, "<file type=\"dir\">");
+	t = xmlstrcpy(t, DN.argv[DI.ui32p[i]]); t += strlen(t);
+	t = xmlstrcpy(t, BN.argv[i]);		t += strlen(t);
+	t = stpcpy(t, "</file>");
+	*t++ = '\0';
+    }
+    for (i = 0; i < c; i++) {
+	if (lvl > 0 && FDGSkip(DN, BN, DI, i) != lvl)
+	    continue;
+	if (!(FFLAGS.ui32p[i] & 0x40))	/* XXX RPMFILE_GHOST */
+	    continue;
+	he->p.argv[ac++] = t;
+	t = stpcpy(t, "<file type=\"ghost\">");
+	t = xmlstrcpy(t, DN.argv[DI.ui32p[i]]); t += strlen(t);
+	t = xmlstrcpy(t, BN.argv[i]);		t += strlen(t);
+	t = stpcpy(t, "</file>");
+	*t++ = '\0';
+    }
+
+    he->p.argv[he->c] = NULL;
+    rc = 0;
+
+exit:
+    BN.argv = _free(BN.argv);
+    DN.argv = _free(DN.argv);
+    DI.ui32p = _free(DI.ui32p);
+    FMODES.ui16p = _free(FMODES.ui16p);
+    FFLAGS.ui32p = _free(FFLAGS.ui32p);
+    return rc;
+}
+
+static int F1xmlTag(Header h, HE_t he)
+	/*@modifies he @*/
+{
+    he->tag = RPMTAG_BASENAMES;
+    return FDGxmlTag(h, he, 1);
+}
+
+static int F2xmlTag(Header h, HE_t he)
+	/*@modifies he @*/
+{
+    he->tag = RPMTAG_BASENAMES;
+    return FDGxmlTag(h, he, 2);
+}
+
+static int FDGsqlTag(Header h, HE_t he, int lvl)
+	/*@modifies he @*/
+{
+    rpmTagData BN = { .ptr = NULL };
+    rpmTagData DN = { .ptr = NULL };
+    rpmTagData DI = { .ptr = NULL };
+    rpmTagData FMODES = { .ptr = NULL };
+    rpmTagData FFLAGS = { .ptr = NULL };
+    char instance[64];
+    size_t nb;
+    uint32_t ac;
+    uint32_t c;
+    uint32_t i;
+    char *t;
+    int rc = 1;		/* assume failure */
+    int xx;
+
+    he->tag = RPMTAG_BASENAMES;
+    xx = headerGet(h, he, 0);
+    if (xx == 0) goto exit;
+    BN.argv = he->p.argv;
+    c = he->c;
+
+    he->tag = RPMTAG_DIRNAMES;
+    xx = headerGet(h, he, 0);
+    if (xx == 0) goto exit;
+    DN.argv = he->p.argv;
+
+    he->tag = RPMTAG_DIRINDEXES;
+    xx = headerGet(h, he, 0);
+    if (xx == 0) goto exit;
+    DI.ui32p = he->p.ui32p;
+
+    he->tag = RPMTAG_FILEMODES;
+    xx = headerGet(h, he, 0);
+    if (xx == 0) goto exit;
+    FMODES.ui16p = he->p.ui16p;
+
+    he->tag = RPMTAG_FILEFLAGS;
+    xx = headerGet(h, he, 0);
+    if (xx == 0) goto exit;
+    FFLAGS.ui32p = he->p.ui32p;
+
+    xx = snprintf(instance, sizeof(instance), "'%d'", headerGetInstance(h));
+    nb = sizeof(*he->p.argv);
+    ac = 0;
+    for (i = 0; i < c; i++) {
+	if (lvl > 0 && FDGSkip(DN, BN, DI, i) != lvl)
+	    continue;
+	ac++;
+	nb += sizeof(*he->p.argv);
+	nb += strlen(instance) + sizeof(", '', ''");
+	nb += strlen(DN.argv[DI.ui32p[i]]);
+	nb += strlen(BN.argv[i]);
+	if (FFLAGS.ui32p[i] & 0x40)	/* XXX RPMFILE_GHOST */
+	    nb += sizeof("ghost") - 1;
+	else if (S_ISDIR(FMODES.ui16p[i]))
+	    nb += sizeof("dir") - 1;
+	else
+	    nb += sizeof("file") - 1;
+    }
+
+    he->t = RPM_STRING_ARRAY_TYPE;
+    he->c = ac;
+    he->freeData = 1;
+    he->p.argv = xmalloc(nb);
+    t = (char *) &he->p.argv[he->c + 1];
+    ac = 0;
+    /* FIXME: Files, then dirs, finally ghosts breaks sort order.  */
+    for (i = 0; i < c; i++) {
+	if (lvl > 0 && FDGSkip(DN, BN, DI, i) != lvl)
+	    continue;
+	if (FFLAGS.ui32p[i] & 0x40)	/* XXX RPMFILE_GHOST */
+	    continue;
+	if (S_ISDIR(FMODES.ui16p[i]))
+	    continue;
+	he->p.argv[ac++] = t;
+	t = stpcpy( stpcpy(t, instance), ", '");
+	t = strcpy(t, DN.argv[DI.ui32p[i]]);	t += strlen(t);
+	t = strcpy(t, BN.argv[i]);		t += strlen(t);
+	t = stpcpy(t, "', 'file'");
+	*t++ = '\0';
+    }
+    for (i = 0; i < c; i++) {
+	if (lvl > 0 && FDGSkip(DN, BN, DI, i) != lvl)
+	    continue;
+	if (FFLAGS.ui32p[i] & 0x40)	/* XXX RPMFILE_GHOST */
+	    continue;
+	if (!S_ISDIR(FMODES.ui16p[i]))
+	    continue;
+	he->p.argv[ac++] = t;
+	t = stpcpy( stpcpy(t, instance), ", '");
+	t = strcpy(t, DN.argv[DI.ui32p[i]]);	t += strlen(t);
+	t = strcpy(t, BN.argv[i]);		t += strlen(t);
+	t = stpcpy(t, "', 'dir'");
+	*t++ = '\0';
+    }
+    for (i = 0; i < c; i++) {
+	if (lvl > 0 && FDGSkip(DN, BN, DI, i) != lvl)
+	    continue;
+	if (!(FFLAGS.ui32p[i] & 0x40))	/* XXX RPMFILE_GHOST */
+	    continue;
+	he->p.argv[ac++] = t;
+	t = stpcpy( stpcpy(t, instance), ", '");
+	t = strcpy(t, DN.argv[DI.ui32p[i]]);	t += strlen(t);
+	t = strcpy(t, BN.argv[i]);		t += strlen(t);
+	t = stpcpy(t, "', 'ghost'");
+	*t++ = '\0';
+    }
+
+    he->p.argv[he->c] = NULL;
+    rc = 0;
+
+exit:
+    BN.argv = _free(BN.argv);
+    DN.argv = _free(DN.argv);
+    DI.ui32p = _free(DI.ui32p);
+    FMODES.ui16p = _free(FMODES.ui16p);
+    FFLAGS.ui32p = _free(FFLAGS.ui32p);
+    return rc;
+}
+
+static int F1sqlTag(Header h, HE_t he)
+	/*@modifies he @*/
+{
+    he->tag = RPMTAG_BASENAMES;
+    return FDGsqlTag(h, he, 1);
+}
+
+static int F2sqlTag(Header h, HE_t he)
+	/*@modifies he @*/
+{
+    he->tag = RPMTAG_BASENAMES;
+    return FDGsqlTag(h, he, 2);
+}
+
+/**
+ * Encode the basename of a string for use in XML CDATA.
+ * @param he            tag container
+ * @param av		paramater list (or NULL)
+ * @return              formatted string
+ */
+static /*@only@*/ char * bncdataFormat(HE_t he, /*@null@*/ const char ** av)
+	/*@*/
+{
+    char * val;
+
+    if (he->t != RPM_STRING_TYPE) {
+	val = xstrdup(_("(not a string)"));
+    } else {
+	const char * bn;
+	const char * s;
+	size_t nb;
+	char * t;
+
+	/* Get rightmost '/' in string (i.e. basename(3) behavior). */
+	if ((bn = strrchr(he->p.str, '/')) != NULL)
+	    bn++;
+	else
+	    bn = he->p.str;
+
+	/* Convert to utf8, escape for XML CDATA. */
+	s = strdup_locale_convert(bn, (av ? av[0] : NULL));
+	nb = xmlstrlen(s);
+	val = t = xcalloc(1, nb + 1);
+	t = xmlstrcpy(t, s);	t += strlen(t);
+	*t = '\0';
+	s = _free(s);
+    }
+
+/*@-globstate@*/
+    return val;
+/*@=globstate@*/
+}
+
+typedef struct key_s {
+/*@observer@*/
+	const char *name;		/* key name */
+	uint32_t value;
+} KEY;
+
+/*@unchecked@*/ /*@observer@*/
+static KEY keyDigests[] = {
+    { "adler32",	PGPHASHALGO_ADLER32 },
+    { "crc32",		PGPHASHALGO_CRC32 },
+    { "crc64",		PGPHASHALGO_CRC64 },
+    { "haval160",	PGPHASHALGO_HAVAL_5_160 },
+    { "jlu32",		PGPHASHALGO_JLU32 },
+    { "md2",		PGPHASHALGO_MD2 },
+    { "md4",		PGPHASHALGO_MD4 },
+    { "md5",		PGPHASHALGO_MD5 },
+    { "rmd128",		PGPHASHALGO_RIPEMD128 },
+    { "rmd160",		PGPHASHALGO_RIPEMD160 },
+    { "rmd256",		PGPHASHALGO_RIPEMD256 },
+    { "rmd320",		PGPHASHALGO_RIPEMD320 },
+    { "salsa10",	PGPHASHALGO_SALSA10 },
+    { "salsa20",	PGPHASHALGO_SALSA20 },
+    { "sha1",		PGPHASHALGO_SHA1 },
+    { "sha224",		PGPHASHALGO_SHA224 },
+    { "sha256",		PGPHASHALGO_SHA256 },
+    { "sha384",		PGPHASHALGO_SHA384 },
+    { "sha512",		PGPHASHALGO_SHA512 },
+    { "tiger192",	PGPHASHALGO_TIGER192 },
+};
+/*@unchecked@*/
+static size_t nkeyDigests = sizeof(keyDigests) / sizeof(keyDigests[0]);
+
+/**
+ * Bit field enum for stat(2) keys.
+ */
+enum keyStat_e {
+    STAT_KEYS_NONE	= 0,
+    STAT_KEYS_DEV	= (1U <<  0),	/*!< st_dev */
+    STAT_KEYS_INO	= (1U <<  1),	/*!< st_ino */
+    STAT_KEYS_MODE	= (1U <<  2),	/*!< st_mode */
+    STAT_KEYS_NLINK	= (1U <<  3),	/*!< st_nlink */
+    STAT_KEYS_UID	= (1U <<  4),	/*!< st_uid */
+    STAT_KEYS_GID	= (1U <<  5),	/*!< st_gid */
+    STAT_KEYS_RDEV	= (1U <<  6),	/*!< st_rdev */
+    STAT_KEYS_SIZE	= (1U <<  7),	/*!< st_size */
+    STAT_KEYS_BLKSIZE	= (1U <<  8),	/*!< st_blksize */
+    STAT_KEYS_BLOCKS	= (1U <<  9),	/*!< st_blocks */
+    STAT_KEYS_ATIME	= (1U << 10),	/*!< st_atime */
+    STAT_KEYS_CTIME	= (1U << 11),	/*!< st_ctime */
+    STAT_KEYS_MTIME	= (1U << 12),	/*!< st_mtime */
+#ifdef	NOTYET
+    STAT_KEYS_FLAGS	= (1U << 13),	/*!< st_flags */
+#endif
+    STAT_KEYS_SLINK	= (1U << 14),	/*!< symlink */
+    STAT_KEYS_DIGEST	= (1U << 15),	/*!< digest */
+#ifdef	NOTYET
+    STAT_KEYS_FCONTEXT	= (1U << 16),	/*!< fcontext */
+#endif
+    STAT_KEYS_UNAME	= (1U << 17),	/*!< user name */
+    STAT_KEYS_GNAME	= (1U << 18),	/*!< group name */
+};
+
+/*@unchecked@*/ /*@observer@*/
+static KEY keyStat[] = {
+    { "adler32",	STAT_KEYS_DIGEST },
+    { "atime",		STAT_KEYS_ATIME },
+    { "ctime",		STAT_KEYS_CTIME },
+    { "blksize",	STAT_KEYS_BLKSIZE },
+    { "blocks",		STAT_KEYS_BLOCKS },
+    { "crc32",		STAT_KEYS_DIGEST },
+    { "crc64",		STAT_KEYS_DIGEST },
+    { "dev",		STAT_KEYS_DEV },
+#ifdef	NOTYET
+    { "digest",		STAT_KEYS_DIGEST },
+    { "fcontext",	STAT_KEYS_FCONTEXT },
+    { "flags",		STAT_KEYS_FLAGS },
+#endif
+    { "gid",		STAT_KEYS_GID },
+    { "gname",		STAT_KEYS_GNAME },
+    { "haval160",	STAT_KEYS_DIGEST },
+    { "ino",		STAT_KEYS_INO },
+    { "jlu32",		STAT_KEYS_DIGEST },
+    { "link",		STAT_KEYS_SLINK },
+    { "md2",		STAT_KEYS_DIGEST },
+    { "md4",		STAT_KEYS_DIGEST },
+    { "md5",		STAT_KEYS_DIGEST },
+    { "mode",		STAT_KEYS_MODE },
+    { "mtime",		STAT_KEYS_MTIME },
+    { "nlink",		STAT_KEYS_NLINK },
+    { "rdev",		STAT_KEYS_RDEV },
+    { "rmd128",		STAT_KEYS_DIGEST },
+    { "rmd160",		STAT_KEYS_DIGEST },
+    { "rmd256",		STAT_KEYS_DIGEST },
+    { "rmd320",		STAT_KEYS_DIGEST },
+    { "salsa10",	STAT_KEYS_DIGEST },
+    { "salsa20",	STAT_KEYS_DIGEST },
+    { "sha1",		STAT_KEYS_DIGEST },
+    { "sha224",		STAT_KEYS_DIGEST },
+    { "sha256",		STAT_KEYS_DIGEST },
+    { "sha384",		STAT_KEYS_DIGEST },
+    { "sha512",		STAT_KEYS_DIGEST },
+    { "size",		STAT_KEYS_SIZE },
+    { "tiger192",	STAT_KEYS_DIGEST },
+    { "uid",		STAT_KEYS_UID },
+    { "uname",		STAT_KEYS_UNAME },
+};
+/*@unchecked@*/
+static size_t nkeyStat = sizeof(keyStat) / sizeof(keyStat[0]);
+
+/**
+ * Bit field enum for stat(2) keys.
+ */
+enum keyUuids_e {
+    UUID_KEYS_NONE	= (0U <<  0),
+    UUID_KEYS_V1	= (1U <<  0),
+    UUID_KEYS_V3	= (3U <<  0),
+    UUID_KEYS_V4	= (4U <<  0),
+    UUID_KEYS_V5	= (5U <<  0),
+#ifdef	NOTYET
+    UUID_KEYS_STRING	= (0U <<  4),
+    UUID_KEYS_SIV	= (1U <<  4),
+    UUID_KEYS_BINARY	= (2U <<  4),
+    UUID_KEYS_TEXT	= (3U <<  4),
+#endif
+};
+
+/*@unchecked@*/ /*@observer@*/
+static KEY keyUuids[] = {
+#ifdef	NOTYET
+    { "binary",		UUID_KEYS_BINARY },
+    { "siv",		UUID_KEYS_SIV },
+    { "string",		UUID_KEYS_STRING },
+    { "text",		UUID_KEYS_TEXT },
+#endif
+    { "v1",		UUID_KEYS_V1 },
+    { "v3",		UUID_KEYS_V3 },
+    { "v4",		UUID_KEYS_V4 },
+    { "v5",		UUID_KEYS_V5 },
+};
+/*@unchecked@*/
+static size_t nkeyUuids = sizeof(keyUuids) / sizeof(keyUuids[0]);
+
+/**
+ */
+static int
+keyCmp(const void * a, const void * b)
+	/*@*/
+{
+    return strcmp(((KEY *)a)->name, ((KEY *)b)->name);
+}
+
+/**
+ */
+static uint32_t
+keyValue(KEY * keys, size_t nkeys, /*@null@*/ const char *name)
+	/*@*/
+{
+    uint32_t keyval = 0;
+
+    if (name && * name) {
+	KEY needle = { .name = name };
+	KEY *k = (KEY *)bsearch(&needle, keys, nkeys, sizeof(*keys), keyCmp);
+	if (k)
+	    keyval = k->value;
+    }
+    return keyval;
+}
+
+/**
+ * Return digest of tag data.
+ * @param he		tag container
+ * @param av		paramater list (NULL uses md5)
+ * @return		formatted string
+ */
+static /*@only@*/ char * digestFormat(HE_t he, /*@null@*/ const char ** av)
+	/*@*/
+{
+    int ix = (he->ix > 0 ? he->ix : 0);
+    char * val = NULL;
+    size_t ns;
+
+assert(ix == 0);
+    switch(he->t) {
+    default:
+	val = xstrdup(_("(invalid type :digest)"));
+	goto exit;
+	/*@notreached@*/ break;
+    case RPM_UINT64_TYPE:
+	ns = sizeof(he->p.ui64p[0]);
+	break;
+    case RPM_STRING_TYPE:
+	ns = strlen(he->p.str);
+	break;
+    case RPM_BIN_TYPE:
+	ns = he->c;
+	break;
+    }
+
+    {	uint32_t keyval = keyValue(keyDigests, nkeyDigests, (av ? av[0] : NULL));
+	uint32_t algo = (keyval ? keyval : PGPHASHALGO_SHA1);
+	DIGEST_CTX ctx = rpmDigestInit(algo, 0);
+	int xx = rpmDigestUpdate(ctx, he->p.ptr, ns);
+	xx = rpmDigestFinal(ctx, &val, NULL, 1);
+    }
+
+exit:
+/*@-globstate@*/
+    return val;
+/*@=globstate@*/
+}
+
+/**
+ * Return file info.
+ * @param he		tag container
+ * @param av		paramater list (NULL uses sha1)
+ * @return		formatted string
+ */
+static /*@only@*/ char * statFormat(HE_t he, /*@null@*/ const char ** av)
+	/*@*/
+{
+    /*@unchecked@*/
+    static const char *avdefault[] = { "mode", NULL };
+    const char * fn = NULL;
+    struct stat sb, *st = &sb;
+    int ix = (he->ix > 0 ? he->ix : 0);
+    char * val = NULL;
+    int xx;
+    int i;
+
+assert(ix == 0);
+    switch(he->t) {
+    case RPM_BIN_TYPE:
+	/* XXX limit to RPMTAG_PACKAGESTAT ... */
+	if (he->tag == RPMTAG_PACKAGESTAT)
+	if (he->c == sizeof(*st)) {
+	    st = (struct stat *)he->p.ptr;
+	    break;
+	}
+	/*@fallthrough @*/
+    default:
+	val = xstrdup(_("(invalid type :stat)"));
+	goto exit;
+	/*@notreached@*/ break;
+    case RPM_STRING_TYPE:
+	fn = he->p.str;
+	if (Lstat(fn, st) == 0)
+	    break;
+	val = rpmExpand("(Lstat:", fn, ":", strerror(errno), ")", NULL);
+	goto exit;
+	/*@notreached@*/ break;
+    }
+
+    if (!(av && av[0] && *av[0]))
+	av = avdefault;
+    for (i = 0; av[i] != NULL; i++) {
+	char b[BUFSIZ];
+	size_t nb = sizeof(b);
+	char * nval;
+	uint32_t keyval = keyValue(keyStat, nkeyStat, av[i]);
+
+	nval = NULL;
+	b[0] = '\0';
+	switch (keyval) {
+	default:
+	    break;
+	case STAT_KEYS_NONE:
+	    break;
+	case STAT_KEYS_DEV:
+	    xx = snprintf(b, nb, "0x%lx", (unsigned long)st->st_dev);
+	    break;
+	case STAT_KEYS_INO:
+	    xx = snprintf(b, nb, "0x%lx", (unsigned long)st->st_ino);
+	    break;
+	case STAT_KEYS_MODE:
+	    xx = snprintf(b, nb, "%06o", (unsigned)st->st_mode);
+	    break;
+	case STAT_KEYS_NLINK:
+	    xx = snprintf(b, nb, "0x%ld", (unsigned long)st->st_nlink);
+	    break;
+	case STAT_KEYS_UID:
+	    xx = snprintf(b, nb, "%ld", (unsigned long)st->st_uid);
+	    break;
+	case STAT_KEYS_GID:
+	    xx = snprintf(b, nb, "%ld", (unsigned long)st->st_gid);
+	    break;
+	case STAT_KEYS_RDEV:
+	    xx = snprintf(b, nb, "0x%lx", (unsigned long)st->st_rdev);
+	    break;
+	case STAT_KEYS_SIZE:
+	    xx = snprintf(b, nb, "%ld", (unsigned long)st->st_size);
+	    break;
+	case STAT_KEYS_BLKSIZE:
+	    xx = snprintf(b, nb, "%ld", (unsigned long)st->st_blksize);
+	    break;
+	case STAT_KEYS_BLOCKS:
+	    xx = snprintf(b, nb, "%ld", (unsigned long)st->st_blocks);
+	    break;
+	case STAT_KEYS_ATIME:
+	    (void) stpcpy(b, ctime(&st->st_atime));
+	    break;
+	case STAT_KEYS_CTIME:
+	    (void) stpcpy(b, ctime(&st->st_ctime));
+	    break;
+	case STAT_KEYS_MTIME:
+	    (void) stpcpy(b, ctime(&st->st_mtime));
+	    break;
+#ifdef	NOTYET
+	case STAT_KEYS_FLAGS:
+	    break;
+#endif
+	case STAT_KEYS_SLINK:
+	    if (fn != NULL && S_ISLNK(st->st_mode)) {
+		ssize_t size = Readlink(fn, b, nb);
+		if (size == -1) {
+		    nval = rpmExpand("(Readlink:", fn, ":", strerror(errno), ")", NULL);
+		    stpcpy(b, nval);
+		    nval = _free(nval);
+		} else
+		    b[size] = '\0';
+	    }
+	    break;
+	case STAT_KEYS_DIGEST:
+	    if (fn != NULL && S_ISREG(st->st_mode)) {
+		uint32_t digval = keyValue(keyDigests, nkeyDigests, av[i]);
+		uint32_t algo = (digval ? digval : PGPHASHALGO_SHA1);
+		FD_t fd = Fopen(fn, "r%{?_rpmgio}");
+		if (fd == NULL || Ferror(fd)) {
+		    nval = rpmExpand("(Fopen:", fn, ":", Fstrerror(fd), ")", NULL);
+		} else {
+		    static int asAscii = 1;
+		    char buffer[16 * 1024];
+		    fdInitDigest(fd, algo, 0);
+		    while (Fread(buffer, sizeof(buffer[0]), sizeof(buffer), fd) > 0)
+			{};
+		    if (Ferror(fd))
+			nval = rpmExpand("(Fread:", fn, ":", Fstrerror(fd), ")", NULL);
+		    else
+			fdFiniDigest(fd, algo, &nval, NULL, asAscii);
+	    }
+		if (nval) {
+		    stpcpy(b, nval);
+		    nval = _free(nval);
+		}
+		if (fd != NULL)
+		    xx = Fclose(fd);
+	    }
+	    break;
+	case STAT_KEYS_UNAME:
+	    (void) stpcpy(b, uidToUname(st->st_uid));
+	    break;
+	case STAT_KEYS_GNAME:
+	    (void) stpcpy(b, gidToGname(st->st_gid));
+	    break;
+	}
+	if (b[0] == '\0')
+	    continue;
+	b[nb-1] = '\0';
+
+	if (val == NULL)
+	    val = xstrdup(b);
+	else {
+	    nval = rpmExpand(val, " | ", b, NULL);
+	    val = _free(val);
+	    val = nval;
+	}
+    }
+
+exit:
+/*@-globstate@*/
+    return val;
+/*@=globstate@*/
+}
+
+/**
+ * Reformat tag string as a UUID.
+ * @param he		tag container
+ * @param av		paramater list (NULL uses UUIDv5)
+ * @return		formatted string
+ */
+static /*@only@*/ char * uuidFormat(HE_t he, /*@null@*/ const char ** av)
+	/*@*/
+{
+    /*@unchecked@*/
+    static const char *avdefault[] = { "v5", NULL };
+    int version = 0;
+    int ix = (he->ix > 0 ? he->ix : 0);
+    char * val = NULL;
+    int i;
+
+assert(ix == 0);
+    switch(he->t) {
+    default:
+	val = xstrdup(_("(invalid type :uuid)"));
+	goto exit;
+	/*@notreached@*/ break;
+    case RPM_STRING_TYPE:
+	break;
+    }
+
+    if (!(av && av[0] && *av[0]))
+	av = avdefault;
+
+    for (i = 0; av[i] != NULL; i++) {
+	uint32_t keyval = keyValue(keyUuids, nkeyUuids, av[i]);
+
+	switch (keyval) {
+	default:
+	    break;
+	case UUID_KEYS_V1:
+	case UUID_KEYS_V3:
+	case UUID_KEYS_V4:
+	case UUID_KEYS_V5:
+	    version = keyval;
+	    break;
+	}
+    }
+
+    /* XXX use private tag container to avoid memory issues for now. */
+    {	HE_t nhe = memset(alloca(sizeof(*nhe)), 0, sizeof(*nhe));
+	int xx;
+	nhe->tag = he->tag;
+	nhe->t = he->t;
+	nhe->p.str = xstrdup(he->p.str);
+	nhe->c = he->c;
+	val = xmalloc((128/4 + 4) + 1);
+	xx = str2uuid(nhe, NULL, version, val);
+	nhe->p.ptr = _free(nhe->p.ptr);
+    }
+
+exit:
+/*@-globstate@*/
+    return val;
+/*@=globstate@*/
+}
+
+/**
+ * Return arithmetic expressions of input.
+ * @param he		tag container
+ * @param av		paramater list (NULL uses sha1)
+ * @return		formatted string
+ */
+static /*@only@*/ char * rpnFormat(HE_t he, /*@null@*/ const char ** av)
+	/*@*/
+{
+    int ac = argvCount(av) + 1;
+    int64_t * stack = memset(alloca(ac*sizeof(*stack)), 0, (ac*sizeof(*stack)));
+    char * end;
+    char * val = NULL;
+    int ix = 0;
+    int i;
+
+    switch(he->t) {
+    default:
+	val = xstrdup(_("(invalid type :rpn)"));
+	goto exit;
+	/*@notreached@*/ break;
+    case RPM_UINT64_TYPE:
+	stack[ix] = he->p.ui64p[0];
+	break;
+    case RPM_STRING_TYPE:
+	end = NULL;
+	stack[ix] = strtoll(he->p.str, &end, 0);
+	if (*end != '\0') {
+	    val = xstrdup(_("(invalid string :rpn)"));
+	    goto exit;
+	}
+	break;
+    }
+
+    if (av != NULL)
+    for (i = 0; av[i] != NULL; i++) {
+	const char * arg = av[i];
+	size_t len = strlen(arg);
+	int c = *arg;
+
+	if (len == 0) {
+	    /* do nothing */
+	} else if (len > 1) {
+	    if (!(xisdigit(c) || (c == '-' && xisdigit(arg[1])))) {
+		val = xstrdup(_("(expected number :rpn)"));
+		goto exit;
+	    }
+	    if (++ix == ac) {
+		val = xstrdup(_("(stack overflow :rpn)"));
+		goto exit;
+	    }
+	    end = NULL;
+	    stack[ix] = strtoll(arg, &end, 0);
+	    if (*end != '\0') {
+		val = xstrdup(_("(invalid number :rpn)"));
+		goto exit;
+	    }
+	} else {
+	    if (ix-- < 1) {
+		val = xstrdup(_("(stack underflow :rpn)"));
+		goto exit;
+	    }
+	    switch (c) {
+	    case '&':	stack[ix] &= stack[ix+1];	break;
+	    case '|':	stack[ix] |= stack[ix+1];	break;
+	    case '^':	stack[ix] ^= stack[ix+1];	break;
+	    case '+':	stack[ix] += stack[ix+1];	break;
+	    case '-':	stack[ix] -= stack[ix+1];	break;
+	    case '*':	stack[ix] *= stack[ix+1];	break;
+	    case '%':	
+	    case '/':	
+		if (stack[ix+1] == 0) {
+		    val = xstrdup(_("(divide by zero :rpn)"));
+		    goto exit;
+		}
+		if (c == '%')
+		    stack[ix] %= stack[ix+1];
+		else
+		    stack[ix] /= stack[ix+1];
+		break;
+	    }
+	}
+    }
+
+    {	HE_t nhe = memset(alloca(sizeof(*nhe)), 0, sizeof(*nhe));
+	nhe->tag = he->tag;
+	nhe->t = RPM_UINT64_TYPE;
+	nhe->p.ui64p = (uint64_t *)&stack[ix];
+	nhe->c = 1;
+	val = intFormat(nhe, NULL, NULL);
+    }
+
+exit:
+/*@-globstate@*/
+    return val;
+/*@=globstate@*/
 }
 
 /*@-type@*/ /* FIX: cast? */
-const struct headerSprintfExtension_s headerCompoundFormats[] = {
-    { HEADER_EXT_TAG, "RPMTAG_CHANGELOGNAME",	{ changelognameTag } },
-    { HEADER_EXT_TAG, "RPMTAG_CHANGELOGTEXT",	{ changelogtextTag } },
-    { HEADER_EXT_TAG, "RPMTAG_DESCRIPTION",	{ descriptionTag } },
-    { HEADER_EXT_TAG, "RPMTAG_GROUP",		{ groupTag } },
-    { HEADER_EXT_TAG, "RPMTAG_INSTALLPREFIX",	{ instprefixTag } },
-    { HEADER_EXT_TAG, "RPMTAG_SUMMARY",		{ summaryTag } },
-    { HEADER_EXT_TAG, "RPMTAG_TRIGGERCONDS",	{ triggercondsTag } },
-    { HEADER_EXT_TAG, "RPMTAG_TRIGGERTYPE",	{ triggertypeTag } },
-    { HEADER_EXT_TAG, "RPMTAG_DBINSTANCE",	{ dbinstanceTag } },
-    { HEADER_EXT_TAG, "RPMTAG_NVRA",		{ nvraTag } },
-    { HEADER_EXT_TAG, "RPMTAG_FILENAMES",	{ filepathsTag } },
-    { HEADER_EXT_TAG, "RPMTAG_FILEPATHS",	{ filepathsTag } },
-    { HEADER_EXT_TAG, "RPMTAG_ORIGPATHS",	{ origpathsTag } },
-    { HEADER_EXT_FORMAT, "armor",		{ armorFormat } },
-    { HEADER_EXT_FORMAT, "base64",		{ base64Format } },
-    { HEADER_EXT_FORMAT, "depflags",		{ depflagsFormat } },
-    { HEADER_EXT_FORMAT, "fflags",		{ fflagsFormat } },
-    { HEADER_EXT_FORMAT, "perms",		{ permsFormat } },
-    { HEADER_EXT_FORMAT, "permissions",		{ permsFormat } },
-    { HEADER_EXT_FORMAT, "pgpsig",		{ pgpsigFormat } },
-    { HEADER_EXT_FORMAT, "triggertype",		{ triggertypeFormat } },
-    { HEADER_EXT_FORMAT, "xml",			{ xmlFormat } },
-    { HEADER_EXT_FORMAT, "yaml",		{ yamlFormat } },
-    { HEADER_EXT_MORE, NULL,		{ (void *) headerDefaultFormats } }
+static struct headerSprintfExtension_s _headerCompoundFormats[] = {
+    { HEADER_EXT_TAG, "RPMTAG_BUILDTIMEUUID",
+	{ .tagFunction = buildtime_uuidTag } },
+    { HEADER_EXT_TAG, "RPMTAG_CHANGELOGNAME",
+	{ .tagFunction = changelognameTag } },
+    { HEADER_EXT_TAG, "RPMTAG_CHANGELOGTEXT",
+	{ .tagFunction = changelogtextTag } },
+    { HEADER_EXT_TAG, "RPMTAG_DESCRIPTION",
+	{ .tagFunction = descriptionTag } },
+    { HEADER_EXT_TAG, "RPMTAG_GROUP",
+	{ .tagFunction = groupTag } },
+    { HEADER_EXT_TAG, "RPMTAG_HDRUUID",
+	{ .tagFunction = hdruuidTag } },
+    { HEADER_EXT_TAG, "RPMTAG_INSTALLPREFIX",
+	{ .tagFunction = instprefixTag } },
+    { HEADER_EXT_TAG, "RPMTAG_INSTALLTIDUUID",
+	{ .tagFunction = installtid_uuidTag } },
+    { HEADER_EXT_TAG, "RPMTAG_INSTALLTIMEUUID",
+	{ .tagFunction = installtime_uuidTag } },
+    { HEADER_EXT_TAG, "RPMTAG_ORIGINTIDUUID",
+	{ .tagFunction = origintid_uuidTag } },
+    { HEADER_EXT_TAG, "RPMTAG_ORIGINTIMEUUID",
+	{ .tagFunction = origintime_uuidTag } },
+    { HEADER_EXT_TAG, "RPMTAG_PKGUUID",
+	{ .tagFunction = pkguuidTag } },
+    { HEADER_EXT_TAG, "RPMTAG_REMOVETIDUUID",
+	{ .tagFunction = removetid_uuidTag } },
+    { HEADER_EXT_TAG, "RPMTAG_SOURCEPKGUUID",
+	{ .tagFunction = sourcepkguuidTag } },
+    { HEADER_EXT_TAG, "RPMTAG_SUMMARY",
+	{ .tagFunction = summaryTag } },
+    { HEADER_EXT_TAG, "RPMTAG_TRIGGERCONDS",
+	{ .tagFunction = triggercondsTag } },
+    { HEADER_EXT_TAG, "RPMTAG_TRIGGERTYPE",
+	{ .tagFunction = triggertypeTag } },
+    { HEADER_EXT_TAG, "RPMTAG_DBINSTANCE",
+	{ .tagFunction = dbinstanceTag } },
+    { HEADER_EXT_TAG, "RPMTAG_HEADERSTARTOFF",
+	{ .tagFunction = headerstartoffTag } },
+    { HEADER_EXT_TAG, "RPMTAG_HEADERENDOFF",
+	{ .tagFunction = headerendoffTag } },
+    { HEADER_EXT_TAG, "RPMTAG_PACKAGEDIGEST",
+	{ .tagFunction = pkgdigestTag } },
+    { HEADER_EXT_TAG, "RPMTAG_PACKAGEORIGIN",
+	{ .tagFunction = pkgoriginTag } },
+    { HEADER_EXT_TAG, "RPMTAG_PACKAGESIZE",
+	{ .tagFunction = pkgsizeTag } },
+    { HEADER_EXT_TAG, "RPMTAG_PACKAGETIME",
+	{ .tagFunction = pkgmtimeTag } },
+    { HEADER_EXT_TAG, "RPMTAG_NVRA",
+	{ .tagFunction = nvraTag } },
+    { HEADER_EXT_TAG, "RPMTAG_FILENAMES",
+	{ .tagFunction = filepathsTag } },
+    { HEADER_EXT_TAG, "RPMTAG_FILEPATHS",
+	{ .tagFunction = filepathsTag } },
+    { HEADER_EXT_TAG, "RPMTAG_ORIGPATHS",
+	{ .tagFunction = origpathsTag } },
+    { HEADER_EXT_TAG, "RPMTAG_FILESTAT",
+	{ .tagFunction = filestatTag } },
+    { HEADER_EXT_TAG, "RPMTAG_PROVIDEXMLENTRY",
+	{ .tagFunction = PxmlTag } },
+    { HEADER_EXT_TAG, "RPMTAG_REQUIREXMLENTRY",
+	{ .tagFunction = RxmlTag } },
+    { HEADER_EXT_TAG, "RPMTAG_CONFLICTXMLENTRY",
+	{ .tagFunction = CxmlTag } },
+    { HEADER_EXT_TAG, "RPMTAG_OBSOLETEXMLENTRY",
+	{ .tagFunction = OxmlTag } },
+    { HEADER_EXT_TAG, "RPMTAG_FILESXMLENTRY1",
+	{ .tagFunction = F1xmlTag } },
+    { HEADER_EXT_TAG, "RPMTAG_FILESXMLENTRY2",
+	{ .tagFunction = F2xmlTag } },
+    { HEADER_EXT_TAG, "RPMTAG_PROVIDESQLENTRY",
+	{ .tagFunction = PsqlTag } },
+    { HEADER_EXT_TAG, "RPMTAG_REQUIRESQLENTRY",
+	{ .tagFunction = RsqlTag } },
+    { HEADER_EXT_TAG, "RPMTAG_CONFLICTSQLENTRY",
+	{ .tagFunction = CsqlTag } },
+    { HEADER_EXT_TAG, "RPMTAG_OBSOLETESQLENTRY",
+	{ .tagFunction = OsqlTag } },
+    { HEADER_EXT_TAG, "RPMTAG_FILESSQLENTRY1",
+	{ .tagFunction = F1sqlTag } },
+    { HEADER_EXT_TAG, "RPMTAG_FILESSQLENTRY2",
+	{ .tagFunction = F2sqlTag } },
+    { HEADER_EXT_FORMAT, "armor",
+	{ .fmtFunction = armorFormat } },
+    { HEADER_EXT_FORMAT, "base64",
+	{ .fmtFunction = base64Format } },
+    { HEADER_EXT_FORMAT, "bncdata",
+	{ .fmtFunction = bncdataFormat } },
+    { HEADER_EXT_FORMAT, "cdata",
+	{ .fmtFunction = cdataFormat } },
+    { HEADER_EXT_FORMAT, "depflags",
+	{ .fmtFunction = depflagsFormat } },
+    { HEADER_EXT_FORMAT, "digest",
+	{ .fmtFunction = digestFormat } },
+    { HEADER_EXT_FORMAT, "fflags",
+	{ .fmtFunction = fflagsFormat } },
+    { HEADER_EXT_FORMAT, "iconv",
+	{ .fmtFunction = iconvFormat } },
+    { HEADER_EXT_FORMAT, "perms",
+	{ .fmtFunction = permsFormat } },
+    { HEADER_EXT_FORMAT, "permissions",	
+	{ .fmtFunction = permsFormat } },
+    { HEADER_EXT_FORMAT, "pgpsig",
+	{ .fmtFunction = pgpsigFormat } },
+    { HEADER_EXT_FORMAT, "rpn",
+	{ .fmtFunction = rpnFormat } },
+    { HEADER_EXT_FORMAT, "sqlescape",
+	{ .fmtFunction = sqlescapeFormat } },
+    { HEADER_EXT_FORMAT, "stat",
+	{ .fmtFunction = statFormat } },
+    { HEADER_EXT_FORMAT, "triggertype",	
+	{ .fmtFunction = triggertypeFormat } },
+    { HEADER_EXT_FORMAT, "utf8",
+	{ .fmtFunction = iconvFormat } },
+    { HEADER_EXT_FORMAT, "uuid",
+	{ .fmtFunction = uuidFormat } },
+    { HEADER_EXT_FORMAT, "xml",
+	{ .fmtFunction = xmlFormat } },
+    { HEADER_EXT_FORMAT, "yaml",
+	{ .fmtFunction = yamlFormat } },
+    { HEADER_EXT_MORE, NULL,		{ (void *) &headerDefaultFormats } }
 } ;
 /*@=type@*/
+
+headerSprintfExtension headerCompoundFormats = &_headerCompoundFormats[0];
+
+/*====================================================================*/
+
+void rpmDisplayQueryTags(FILE * fp, headerTagTableEntry _rpmTagTable, headerSprintfExtension _rpmHeaderFormats)
+{
+    const struct headerTagTableEntry_s * t;
+    headerSprintfExtension exts;
+    headerSprintfExtension ext;
+    int extNum;
+
+    if (fp == NULL)
+	fp = stdout;
+    if (_rpmTagTable == NULL)
+	_rpmTagTable = rpmTagTable;
+
+    /* XXX this should use rpmHeaderFormats, but there are linkage problems. */
+    if (_rpmHeaderFormats == NULL)
+	_rpmHeaderFormats = headerCompoundFormats;
+
+    for (t = _rpmTagTable; t && t->name; t++) {
+	/*@observer@*/
+	static const char * tagtypes[] = {
+		"", "char", "uint8", "uint16", "uint32", "uint64",
+		"string", "octets", "argv", "i18nstring",
+	};
+	uint32_t ttype;
+
+	if (rpmIsVerbose()) {
+	    fprintf(fp, "%-20s %6d", t->name + 7, t->val);
+	    ttype = t->type & RPM_MASK_TYPE;
+	    if (ttype < RPM_MIN_TYPE || ttype > RPM_MAX_TYPE)
+		continue;
+	    if (t->type & RPM_OPENPGP_RETURN_TYPE)
+		fprintf(fp, " openpgp");
+	    if (t->type & RPM_X509_RETURN_TYPE)
+		fprintf(fp, " x509");
+	    if (t->type & RPM_ASN1_RETURN_TYPE)
+		fprintf(fp, " asn1");
+	    if (t->type & RPM_OPAQUE_RETURN_TYPE)
+		fprintf(fp, " opaque");
+	    fprintf(fp, " %s", tagtypes[ttype]);
+	    if (t->type & RPM_ARRAY_RETURN_TYPE)
+		fprintf(fp, " array");
+	    if (t->type & RPM_MAPPING_RETURN_TYPE)
+		fprintf(fp, " mapping");
+	    if (t->type & RPM_PROBE_RETURN_TYPE)
+		fprintf(fp, " probe");
+	    if (t->type & RPM_TREE_RETURN_TYPE)
+		fprintf(fp, " tree");
+	} else
+	    fprintf(fp, "%s", t->name + 7);
+	fprintf(fp, "\n");
+    }
+
+    exts = _rpmHeaderFormats;
+    for (ext = exts, extNum = 0; ext != NULL && ext->type != HEADER_EXT_LAST;
+	ext = (ext->type == HEADER_EXT_MORE ? *ext->u.more : ext+1), extNum++)
+    {
+	if (ext->name == NULL || ext->type != HEADER_EXT_TAG)
+	    continue;
+
+	/* XXX don't print header tags twice. */
+	if (tagValue(ext->name) > 0)
+	    continue;
+	fprintf(fp, "%s\n", ext->name + 7);
+    }
+}
+
+/*====================================================================*/
+
+#define PARSER_BEGIN 	0
+#define PARSER_IN_ARRAY 1
+#define PARSER_IN_EXPR  2
+
+/** \ingroup header
+ */
+typedef /*@abstract@*/ struct sprintfTag_s * sprintfTag;
+
+/** \ingroup header
+ */
+struct sprintfTag_s {
+    HE_s he;
+/*@null@*/
+    headerTagFormatFunction * fmtfuncs;
+/*@null@*/
+    headerTagTagFunction ext;   /*!< NULL if tag element is invalid */
+    int extNum;
+    rpmTag tagno;
+    int justOne;
+    int arrayCount;
+/*@kept@*/
+    char * format;
+/*@only@*/ /*@null@*/
+    ARGV_t av;
+    ARGV_t params;
+    unsigned pad;
+};
+
+/** \ingroup header
+ */
+typedef /*@abstract@*/ struct sprintfToken_s * sprintfToken;
+
+/** \ingroup header
+ */
+struct sprintfToken_s {
+    enum {
+        PTOK_NONE       = 0,
+        PTOK_TAG        = 1,
+        PTOK_ARRAY      = 2,
+        PTOK_STRING     = 3,
+        PTOK_COND       = 4
+    } type;
+    union {
+	struct sprintfTag_s tag;	/*!< PTOK_TAG */
+	struct {
+	/*@only@*/
+	    sprintfToken format;
+	    size_t numTokens;
+	} array;			/*!< PTOK_ARRAY */
+	struct {
+	/*@dependent@*/
+	    char * string;
+	    size_t len;
+	} string;			/*!< PTOK_STRING */
+	struct {
+	/*@only@*/ /*@null@*/
+	    sprintfToken ifFormat;
+	    size_t numIfTokens;
+	/*@only@*/ /*@null@*/
+	    sprintfToken elseFormat;
+	    size_t numElseTokens;
+	    struct sprintfTag_s tag;
+	} cond;				/*!< PTOK_COND */
+    } u;
+};
+
+/** \ingroup header
+ */
+typedef /*@abstract@*/ struct headerSprintfArgs_s * headerSprintfArgs;
+
+/** \ingroup header
+ */
+struct headerSprintfArgs_s {
+    Header h;
+    char * fmt;
+/*@observer@*/ /*@temp@*/
+    headerTagTableEntry tags;
+/*@observer@*/ /*@temp@*/
+    headerSprintfExtension exts;
+/*@observer@*/ /*@null@*/
+    const char * errmsg;
+    HE_t ec;			/*!< Extension data cache. */
+    int nec;			/*!< No. of extension cache items. */
+    sprintfToken format;
+/*@relnull@*/
+    HeaderIterator hi;
+/*@owned@*/
+    char * val;
+    size_t vallen;
+    size_t alloced;
+    size_t numTokens;
+    size_t i;
+};
+
+/*@access sprintfTag @*/
+/*@access sprintfToken @*/
+/*@access headerSprintfArgs @*/
+
+/**
+ */
+static char escapedChar(const char ch)	/*@*/
+{
+/*@-modfilesys@*/
+if (_hdr_debug)
+fprintf(stderr, "\t\t\\%c\n", ch);
+/*@=modfilesys@*/
+    switch (ch) {
+    case 'a': 	return '\a';
+    case 'b': 	return '\b';
+    case 'f': 	return '\f';
+    case 'n': 	return '\n';
+    case 'r': 	return '\r';
+    case 't': 	return '\t';
+    case 'v': 	return '\v';
+    default:	return ch;
+    }
+}
+
+/**
+ * Clean a tag container, free'ing attached malloc's.
+ * @param he		tag container
+ */
+/*@relnull@*/
+static HE_t rpmheClean(/*@returned@*/ /*@null@*/ HE_t he)
+	/*@modifies he @*/
+{
+    if (he) {
+	if (he->freeData && he->p.ptr != NULL)
+	    he->p.ptr = _free(he->p.ptr);
+	memset(he, 0, sizeof(*he));
+    }
+    return he;
+}
+
+/**
+ * Destroy headerSprintf format array.
+ * @param format	sprintf format array
+ * @param num		number of elements
+ * @return		NULL always
+ */
+static /*@null@*/ sprintfToken
+freeFormat( /*@only@*/ /*@null@*/ sprintfToken format, size_t num)
+	/*@modifies *format @*/
+{
+    unsigned i;
+
+    if (format == NULL) return NULL;
+
+    for (i = 0; i < (unsigned) num; i++) {
+	switch (format[i].type) {
+	case PTOK_TAG:
+	    (void) rpmheClean(&format[i].u.tag.he);
+	    format[i].u.tag.av = argvFree(format[i].u.tag.av);
+	    format[i].u.tag.params = argvFree(format[i].u.tag.params);
+	    format[i].u.tag.fmtfuncs = _free(format[i].u.tag.fmtfuncs);
+	    /*@switchbreak@*/ break;
+	case PTOK_ARRAY:
+	    format[i].u.array.format =
+		freeFormat(format[i].u.array.format,
+			format[i].u.array.numTokens);
+	    /*@switchbreak@*/ break;
+	case PTOK_COND:
+	    format[i].u.cond.ifFormat =
+		freeFormat(format[i].u.cond.ifFormat, 
+			format[i].u.cond.numIfTokens);
+	    format[i].u.cond.elseFormat =
+		freeFormat(format[i].u.cond.elseFormat, 
+			format[i].u.cond.numElseTokens);
+	    (void) rpmheClean(&format[i].u.cond.tag.he);
+	    format[i].u.cond.tag.av = argvFree(format[i].u.cond.tag.av);
+	    format[i].u.cond.tag.params = argvFree(format[i].u.cond.tag.params);
+	    format[i].u.cond.tag.fmtfuncs = _free(format[i].u.cond.tag.fmtfuncs);
+	    /*@switchbreak@*/ break;
+	case PTOK_NONE:
+	case PTOK_STRING:
+	default:
+	    /*@switchbreak@*/ break;
+	}
+    }
+    format = _free(format);
+    return NULL;
+}
+
+/**
+ * Initialize an hsa iteration.
+ * @param hsa		headerSprintf args
+ * @return		headerSprintf args
+ */
+static headerSprintfArgs hsaInit(/*@returned@*/ headerSprintfArgs hsa)
+	/*@modifies hsa */
+{
+    sprintfTag tag =
+	(hsa->format->type == PTOK_TAG
+	    ? &hsa->format->u.tag :
+	(hsa->format->type == PTOK_ARRAY
+	    ? &hsa->format->u.array.format->u.tag :
+	NULL));
+
+    if (hsa != NULL) {
+	hsa->i = 0;
+	if (tag != NULL && tag->tagno == (rpmTag)-2)
+	    hsa->hi = headerInit(hsa->h);
+    }
+/*@-nullret@*/
+    return hsa;
+/*@=nullret@*/
+}
+
+/**
+ * Return next hsa iteration item.
+ * @param hsa		headerSprintf args
+ * @return		next sprintfToken (or NULL)
+ */
+/*@null@*/
+static sprintfToken hsaNext(/*@returned@*/ headerSprintfArgs hsa)
+	/*@modifies hsa */
+{
+    sprintfToken fmt = NULL;
+    sprintfTag tag =
+	(hsa->format->type == PTOK_TAG
+	    ? &hsa->format->u.tag :
+	(hsa->format->type == PTOK_ARRAY
+	    ? &hsa->format->u.array.format->u.tag :
+	NULL));
+
+    if (hsa != NULL && hsa->i < hsa->numTokens) {
+	fmt = hsa->format + hsa->i;
+	if (hsa->hi == NULL) {
+	    hsa->i++;
+	} else {
+	    HE_t he = rpmheClean(&tag->he);
+	    if (!headerNext(hsa->hi, he, 0))
+	    {
+		tag->tagno = 0;
+		return NULL;
+	    }
+	    he->avail = 1;
+	    tag->tagno = he->tag;
+	}
+    }
+
+/*@-dependenttrans -onlytrans@*/
+    return fmt;
+/*@=dependenttrans =onlytrans@*/
+}
+
+/**
+ * Finish an hsa iteration.
+ * @param hsa		headerSprintf args
+ * @return		headerSprintf args
+ */
+static headerSprintfArgs hsaFini(/*@returned@*/ headerSprintfArgs hsa)
+	/*@modifies hsa */
+{
+    if (hsa != NULL) {
+	hsa->hi = headerFini(hsa->hi);
+	hsa->i = 0;
+    }
+/*@-nullret@*/
+    return hsa;
+/*@=nullret@*/
+}
+
+/**
+ * Reserve sufficient buffer space for next output value.
+ * @param hsa		headerSprintf args
+ * @param need		no. of bytes to reserve
+ * @return		pointer to reserved space
+ */
+/*@dependent@*/ /*@exposed@*/
+static char * hsaReserve(headerSprintfArgs hsa, size_t need)
+	/*@modifies hsa */
+{
+    if ((hsa->vallen + need) >= hsa->alloced) {
+	if (hsa->alloced <= need)
+	    hsa->alloced += need;
+	hsa->alloced <<= 1;
+	hsa->val = xrealloc(hsa->val, hsa->alloced+1);	
+    }
+    return hsa->val + hsa->vallen;
+}
+
+/**
+ * Return tag name from value.
+ * @param tbl		tag table
+ * @param val		tag value to find
+ * @retval *typep	tag type (or NULL)
+ * @return		tag name, NULL on not found
+ */
+/*@observer@*/ /*@null@*/
+static const char * myTagName(headerTagTableEntry tbl, uint32_t val,
+		/*@null@*/ uint32_t *typep)
+	/*@modifies *typep @*/
+{
+    static char name[128];	/* XXX Ick. */
+    const char * s;
+    char *t;
+
+    /* XXX Use bsearch on the "normal" rpmTagTable lookup. */
+    if (tbl == NULL || tbl == rpmTagTable) {
+	s = tagName(val);
+	if (s != NULL && typep != NULL)
+	    *typep = tagType(val);
+	return s;
+    }
+
+    for (; tbl->name != NULL; tbl++) {
+	if (tbl->val == val)
+	    break;
+    }
+    if ((s = tbl->name) == NULL)
+	return NULL;
+    s += sizeof("RPMTAG_") - 1;
+    t = name;
+    *t++ = *s++;
+    while (*s != '\0')
+	*t++ = (char)xtolower((int)*s++);
+    *t = '\0';
+    if (typep)
+	*typep = tbl->type;
+    return name;
+}
+
+/**
+ * Return tag value from name.
+ * @param tbl		tag table
+ * @param name		tag name to find
+ * @return		tag value, 0 on not found
+ */
+static uint32_t myTagValue(headerTagTableEntry tbl, const char * name)
+	/*@*/
+{
+    uint32_t val = 0;
+
+    /* XXX Use bsearch on the "normal" rpmTagTable lookup. */
+    if (tbl == NULL || tbl == rpmTagTable)
+	val = tagValue(name);
+    else
+    for (; tbl->name != NULL; tbl++) {
+	if (xstrcasecmp(tbl->name, name))
+	    continue;
+	val = tbl->val;
+	break;
+    }
+    return val;
+}
+
+/**
+ * Search extensions and tags for a name.
+ * @param hsa		headerSprintf args
+ * @param token		parsed fields
+ * @param name		name to find
+ * @return		0 on success, 1 on not found
+ */
+static int findTag(headerSprintfArgs hsa, sprintfToken token, const char * name)
+	/*@modifies token @*/
+{
+    headerSprintfExtension exts = hsa->exts;
+    headerSprintfExtension ext;
+    sprintfTag stag = (token->type == PTOK_COND
+	? &token->u.cond.tag : &token->u.tag);
+    int extNum;
+
+    stag->fmtfuncs = NULL;
+    stag->ext = NULL;
+    stag->extNum = 0;
+    stag->tagno = -1;
+
+    if (!strcmp(name, "*")) {
+	stag->tagno = -2;
+	goto bingo;
+    }
+
+    if (strncmp("RPMTAG_", name, sizeof("RPMTAG_")-1)) {
+	char * t = alloca(strlen(name) + sizeof("RPMTAG_"));
+	(void) stpcpy( stpcpy(t, "RPMTAG_"), name);
+	name = t;
+    }
+
+    /* Search extensions for specific tag override. */
+    for (ext = exts, extNum = 0; ext != NULL && ext->type != HEADER_EXT_LAST;
+	ext = (ext->type == HEADER_EXT_MORE ? *ext->u.more : ext+1), extNum++)
+    {
+	if (ext->name == NULL || ext->type != HEADER_EXT_TAG)
+	    continue;
+	if (!xstrcasecmp(ext->name, name)) {
+	    stag->ext = ext->u.tagFunction;
+	    stag->extNum = extNum;
+	    goto bingo;
+	}
+    }
+
+    /* Search tag names. */
+    stag->tagno = myTagValue(hsa->tags, name);
+    if (stag->tagno != 0)
+	goto bingo;
+
+    return 1;
+
+bingo:
+    /* Search extensions for specific format(s). */
+    if (stag->av != NULL) {
+	int i;
+	stag->fmtfuncs = xcalloc(argvCount(stag->av) + 1, sizeof(*stag->fmtfuncs));
+	for (i = 0; i < 1; i++) {
+	    for (ext = exts; ext != NULL && ext->type != HEADER_EXT_LAST;
+		 ext = (ext->type == HEADER_EXT_MORE ? *ext->u.more : ext+1))
+	    {
+		if (ext->name == NULL || ext->type != HEADER_EXT_FORMAT)
+		    continue;
+		if (strcmp(ext->name, stag->av[i]))
+		    continue;
+		stag->fmtfuncs[i] = ext->u.fmtFunction;
+		break;
+	    }
+	}
+    }
+    return 0;
+}
+
+/* forward ref */
+/**
+ * Parse a headerSprintf expression.
+ * @param hsa		headerSprintf args
+ * @param token
+ * @param str
+ * @retval *endPtr
+ * @return		0 on success
+ */
+static int parseExpression(headerSprintfArgs hsa, sprintfToken token,
+		char * str, /*@out@*/char ** endPtr)
+	/*@modifies hsa, str, token, *endPtr @*/
+	/*@requires maxSet(endPtr) >= 0 @*/;
+
+/**
+ * Parse a headerSprintf term.
+ * @param hsa		headerSprintf args
+ * @param str
+ * @retval *formatPtr
+ * @retval *numTokensPtr
+ * @retval *endPtr
+ * @param state
+ * @return		0 on success
+ */
+static int parseFormat(headerSprintfArgs hsa, /*@null@*/ char * str,
+		/*@out@*/ sprintfToken * formatPtr,
+		/*@out@*/ size_t * numTokensPtr,
+		/*@null@*/ /*@out@*/ char ** endPtr, int state)
+	/*@modifies hsa, str, *formatPtr, *numTokensPtr, *endPtr @*/
+	/*@requires maxSet(formatPtr) >= 0 /\ maxSet(numTokensPtr) >= 0
+		/\ maxSet(endPtr) >= 0 @*/
+{
+/*@observer@*/
+static const char *pstates[] = {
+"NORMAL", "ARRAY", "EXPR", "WTF?"
+};
+    char * chptr, * start, * next, * dst;
+    sprintfToken format;
+    sprintfToken token;
+    size_t numTokens;
+    unsigned i;
+    int done = 0;
+
+/*@-modfilesys@*/
+if (_hdr_debug)
+fprintf(stderr, "-->     parseFormat(%p, \"%s\", %p, %p, %p, %s)\n", hsa, str, formatPtr, numTokensPtr, endPtr, pstates[(state & 0x3)]);
+/*@=modfilesys@*/
+
+    /* upper limit on number of individual formats */
+    numTokens = 0;
+    if (str != NULL)
+    for (chptr = str; *chptr != '\0'; chptr++)
+	if (*chptr == '%') numTokens++;
+    numTokens = numTokens * 2 + 1;
+
+    format = xcalloc(numTokens, sizeof(*format));
+    if (endPtr) *endPtr = NULL;
+
+/*@-infloops@*/ /* LCL: can't detect done termination */
+    dst = start = str;
+    numTokens = 0;
+    token = NULL;
+    if (start != NULL)
+    while (*start != '\0') {
+	switch (*start) {
+	case '%':
+	    /* handle %% */
+	    if (*(start + 1) == '%') {
+		if (token == NULL || token->type != PTOK_STRING) {
+		    token = format + numTokens++;
+		    token->type = PTOK_STRING;
+		    /*@-temptrans -assignexpose@*/
+		    dst = token->u.string.string = start;
+		    /*@=temptrans =assignexpose@*/
+		}
+		start++;
+		*dst++ = *start++;
+		/*@switchbreak@*/ break;
+	    } 
+
+	    token = format + numTokens++;
+	    *dst++ = '\0';
+	    start++;
+
+	    if (*start == '|') {
+		char * newEnd;
+
+		start++;
+		if (parseExpression(hsa, token, start, &newEnd))
+		{
+		    format = freeFormat(format, numTokens);
+		    return 1;
+		}
+		start = newEnd;
+		/*@switchbreak@*/ break;
+	    }
+
+	    /*@-assignexpose@*/
+	    token->u.tag.format = start;
+	    /*@=assignexpose@*/
+	    token->u.tag.pad = 0;
+	    token->u.tag.justOne = 0;
+	    token->u.tag.arrayCount = 0;
+
+	    chptr = start;
+	    while (*chptr && *chptr != '{' && *chptr != '%') chptr++;
+	    if (!*chptr || *chptr == '%') {
+		hsa->errmsg = _("missing { after %");
+		format = freeFormat(format, numTokens);
+		return 1;
+	    }
+
+/*@-modfilesys@*/
+if (_hdr_debug)
+fprintf(stderr, "\tchptr *%p = NUL\n", chptr);
+/*@=modfilesys@*/
+	    *chptr++ = '\0';
+
+	    while (start < chptr) {
+		if (xisdigit((int)*start)) {
+		    i = strtoul(start, &start, 10);
+		    token->u.tag.pad += i;
+		    start = chptr;
+		    /*@innerbreak@*/ break;
+		} else {
+		    start++;
+		}
+	    }
+
+	    if (*start == '=') {
+		token->u.tag.justOne = 1;
+		start++;
+	    } else if (*start == '#') {
+		token->u.tag.justOne = 1;
+		token->u.tag.arrayCount = 1;
+		start++;
+	    }
+
+	    next = start;
+	    while (*next && *next != '}') next++;
+	    if (!*next) {
+		hsa->errmsg = _("missing } after %{");
+		format = freeFormat(format, numTokens);
+		return 1;
+	    }
+/*@-modfilesys@*/
+if (_hdr_debug)
+fprintf(stderr, "\tnext *%p = NUL\n", next);
+/*@=modfilesys@*/
+	    *next++ = '\0';
+
+	    chptr = start;
+	    while (*chptr && *chptr != ':') chptr++;
+
+	    if (*chptr != '\0') {
+		*chptr++ = '\0';
+		if (!*chptr) {
+		    hsa->errmsg = _("empty tag format");
+		    format = freeFormat(format, numTokens);
+		    return 1;
+		}
+		(void) argvAdd(&token->u.tag.av, chptr);
+	    }
+	    token->u.tag.params = NULL;
+	    
+	    if (*start == '\0') {
+		hsa->errmsg = _("empty tag name");
+		format = freeFormat(format, numTokens);
+		return 1;
+	    }
+
+	    i = 0;
+	    token->type = PTOK_TAG;
+
+	    if (findTag(hsa, token, start)) {
+		hsa->errmsg = _("unknown tag");
+		format = freeFormat(format, numTokens);
+		return 1;
+	    }
+
+	    dst = start = next;
+/*@-modfilesys@*/
+if (_hdr_debug)
+fprintf(stderr, "\tdst = start = next %p\n", dst);
+/*@=modfilesys@*/
+	    /*@switchbreak@*/ break;
+
+	case '[':
+/*@-modfilesys@*/
+if (_hdr_debug)
+fprintf(stderr, "\t%s => %s *%p = NUL\n", pstates[(state & 0x3)], pstates[PARSER_IN_ARRAY], start);
+/*@=modfilesys@*/
+	    *start++ = '\0';
+	    token = format + numTokens++;
+
+	    if (parseFormat(hsa, start,
+			    &token->u.array.format,
+			    &token->u.array.numTokens,
+			    &start, PARSER_IN_ARRAY))
+	    {
+		format = freeFormat(format, numTokens);
+		return 1;
+	    }
+
+	    if (!start) {
+		hsa->errmsg = _("] expected at end of array");
+		format = freeFormat(format, numTokens);
+		return 1;
+	    }
+
+	    dst = start;
+/*@-modfilesys@*/
+if (_hdr_debug)
+fprintf(stderr, "\tdst = start %p\n", dst);
+/*@=modfilesys@*/
+
+	    token->type = PTOK_ARRAY;
+
+	    /*@switchbreak@*/ break;
+
+	case ']':
+	    if (state != PARSER_IN_ARRAY) {
+		hsa->errmsg = _("unexpected ]");
+		format = freeFormat(format, numTokens);
+		return 1;
+	    }
+	    *start++ = '\0';
+/*@-modfilesys@*/
+if (_hdr_debug)
+fprintf(stderr, "\t<= %s %p[-1] = NUL\n", pstates[(state & 0x3)], start);
+/*@=modfilesys@*/
+	    if (endPtr) *endPtr = start;
+	    done = 1;
+	    /*@switchbreak@*/ break;
+
+	case '}':
+	    if (state != PARSER_IN_EXPR) {
+		hsa->errmsg = _("unexpected }");
+		format = freeFormat(format, numTokens);
+		return 1;
+	    }
+	    *start++ = '\0';
+/*@-modfilesys@*/
+if (_hdr_debug)
+fprintf(stderr, "\t<= %s %p[-1] = NUL\n", pstates[(state & 0x3)], start);
+/*@=modfilesys@*/
+	    if (endPtr) *endPtr = start;
+	    done = 1;
+	    /*@switchbreak@*/ break;
+
+	default:
+	    if (token == NULL || token->type != PTOK_STRING) {
+		token = format + numTokens++;
+		token->type = PTOK_STRING;
+		/*@-temptrans -assignexpose@*/
+		dst = token->u.string.string = start;
+		/*@=temptrans =assignexpose@*/
+	    }
+
+/*@-modfilesys@*/
+if (_hdr_debug)
+fprintf(stderr, "\t*%p = *%p \"%s\"\n", dst, start, start);
+/*@=modfilesys@*/
+	    if (*start == '\\') {
+		start++;
+		*dst++ = escapedChar(*start);
+		*start++ = '\0';
+	    } else {
+		*dst++ = *start++;
+	    }
+	    /*@switchbreak@*/ break;
+	}
+	if (done)
+	    break;
+    }
+/*@=infloops@*/
+
+    if (dst != NULL)
+        *dst = '\0';
+
+    for (i = 0; i < (unsigned) numTokens; i++) {
+	token = format + i;
+	switch(token->type) {
+	default:
+	    /*@switchbreak@*/ break;
+	case PTOK_STRING:
+	    token->u.string.len = strlen(token->u.string.string);
+	    /*@switchbreak@*/ break;
+	}
+    }
+
+    if (numTokensPtr != NULL)
+	*numTokensPtr = numTokens;
+    if (formatPtr != NULL)
+	*formatPtr = format;
+
+    return 0;
+}
+
+static int parseExpression(headerSprintfArgs hsa, sprintfToken token,
+		char * str, /*@out@*/ char ** endPtr)
+{
+    char * chptr;
+    char * end;
+
+/*@-modfilesys@*/
+if (_hdr_debug)
+fprintf(stderr, "-->   parseExpression(%p, %p, \"%s\", %p)\n", hsa, token, str, endPtr);
+/*@=modfilesys@*/
+
+    hsa->errmsg = NULL;
+    chptr = str;
+    while (*chptr && *chptr != '?') chptr++;
+
+    if (*chptr != '?') {
+	hsa->errmsg = _("? expected in expression");
+	return 1;
+    }
+
+    *chptr++ = '\0';
+
+    if (*chptr != '{') {
+	hsa->errmsg = _("{ expected after ? in expression");
+	return 1;
+    }
+
+    chptr++;
+
+    if (parseFormat(hsa, chptr, &token->u.cond.ifFormat, 
+		    &token->u.cond.numIfTokens, &end, PARSER_IN_EXPR)) 
+	return 1;
+
+    /* XXX fix segfault on "rpm -q rpm --qf='%|NAME?{%}:{NAME}|\n'"*/
+    if (!(end && *end)) {
+	hsa->errmsg = _("} expected in expression");
+	token->u.cond.ifFormat =
+		freeFormat(token->u.cond.ifFormat, token->u.cond.numIfTokens);
+	return 1;
+    }
+
+    chptr = end;
+    if (*chptr != ':' && *chptr != '|') {
+	hsa->errmsg = _(": expected following ? subexpression");
+	token->u.cond.ifFormat =
+		freeFormat(token->u.cond.ifFormat, token->u.cond.numIfTokens);
+	return 1;
+    }
+
+    if (*chptr == '|') {
+	if (parseFormat(hsa, NULL, &token->u.cond.elseFormat, 
+		&token->u.cond.numElseTokens, &end, PARSER_IN_EXPR))
+	{
+	    token->u.cond.ifFormat =
+		freeFormat(token->u.cond.ifFormat, token->u.cond.numIfTokens);
+	    return 1;
+	}
+    } else {
+	chptr++;
+
+	if (*chptr != '{') {
+	    hsa->errmsg = _("{ expected after : in expression");
+	    token->u.cond.ifFormat =
+		freeFormat(token->u.cond.ifFormat, token->u.cond.numIfTokens);
+	    return 1;
+	}
+
+	chptr++;
+
+	if (parseFormat(hsa, chptr, &token->u.cond.elseFormat, 
+			&token->u.cond.numElseTokens, &end, PARSER_IN_EXPR)) 
+	    return 1;
+
+	/* XXX fix segfault on "rpm -q rpm --qf='%|NAME?{a}:{%}|{NAME}\n'" */
+	if (!(end && *end)) {
+	    hsa->errmsg = _("} expected in expression");
+	    token->u.cond.ifFormat =
+		freeFormat(token->u.cond.ifFormat, token->u.cond.numIfTokens);
+	    return 1;
+	}
+
+	chptr = end;
+	if (*chptr != '|') {
+	    hsa->errmsg = _("| expected at end of expression");
+	    token->u.cond.ifFormat =
+		freeFormat(token->u.cond.ifFormat, token->u.cond.numIfTokens);
+	    token->u.cond.elseFormat =
+		freeFormat(token->u.cond.elseFormat, token->u.cond.numElseTokens);
+	    return 1;
+	}
+    }
+	
+    chptr++;
+
+    *endPtr = chptr;
+
+    token->type = PTOK_COND;
+
+    (void) findTag(hsa, token, str);
+
+    return 0;
+}
+
+/**
+ * Call a header extension only once, saving results.
+ * @param hsa		headerSprintf args
+ * @param fn		function
+ * @retval he		tag container
+ * @retval ec		extension cache
+ * @return		1 on success, 0 on failure
+ */
+static int getExtension(headerSprintfArgs hsa, headerTagTagFunction fn,
+		HE_t he, HE_t ec)
+	/*@modifies he, ec @*/
+{
+    int rc = 0;
+    if (!ec->avail) {
+	he = rpmheClean(he);
+	rc = fn(hsa->h, he);
+	*ec = *he;	/* structure copy. */
+	if (!rc)
+	    ec->avail = 1;
+    } else
+	*he = *ec;	/* structure copy. */
+    he->freeData = 0;
+    rc = (rc == 0);	/* XXX invert getExtension return. */
+    return rc;
+}
+
+/**
+ * Format a single item's value.
+ * @param hsa		headerSprintf args
+ * @param tag		tag
+ * @param element	element index
+ * @return		end of formatted string (NULL on error)
+ */
+/*@observer@*/ /*@null@*/
+static char * formatValue(headerSprintfArgs hsa, sprintfTag tag,
+		uint32_t element)
+	/*@modifies hsa, tag @*/
+{
+    HE_t vhe = memset(alloca(sizeof(*vhe)), 0, sizeof(*vhe));
+    HE_t he = &tag->he;
+    char * val = NULL;
+    size_t need = 0;
+    char * t, * te;
+    uint64_t ival = 0;
+    rpmTagCount countBuf;
+    int xx;
+
+    if (!he->avail) {
+	if (tag->ext)
+	    xx = getExtension(hsa, tag->ext, he, hsa->ec + tag->extNum);
+	else {
+	    he->tag = tag->tagno;	/* XXX necessary? */
+	    xx = headerGet(hsa->h, he, 0);
+	}
+	if (!xx) {
+	    (void) rpmheClean(he);
+	    he->t = RPM_STRING_TYPE;	
+	    he->p.str = xstrdup("(none)");
+	    he->c = 1;
+	    he->freeData = 1;
+	}
+	he->avail = 1;
+    }
+
+    if (tag->arrayCount) {
+	countBuf = he->c;
+	he = rpmheClean(he);
+	he->t = RPM_UINT32_TYPE;
+	he->p.ui32p = &countBuf;
+	he->c = 1;
+	he->freeData = 0;
+    }
+
+    vhe->tag = he->tag;
+
+    if (he->p.ptr)
+    switch (he->t) {
+    default:
+	val = xstrdup("(unknown type)");
+	need = strlen(val) + 1;
+	goto exit;
+	/*@notreached@*/ break;
+    case RPM_I18NSTRING_TYPE:
+    case RPM_STRING_ARRAY_TYPE:
+	vhe->t = RPM_STRING_TYPE;
+	vhe->p.str = he->p.argv[element];
+	vhe->c = he->c;
+	/* XXX TODO: force array representation? */
+	vhe->ix = (he->c > 1 ? 0 : -1);
+	break;
+    case RPM_STRING_TYPE:
+	vhe->p.str = he->p.str;
+	vhe->t = RPM_STRING_TYPE;
+	vhe->c = he->c;
+	vhe->ix = -1;
+	break;
+    case RPM_UINT8_TYPE:
+    case RPM_UINT16_TYPE:
+    case RPM_UINT32_TYPE:
+    case RPM_UINT64_TYPE:
+	switch (he->t) {
+	default:
+assert(0);	/* XXX keep gcc quiet. */
+	    /*@innerbreak@*/ break;
+	case RPM_UINT8_TYPE:
+	    ival = he->p.ui8p[element];
+	    /*@innerbreak@*/ break;
+	case RPM_UINT16_TYPE:
+	    ival = he->p.ui16p[element];	/* XXX note unsigned. */
+	    /*@innerbreak@*/ break;
+	case RPM_UINT32_TYPE:
+	    ival = he->p.ui32p[element];
+	    /*@innerbreak@*/ break;
+	case RPM_UINT64_TYPE:
+	    ival = he->p.ui64p[element];
+	    /*@innerbreak@*/ break;
+	}
+	vhe->t = RPM_UINT64_TYPE;
+	vhe->p.ui64p = &ival;
+	vhe->c = he->c;
+	/* XXX TODO: force array representation? */
+	vhe->ix = (he->c > 1 ? 0 : -1);
+	break;
+
+    case RPM_BIN_TYPE:
+	vhe->t = RPM_BIN_TYPE;
+	vhe->p.ptr = he->p.ptr;
+	vhe->c = he->c;
+	vhe->ix = -1;
+	break;
+    }
+
+/*@-compmempass@*/	/* vhe->p.ui64p is stack, not owned */
+    if (tag->fmtfuncs) {
+	int i;
+	for (i = 0; i < 1; i++) {
+	    headerTagFormatFunction fmt;
+	    ARGV_t av = NULL;
+	    if ((fmt = tag->fmtfuncs[i]) == NULL)
+		continue;
+	    val = fmt(vhe, av);
+	}
+    } else {
+	val = intFormat(vhe, NULL, NULL);
+    }
+/*@=compmempass@*/
+assert(val != NULL);
+    if (val)
+	need = strlen(val) + 1;
+
+exit:
+    if (val && need > 0) {
+	if (tag->format && *tag->format && tag->pad > 0) {
+	    size_t nb;
+	    nb = strlen(tag->format) + sizeof("%s");
+	    t = alloca(nb);
+	    (void) stpcpy( stpcpy( stpcpy(t, "%"), tag->format), "s");
+	    nb = tag->pad + strlen(val) + 1;
+	    te = xmalloc(nb);
+/*@-formatconst@*/
+	    (void) snprintf(te, nb, t, val);
+/*@=formatconst@*/
+	    te[nb-1] = '\0';
+	    val = _free(val);
+	    val = te;
+	    need += tag->pad;
+	}
+	t = hsaReserve(hsa, need);
+	te = stpcpy(t, val);
+	hsa->vallen += (te - t);
+	val = _free(val);
+    }
+
+    return (hsa->val + hsa->vallen);
+}
+
+/**
+ * Format a single headerSprintf item.
+ * @param hsa		headerSprintf args
+ * @param token		item to format
+ * @param element	element index
+ * @return		end of formatted string (NULL on error)
+ */
+/*@observer@*/
+static char * singleSprintf(headerSprintfArgs hsa, sprintfToken token,
+		uint32_t element)
+	/*@modifies hsa, token @*/
+{
+    char numbuf[64];	/* XXX big enuf for "Tag_0x01234567" */
+    char * t, * te;
+    uint32_t i, j;
+    uint32_t numElements;
+    sprintfToken spft;
+    sprintfTag tag = NULL;
+    HE_t he = NULL;
+    uint32_t condNumFormats;
+    size_t need;
+    int xx;
+
+    /* we assume the token and header have been validated already! */
+
+    switch (token->type) {
+    case PTOK_NONE:
+	break;
+
+    case PTOK_STRING:
+	need = token->u.string.len;
+	if (need == 0) break;
+	t = hsaReserve(hsa, need);
+	te = stpcpy(t, token->u.string.string);
+	hsa->vallen += (te - t);
+	break;
+
+    case PTOK_TAG:
+	t = hsa->val + hsa->vallen;
+/*@-modobserver@*/	/* headerCompoundFormats not modified. */
+	te = formatValue(hsa, &token->u.tag,
+			(token->u.tag.justOne ? 0 : element));
+/*@=modobserver@*/
+	if (te == NULL)
+	    return NULL;
+	break;
+
+    case PTOK_COND:
+	if (token->u.cond.tag.ext
+	 || headerIsEntry(hsa->h, token->u.cond.tag.tagno))
+	{
+	    spft = token->u.cond.ifFormat;
+	    condNumFormats = token->u.cond.numIfTokens;
+	} else {
+	    spft = token->u.cond.elseFormat;
+	    condNumFormats = token->u.cond.numElseTokens;
+	}
+
+	need = condNumFormats * 20;
+	if (spft == NULL || need == 0) break;
+
+	t = hsaReserve(hsa, need);
+	for (i = 0; i < condNumFormats; i++, spft++) {
+/*@-modobserver@*/	/* headerCompoundFormats not modified. */
+	    te = singleSprintf(hsa, spft, element);
+/*@=modobserver@*/
+	    if (te == NULL)
+		return NULL;
+	}
+	break;
+
+    case PTOK_ARRAY:
+	numElements = 0;
+	spft = token->u.array.format;
+	for (i = 0; i < token->u.array.numTokens; i++, spft++)
+	{
+	    tag = &spft->u.tag;
+	    if (spft->type != PTOK_TAG || tag->arrayCount || tag->justOne)
+		continue;
+	    he = &tag->he;
+	    if (!he->avail) {
+		he->tag = tag->tagno;
+		if (tag->ext)
+		    xx = getExtension(hsa, tag->ext, he, hsa->ec + tag->extNum);
+		else
+		    xx = headerGet(hsa->h, he, 0);
+		if (!xx) {
+		    (void) rpmheClean(he);
+		    continue;
+		}
+		he->avail = 1;
+	    }
+
+	    /* Check iteration arrays are same dimension (or scalar). */
+	    switch (he->t) {
+	    default:
+		if (numElements == 0) {
+		    numElements = he->c;
+		    /*@switchbreak@*/ break;
+		}
+		if (he->c == numElements)
+		    /*@switchbreak@*/ break;
+		hsa->errmsg =
+			_("array iterator used with different sized arrays");
+		he = rpmheClean(he);
+		return NULL;
+		/*@notreached@*/ /*@switchbreak@*/ break;
+	    case RPM_BIN_TYPE:
+	    case RPM_STRING_TYPE:
+		if (numElements == 0)
+		    numElements = 1;
+		/*@switchbreak@*/ break;
+	    }
+	}
+	spft = token->u.array.format;
+
+	if (numElements == 0) {
+#ifdef	DYING	/* XXX lots of pugly "(none)" lines with --conflicts. */
+	    need = sizeof("(none)\n") - 1;
+	    t = hsaReserve(hsa, need);
+	    te = stpcpy(t, "(none)\n");
+	    hsa->vallen += (te - t);
+#endif
+	} else {
+	    int isxml;
+	    int isyaml;
+
+	    need = numElements * token->u.array.numTokens;
+	    if (need == 0) break;
+
+	    tag = &spft->u.tag;
+
+	    isxml = (spft->type == PTOK_TAG && tag->av != NULL &&
+		tag->av[0] != NULL && !strcmp(tag->av[0], "xml"));
+	    isyaml = (spft->type == PTOK_TAG && tag->av != NULL &&
+		tag->av[0] != NULL && !strcmp(tag->av[0], "yaml"));
+
+	    if (isxml) {
+		const char * tagN;
+		/* XXX display "Tag_0x01234567" for arbitrary tags. */
+		if (tag->tagno & 0x40000000) {
+		    (void) snprintf(numbuf, sizeof(numbuf), "Tag_0x%08x",
+				(unsigned) tag->tagno);
+		    numbuf[sizeof(numbuf)-1] = '\0';
+		    tagN = numbuf;
+		} else
+		    tagN = myTagName(hsa->tags, tag->tagno, NULL);
+		need = sizeof("  <rpmTag name=\"\">\n") + strlen(tagN);
+		te = t = hsaReserve(hsa, need);
+		te = stpcpy( stpcpy( stpcpy(te, "  <rpmTag name=\""), tagN), "\">\n");
+		hsa->vallen += (te - t);
+	    }
+	    if (isyaml) {
+		rpmTag tagT = 0;
+		const char * tagN;
+		/* XXX display "Tag_0x01234567" for arbitrary tags. */
+		if (tag->tagno & 0x40000000) {
+		    (void) snprintf(numbuf, sizeof(numbuf), "Tag_0x%08x",
+				(unsigned) tag->tagno);
+		    numbuf[sizeof(numbuf)-1] = '\0';
+		    tagN = numbuf;
+/*@-type@*/
+		    tagT = numElements > 1
+			?  RPM_ARRAY_RETURN_TYPE : RPM_SCALAR_RETURN_TYPE;
+/*@=type@*/
+		} else
+		    tagN = myTagName(hsa->tags, tag->tagno, &tagT);
+		need = sizeof("  :     - ") + strlen(tagN);
+		te = t = hsaReserve(hsa, need);
+		*te++ = ' ';
+		*te++ = ' ';
+		te = stpcpy(te, tagN);
+		*te++ = ':';
+/*@-type@*/
+		*te++ = (((tagT & RPM_MASK_RETURN_TYPE) == RPM_ARRAY_RETURN_TYPE)
+			? '\n' : ' ');
+/*@=type@*/
+		/* XXX Dirnames: in srpms need "    " indent */
+/*@-type@*/
+		if (((tagT & RPM_MASK_RETURN_TYPE) == RPM_ARRAY_RETURN_TYPE)
+		 && numElements == 1)
+/*@=type@*/
+		{
+		    te = stpcpy(te, "    ");
+		    if (tag->tagno != 1118)
+			te = stpcpy(te, "- ");
+		}
+		*te = '\0';
+		hsa->vallen += (te - t);
+	    }
+
+	    need = numElements * token->u.array.numTokens * 10;
+	    t = hsaReserve(hsa, need);
+	    for (j = 0; j < numElements; j++) {
+		spft = token->u.array.format;
+		for (i = 0; i < token->u.array.numTokens; i++, spft++) {
+/*@-modobserver@*/	/* headerCompoundFormats not modified. */
+		    te = singleSprintf(hsa, spft, j);
+/*@=modobserver@*/
+		    if (te == NULL)
+			return NULL;
+		}
+	    }
+
+	    if (isxml) {
+		need = sizeof("  </rpmTag>\n") - 1;
+		te = t = hsaReserve(hsa, need);
+		te = stpcpy(te, "  </rpmTag>\n");
+		hsa->vallen += (te - t);
+	    }
+	    if (isyaml) {
+#if 0
+		need = sizeof("\n") - 1;
+		te = t = hsaReserve(hsa, need);
+		te = stpcpy(te, "\n");
+		hsa->vallen += (te - t);
+#endif
+	    }
+
+	}
+	break;
+    }
+
+    return (hsa->val + hsa->vallen);
+}
+
+/**
+ * Create an extension cache.
+ * @param exts		headerSprintf extensions
+ * @retval *necp	no. of elements (or NULL)
+ * @return		new extension cache
+ */
+static /*@only@*/ HE_t
+rpmecNew(const headerSprintfExtension exts, /*@null@*/ int * necp)
+	/*@modifies *necp @*/
+{
+    headerSprintfExtension ext;
+    HE_t ec;
+    int extNum = 0;
+
+    if (exts != NULL)
+    for (ext = exts, extNum = 0; ext != NULL && ext->type != HEADER_EXT_LAST;
+	ext = (ext->type == HEADER_EXT_MORE ? *ext->u.more : ext+1), extNum++)
+    {
+	;
+    }
+    if (necp)
+	*necp = extNum;
+    ec = xcalloc(extNum+1, sizeof(*ec));	/* XXX +1 unnecessary */
+    return ec;
+}
+
+/**
+ * Destroy an extension cache.
+ * @param exts		headerSprintf extensions
+ * @param ec		extension cache
+ * @return		NULL always
+ */
+static /*@null@*/ HE_t
+rpmecFree(const headerSprintfExtension exts, /*@only@*/ HE_t ec)
+	/*@modifies ec @*/
+{
+    headerSprintfExtension ext;
+    int extNum;
+
+    for (ext = exts, extNum = 0; ext != NULL && ext->type != HEADER_EXT_LAST;
+	ext = (ext->type == HEADER_EXT_MORE ? *ext->u.more : ext+1), extNum++)
+    {
+	(void) rpmheClean(&ec[extNum]);
+    }
+
+    ec = _free(ec);
+    return NULL;
+}
+
+char * headerSprintf(Header h, const char * fmt,
+		headerTagTableEntry tags,
+		headerSprintfExtension exts,
+		errmsg_t * errmsg)
+{
+    headerSprintfArgs hsa = memset(alloca(sizeof(*hsa)), 0, sizeof(*hsa));
+    sprintfToken nextfmt;
+    sprintfTag tag;
+    char * t, * te;
+    int isxml;
+    int isyaml;
+    int need;
+
+/*@-modfilesys@*/
+if (_hdr_debug)
+fprintf(stderr, "==> headerSprintf(%p, \"%s\", %p, %p, %p)\n", h, fmt, tags, exts, errmsg);
+/*@=modfilesys@*/
+
+    /* Set some reasonable defaults */
+    if (tags == NULL)
+	tags = rpmTagTable;
+    /* XXX this loses the extensions in lib/formats.c. */
+    if (exts == NULL)
+	exts = headerCompoundFormats;
+ 
+    hsa->h = headerLink(h);
+    hsa->fmt = xstrdup(fmt);
+/*@-assignexpose -dependenttrans@*/
+    hsa->exts = exts;
+    hsa->tags = tags;
+/*@=assignexpose =dependenttrans@*/
+    hsa->errmsg = NULL;
+
+    if (parseFormat(hsa, hsa->fmt, &hsa->format, &hsa->numTokens, NULL, PARSER_BEGIN))
+	goto exit;
+
+    hsa->nec = 0;
+    hsa->ec = rpmecNew(hsa->exts, &hsa->nec);
+    hsa->val = xstrdup("");
+
+    tag =
+	(hsa->format->type == PTOK_TAG
+	    ? &hsa->format->u.tag :
+	(hsa->format->type == PTOK_ARRAY
+	    ? &hsa->format->u.array.format->u.tag :
+	NULL));
+    isxml = (tag != NULL && tag->tagno == (rpmTag)-2 && tag->av != NULL
+		&& tag->av[0] != NULL && !strcmp(tag->av[0], "xml"));
+    isyaml = (tag != NULL && tag->tagno == (rpmTag)-2 && tag->av != NULL
+		&& tag->av[0] != NULL && !strcmp(tag->av[0], "yaml"));
+
+    if (isxml) {
+	need = sizeof("<rpmHeader>\n") - 1;
+	t = hsaReserve(hsa, need);
+	te = stpcpy(t, "<rpmHeader>\n");
+	hsa->vallen += (te - t);
+    }
+    if (isyaml) {
+	need = sizeof("- !!omap\n") - 1;
+	t = hsaReserve(hsa, need);
+	te = stpcpy(t, "- !!omap\n");
+	hsa->vallen += (te - t);
+    }
+
+    hsa = hsaInit(hsa);
+    while ((nextfmt = hsaNext(hsa)) != NULL) {
+/*@-modobserver@*/	/* headerCompoundFormats not modified. */
+	te = singleSprintf(hsa, nextfmt, 0);
+/*@=modobserver@*/
+	if (te == NULL) {
+	    hsa->val = _free(hsa->val);
+	    break;
+	}
+    }
+    hsa = hsaFini(hsa);
+
+    if (isxml) {
+	need = sizeof("</rpmHeader>\n") - 1;
+	t = hsaReserve(hsa, need);
+	te = stpcpy(t, "</rpmHeader>\n");
+	hsa->vallen += (te - t);
+    }
+    if (isyaml) {
+	need = sizeof("\n") - 1;
+	t = hsaReserve(hsa, need);
+	te = stpcpy(t, "\n");
+	hsa->vallen += (te - t);
+    }
+
+    if (hsa->val != NULL && hsa->vallen < hsa->alloced)
+	hsa->val = xrealloc(hsa->val, hsa->vallen+1);	
+
+    hsa->ec = rpmecFree(hsa->exts, hsa->ec);
+    hsa->nec = 0;
+    hsa->format = freeFormat(hsa->format, hsa->numTokens);
+
+exit:
+/*@-dependenttrans -observertrans @*/
+    if (errmsg)
+	*errmsg = hsa->errmsg;
+/*@=dependenttrans =observertrans @*/
+    hsa->h = headerFree(hsa->h);
+    hsa->fmt = _free(hsa->fmt);
+/*@-retexpose@*/
+    return hsa->val;
+/*@=retexpose@*/
+}

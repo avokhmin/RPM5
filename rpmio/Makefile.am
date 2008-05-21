@@ -4,9 +4,9 @@ AUTOMAKE_OPTIONS = 1.4 foreign
 
 LINT = splint
 
-EXTRA_DIST = tax.c tdir.c tfts.c tget.c thkp.c tput.c tglob.c tinv.c tkey.c trpmio.c lookup3.c tpw.c librpmio.vers
+EXTRA_DIST = gengpg.sh tdir.c tfts.c tget.c thkp.c tput.c tglob.c tinv.c tkey.c trpmio.c lookup3.c tpw.c librpmio.vers
 
-EXTRA_PROGRAMS = tax tdir tfts tget thkp tmacro tput tglob tinv tkey tmagic trpmio tsw dumpasn1 lookup3 tpw
+EXTRA_PROGRAMS = tdir tfts tget thkp tmacro tput tglob tinv tkey tmagic trpmio tsw dumpasn1 lookup3 tpw
 
 AM_CPPFLAGS = \
 	-I$(srcdir) \
@@ -19,7 +19,8 @@ AM_CPPFLAGS = \
 	@WITH_DB_CPPFLAGS@ \
 	@WITH_ZLIB_CPPFLAGS@ \
 	@WITH_LUA_CPPFLAGS@ \
-	@WITH_FILE_CPPFLAGS@
+	@WITH_FILE_CPPFLAGS@ \
+	@WITH_XAR_CPPFLAGS@
 
 RPM_LDADD = \
 	$(top_builddir)/build/librpmbuild.la \
@@ -31,26 +32,25 @@ RPM_LDADD = \
 
 pkgincdir = $(pkgincludedir)$(WITH_PATH_VERSIONED_SUFFIX)
 pkginc_HEADERS = \
-	argv.h envvar.h fts.h mire.h rpmdav.h rpmhash.h \
-	rpmio-stub.h rpmmg.h \
-	rpmio.h rpmurl.h rpmmacro.h rpmlog.h rpmmessages.h rpmerr.h rpmpgp.h \
-	rpmsq.h rpmsw.h ugid.h
+	argv.h envvar.h fts.h mire.h rpmbc.h rpmcb.h rpmdav.h \
+	rpmhash.h rpmio.h rpmio-stub.h rpmlog.h rpmmacro.h rpmmg.h \
+	rpmnss.h rpmpgp.h rpmsq.h rpmssl.h rpmsw.h rpmurl.h rpmxar.h \
+	stringbuf.h ugid.h rpmuuid.h
 noinst_HEADERS = \
 	md2.h md4.h rmd128.h rmd160.h rmd256.h rmd320.h sha224.h \
 	salsa10.h salsa20.h tiger.h \
-	LzmaDecode.h rpmio_internal.h rpmlua.h rpmhook.h
+	LzmaDecode.h rpmhook.h rpmio_internal.h rpmlua.h
 
 usrlibdir = $(libdir)
 usrlib_LTLIBRARIES = librpmio.la
 librpmio_la_SOURCES = \
 	argv.c digest.c fts.c getpass.c macro.c mire.c mount.c \
 	md2.c md4.c rmd128.c rmd160.c rmd256.c rmd320.c sha224.c \
-	salsa10.c salsa20.c tiger.c \
-	rpmio-stub.c rpmmg.c \
-	rpmdav.c rpmhash.c rpmhook.c rpmio.c rpmlog.c rpmlua.c rpmmalloc.c \
-	rpmpgp.c rpmrpc.c rpmsq.c rpmsw.c strcasecmp.c strtolocale.c \
-	url.c ugid.c \
-	LzmaDecode.c
+	salsa10.c salsa20.c tiger.c LzmaDecode.c \
+	rpmbc.c rpmdav.c rpmhash.c rpmhook.c rpmio.c rpmio-stub.c \
+	rpmlog.c rpmlua.c rpmmalloc.c rpmmg.c rpmnss.c rpmpgp.c \
+	rpmrpc.c rpmsq.c rpmssl.c rpmsw.c rpmxar.c \
+	strcasecmp.c stringbuf.c strtolocale.c url.c ugid.c rpmuuid.c
 librpmio_la_LDFLAGS = -release $(LT_CURRENT).$(LT_REVISION)
 if HAVE_LD_VERSION_SCRIPT
 librpmio_la_LDFLAGS += -Wl,--version-script=$(srcdir)/librpmio.vers
@@ -96,9 +96,6 @@ sources:
 lint:
 	$(LINT) $(DEFS) $(INCLUDES) $(librpmio_la_SOURCES)
 
-tax_SOURCES = tax.c
-tax_LDADD = $(RPM_LDADD)
-
 tdir_SOURCES = tdir.c
 tdir_LDADD = $(RPM_LDADD)
 
@@ -128,8 +125,12 @@ tglob_LDADD = $(RPM_LDADD)
 tinv_SOURCES = tinv.c
 tinv_LDADD = $(RPM_LDADD)
 
-tkey_SOURCES = tkey.c
-tkey_LDADD = $(RPM_LDADD)
+tkey_SOURCES = gengpg.h tkey.c rpmgc.c rpmnss.c rpmssl.c
+tkey_CFLAGS  = $(CFLAGS)
+tkey_LDADD = $(RPM_LDADD) -lgcrypt
+
+gengpg.h:
+	-sh ./gengpg.sh > gengpg.h
 
 trpmio_SOURCES = trpmio.c
 trpmio_LDADD = $(RPM_LDADD)
