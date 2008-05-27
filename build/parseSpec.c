@@ -5,7 +5,8 @@
 
 #include "system.h"
 
-#include <rpmio_internal.h>
+#include <rpmio_internal.h>	/* XXX fdGetFp */
+#define	_RPMTAG_INTERNAL	/* XXX rpmTags->aTags */
 #include <rpmbuild.h>
 #include "rpmds.h"
 #include "rpmts.h"
@@ -17,8 +18,8 @@
  */
 /*@unchecked@*/
 static struct PartRec {
-    int part;
-    int len;
+    rpmParseState part;
+    size_t len;
 /*@observer@*/ /*@null@*/
     const char * token;
 } partList[] = {
@@ -43,6 +44,7 @@ static struct PartRec {
     { PART_TRIGGERIN,     0, "%triggerin"},
     { PART_TRIGGERIN,     0, "%trigger"},
     { PART_VERIFYSCRIPT,  0, "%verifyscript"},
+    { PART_SANITYCHECK,	  0, "%sanitycheck"},	/* support "%sanitycheck" scriptlet */
     {0, 0, 0}
 };
 
@@ -55,27 +57,55 @@ static inline void initParts(struct PartRec *p)
 	p->len = strlen(p->token);
 }
 
-rpmParseState isPart(const char *line)
+rpmParseState isPart(Spec spec)
 {
+    const char * line = spec->line;
     struct PartRec *p;
+    rpmParseState nextPart = PART_NONE;	/* assume failure */
 
-/*@-boundsread@*/
     if (partList[0].len == 0)
 	initParts(partList);
-/*@=boundsread@*/
     
     for (p = partList; p->token != NULL; p++) {
 	char c;
 	if (xstrncasecmp(line, p->token, p->len))
 	    continue;
-/*@-boundsread@*/
 	c = *(line + p->len);
-/*@=boundsread@*/
-	if (c == '\0' || xisspace(c))
+	if (c == '\0' || xisspace(c)) {
+	    nextPart = p->part;
 	    break;
+	}
     }
 
-    return (p->token ? p->part : PART_NONE);
+    /* If %foo is not found explictly, check for an arbitrary %foo tag. */
+    if (nextPart == PART_NONE) {
+	ARGV_t aTags = NULL;
+	const char * s;
+/*@-noeffect@*/
+        (void) tagName(0); /* XXX force arbitrary tags to be initialized. */
+/*@=noeffect@*/
+        aTags = rpmTags->aTags;
+        if (aTags != NULL && aTags[0] != NULL) {
+            ARGV_t av;
+            s = tagCanonicalize(line+1);	/* XXX +1 to skip leading '%' */
+#if defined(RPM_VENDOR_OPENPKG) /* wildcard-matching-arbitrary-tagnames */
+            av = argvSearchLinear(aTags, s, argvFnmatchCasefold);
+#else
+            av = argvSearch(aTags, s, argvStrcasecmp);
+#endif
+            if (av != NULL) {
+		spec->foo = xrealloc(spec->foo, (spec->nfoo + 1) * sizeof(*spec->foo));
+		spec->foo[spec->nfoo].str = xstrdup(s);
+		spec->foo[spec->nfoo].tag = tagGenerate(s);
+		spec->foo[spec->nfoo].val = NULL;
+		spec->nfoo++;
+                nextPart = PART_ARBITRARY;
+	    }
+            s = _free(s);
+        }
+    }
+
+    return nextPart;
 }
 
 /**
@@ -87,7 +117,6 @@ static int matchTok(const char *token, const char *line)
     size_t toklen = strlen(token);
     int rc = 0;
 
-/*@-boundsread@*/
     while ( *(b = be) != '\0' ) {
 	SKIPSPACE(b);
 	be = b;
@@ -99,19 +128,16 @@ static int matchTok(const char *token, const char *line)
 	rc = 1;
 	break;
     }
-/*@=boundsread@*/
 
     return rc;
 }
 
-/*@-boundswrite@*/
 void handleComments(char *s)
 {
     SKIPSPACE(s);
     if (*s == '#')
 	*s = '\0';
 }
-/*@=boundswrite@*/
 
 /**
  */
@@ -128,22 +154,29 @@ static void forceIncludeFile(Spec spec, const char * fileName)
 
 /**
  */
-/*@-boundswrite@*/
-static int copyNextLine(Spec spec, OFI_t *ofi, int strip)
+static int restoreFirstChar(Spec spec)
+	/*@*/
+{
+    /* Restore 1st char in (possible) next line */
+    if (spec->nextline != NULL && spec->nextpeekc != '\0') {
+	*spec->nextline = spec->nextpeekc;
+	spec->nextpeekc = '\0';
+	return 1;
+    }
+    return 0;
+}
+
+/**
+ */
+static int copyNextLineFromOFI(Spec spec, OFI_t * ofi)
 	/*@globals rpmGlobalMacroContext, h_errno,
 		fileSystem @*/
 	/*@modifies spec->nextline, spec->nextpeekc, spec->lbuf, spec->line,
 		ofi->readPtr,
 		rpmGlobalMacroContext, fileSystem @*/
 {
-    char *last;
     char ch;
 
-    /* Restore 1st char in (possible) next line */
-    if (spec->nextline != NULL && spec->nextpeekc != '\0') {
-	*spec->nextline = spec->nextpeekc;
-	spec->nextpeekc = '\0';
-    }
     /* Expand next line from file into line buffer */
     if (!(spec->nextline && *spec->nextline)) {
 	int pc = 0, bc = 0, nc = 0;
@@ -190,7 +223,7 @@ static int copyNextLine(Spec spec, OFI_t *ofi, int strip)
 /*@-observertrans -readonlytrans@*/
 	    spec->nextline = "";
 /*@=observertrans =readonlytrans@*/
-	    return RPMERR_UNMATCHEDIF;
+	    return RPMRC_FAIL;
 	}
 /*@-mods@*/
 	spec->lbufPtr = spec->lbuf;
@@ -198,13 +231,22 @@ static int copyNextLine(Spec spec, OFI_t *ofi, int strip)
 
 	/* Don't expand macros (eg. %define) in false branch of %if clause */
 	if (spec->readStack->reading &&
-	    expandMacros(spec, spec->macros, spec->lbuf, sizeof(spec->lbuf))) {
-		rpmError(RPMERR_BADSPEC, _("line %d: %s\n"),
+	    expandMacros(spec, spec->macros, spec->lbuf, spec->lbuf_len)) {
+		rpmlog(RPMLOG_ERR, _("line %d: %s\n"),
 			spec->lineNum, spec->lbuf);
-		return RPMERR_BADSPEC;
+		return RPMRC_FAIL;
 	}
 	spec->nextline = spec->lbuf;
     }
+    return 0;
+}
+
+/**
+ */
+static int copyNextLineFinish(Spec spec, int strip)
+{
+    char *last;
+    char ch;
 
     /* Find next line in expanded line buffer */
     spec->line = last = spec->nextline;
@@ -229,35 +271,24 @@ static int copyNextLine(Spec spec, OFI_t *ofi, int strip)
 
     return 0;
 }
-/*@=boundswrite@*/
 
-/*@-boundswrite@*/
-int readLine(Spec spec, int strip)
+/**
+ */
+static int readLineFromOFI(Spec spec, OFI_t *ofi)
+	/*@modifies spec, ofi @*/
 {
-#ifdef	DYING
-    const char *arch;
-    const char *os;
-#endif
-    char  *s;
-    int match;
-    struct ReadLevelEntry *rl;
-    OFI_t *ofi = spec->fileStack;
-    int rc;
-
 retry:
     /* Make sure the current file is open */
-    /*@-branchstate@*/
     if (ofi->fd == NULL) {
 	ofi->fd = Fopen(ofi->fileName, "r.fpio");
 	if (ofi->fd == NULL || Ferror(ofi->fd)) {
 	    /* XXX Fstrerror */
-	    rpmError(RPMERR_BADSPEC, _("Unable to open %s: %s\n"),
+	    rpmlog(RPMLOG_ERR, _("Unable to open %s: %s\n"),
 		     ofi->fileName, Fstrerror(ofi->fd));
-	    return RPMERR_BADSPEC;
+	    return RPMRC_FAIL;
 	}
 	spec->lineNum = ofi->lineNum = 0;
     }
-    /*@=branchstate@*/
 
     /* Make sure we have something in the read buffer */
     if (!(ofi->readPtr && *(ofi->readPtr))) {
@@ -267,8 +298,8 @@ retry:
 	if (f == NULL || !fgets(ofi->readBuf, BUFSIZ, f)) {
 	    /* EOF */
 	    if (spec->readStack->next) {
-		rpmError(RPMERR_UNMATCHEDIF, _("Unclosed %%if\n"));
-	        return RPMERR_UNMATCHEDIF;
+		rpmlog(RPMLOG_ERR, _("Unclosed %%if\n"));
+	        return RPMRC_FAIL;
 	    }
 
 	    /* remove this file from the stack */
@@ -298,13 +329,32 @@ retry:
 	    sl->sl_lines[sl->sl_nlines++] = xstrdup(ofi->readBuf);
 	}
     }
-    
-    /* Copy next file line into the spec line buffer */
-    if ((rc = copyNextLine(spec, ofi, strip)) != 0) {
-	if (rc == RPMERR_UNMATCHEDIF)
+    return 0;
+}
+
+int readLine(Spec spec, int strip)
+{
+    char  *s;
+    int match;
+    struct ReadLevelEntry *rl;
+    OFI_t *ofi = spec->fileStack;
+    int rc;
+
+    if (!restoreFirstChar(spec)) {
+    retry:
+      if ((rc = readLineFromOFI(spec, ofi)) != 0)
+        return rc;
+
+      /* Copy next file line into the spec line buffer */
+
+      if ((rc = copyNextLineFromOFI(spec, ofi)) != 0) {
+	if (rc == RPMRC_FAIL)
 	    goto retry;
 	return rc;
+      }
     }
+
+    copyNextLineFinish(spec, strip);
 
     s = spec->line;
     SKIPSPACE(s);
@@ -336,19 +386,19 @@ retry:
 	s += 3;
         match = parseExpressionBoolean(spec, s);
 	if (match < 0) {
-	    rpmError(RPMERR_UNMATCHEDIF,
+	    rpmlog(RPMLOG_ERR,
 			_("%s:%d: parseExpressionBoolean returns %d\n"),
 			ofi->fileName, ofi->lineNum, match);
-	    return RPMERR_BADSPEC;
+	    return RPMRC_FAIL;
 	}
     } else if (! strncmp("%else", s, sizeof("%else")-1)) {
 	s += 5;
 	if (! spec->readStack->next) {
 	    /* Got an else with no %if ! */
-	    rpmError(RPMERR_UNMATCHEDIF,
+	    rpmlog(RPMLOG_ERR,
 			_("%s:%d: Got a %%else with no %%if\n"),
 			ofi->fileName, ofi->lineNum);
-	    return RPMERR_UNMATCHEDIF;
+	    return RPMRC_FAIL;
 	}
 	spec->readStack->reading =
 	    spec->readStack->next->reading && ! spec->readStack->reading;
@@ -357,10 +407,10 @@ retry:
 	s += 6;
 	if (! spec->readStack->next) {
 	    /* Got an end with no %if ! */
-	    rpmError(RPMERR_UNMATCHEDIF,
+	    rpmlog(RPMLOG_ERR,
 			_("%s:%d: Got a %%endif with no %%if\n"),
 			ofi->fileName, ofi->lineNum);
-	    return RPMERR_UNMATCHEDIF;
+	    return RPMRC_FAIL;
 	}
 	rl = spec->readStack;
 	spec->readStack = spec->readStack->next;
@@ -372,8 +422,8 @@ retry:
 	s += 8;
 	fileName = s;
 	if (! xisspace(*fileName)) {
-	    rpmError(RPMERR_BADSPEC, _("malformed %%include statement\n"));
-	    return RPMERR_BADSPEC;
+	    rpmlog(RPMLOG_ERR, _("malformed %%include statement\n"));
+	    return RPMRC_FAIL;
 	}
 	SKIPSPACE(fileName);
 	endFileName = fileName;
@@ -381,8 +431,8 @@ retry:
 	p = endFileName;
 	SKIPSPACE(p);
 	if (*p != '\0') {
-	    rpmError(RPMERR_BADSPEC, _("malformed %%include statement\n"));
-	    return RPMERR_BADSPEC;
+	    rpmlog(RPMLOG_ERR, _("malformed %%include statement\n"));
+	    return RPMRC_FAIL;
 	}
 	*endFileName = '\0';
 
@@ -408,7 +458,6 @@ retry:
     return 0;
     /*@=compmempass@*/
 }
-/*@=boundswrite@*/
 
 void closeSpec(Spec spec)
 {
@@ -423,21 +472,44 @@ void closeSpec(Spec spec)
     }
 }
 
+/**
+ */
+static inline int genSourceRpmName(Spec spec)
+	/*@modifies spec->sourceRpmName, spec->packages->header @*/
+{
+    if (spec->sourceRpmName == NULL) {
+	const char *N, *V, *R;
+	char fileName[BUFSIZ];
+
+	(void) headerNEVRA(spec->packages->header, &N, NULL, &V, &R, NULL);
+	(void) snprintf(fileName, sizeof(fileName), "%s-%s-%s.%ssrc.rpm",
+			N, V, R, spec->noSource ? "no" : "");
+	fileName[sizeof(fileName)-1] = '\0';
+	N = _free(N);
+	V = _free(V);
+	R = _free(R);
+	spec->sourceRpmName = xstrdup(fileName);
+    }
+
+    return 0;
+}
+
 /*@-redecl@*/
 /*@unchecked@*/
 extern int noLang;		/* XXX FIXME: pass as arg */
 /*@=redecl@*/
 
 /*@todo Skip parse recursion if os is not compatible. @*/
-/*@-boundswrite@*/
 int parseSpec(rpmts ts, const char *specFile, const char *rootURL,
 		int recursing, const char *passPhrase,
 		const char *cookie, int anyarch, int force, int verify)
 {
+    HE_t he = memset(alloca(sizeof(*he)), 0, sizeof(*he));
     rpmParseState parsePart = PART_PREAMBLE;
     int initialPackage = 1;
     Package pkg;
     Spec spec;
+    int xx;
     
     /* Set up a new Spec structure with no packages. */
     spec = newSpec();
@@ -474,8 +546,12 @@ int parseSpec(rpmts ts, const char *specFile, const char *rootURL,
     /* which handles the initial entry into a spec file.         */
     
     /*@-infloops@*/	/* LCL: parsePart is modified @*/
-    while (parsePart < PART_LAST && parsePart != PART_NONE) {
+    while (parsePart > PART_NONE) {
+	int goterror = 0;
 	switch (parsePart) {
+	default:
+	    goterror = 1;
+	    /*@switchbreak@*/ break;
 	case PART_PREAMBLE:
 	    parsePart = parsePreamble(spec, initialPackage);
 	    initialPackage = 0;
@@ -487,6 +563,7 @@ int parseSpec(rpmts ts, const char *specFile, const char *rootURL,
 	case PART_INSTALL:
 	case PART_CHECK:
 	case PART_CLEAN:
+	case PART_ARBITRARY:
 	    parsePart = parseBuildInstallClean(spec, parsePart);
 	    /*@switchbreak@*/ break;
 	case PART_CHANGELOG:
@@ -503,6 +580,7 @@ int parseSpec(rpmts ts, const char *specFile, const char *rootURL,
 	case PART_PRETRANS:
 	case PART_POSTTRANS:
 	case PART_VERIFYSCRIPT:
+	case PART_SANITYCHECK:
 	case PART_TRIGGERPREIN:
 	case PART_TRIGGERIN:
 	case PART_TRIGGERUN:
@@ -520,7 +598,7 @@ int parseSpec(rpmts ts, const char *specFile, const char *rootURL,
 	    /*@switchbreak@*/ break;
 	}
 
-	if (parsePart >= PART_LAST) {
+	if (goterror || parsePart >= PART_LAST) {
 	    spec = freeSpec(spec);
 	    return parsePart;
 	}
@@ -549,7 +627,7 @@ int parseSpec(rpmts ts, const char *specFile, const char *rootURL,
 			spec->BACount = index;
 /*@-nullstate@*/
 			spec = freeSpec(spec);
-			return RPMERR_BADSPEC;
+			return RPMRC_FAIL;
 /*@=nullstate@*/
 		}
 
@@ -560,11 +638,11 @@ int parseSpec(rpmts ts, const char *specFile, const char *rootURL,
 
 	    spec->BACount = index;
 	    if (! index) {
-		rpmError(RPMERR_BADSPEC,
+		rpmlog(RPMLOG_ERR,
 			_("No compatible architectures found for build\n"));
 /*@-nullstate@*/
 		spec = freeSpec(spec);
-		return RPMERR_BADSPEC;
+		return RPMRC_FAIL;
 /*@=nullstate@*/
 	    }
 
@@ -577,20 +655,21 @@ int parseSpec(rpmts ts, const char *specFile, const char *rootURL,
 	     * further problem that the macro context, particularly
 	     * %{_target_cpu}, disagrees with the info in the header.
 	     */
-	    /*@-branchstate@*/
 	    if (spec->BACount >= 1) {
 		Spec nspec = spec->BASpecs[0];
 		spec->BASpecs = _free(spec->BASpecs);
 		spec = freeSpec(spec);
 		spec = nspec;
 	    }
-	    /*@=branchstate@*/
 
 	    (void) rpmtsSetSpec(ts, spec);
 	    return 0;
 	}
     }
     /*@=infloops@*/	/* LCL: parsePart is modified @*/
+
+    /* Initialize source RPM name. */
+    (void) genSourceRpmName(spec);
 
     /* Check for description in each package and add arch and os */
   {
@@ -599,22 +678,39 @@ int parseSpec(rpmts ts, const char *specFile, const char *rootURL,
     const char *os = rpmExpand("%{_target_os}", NULL);
 
     for (pkg = spec->packages; pkg != NULL; pkg = pkg->next) {
-	if (!headerIsEntry(pkg->header, RPMTAG_DESCRIPTION)) {
-	    const char * NVRA = NULL;
-	    (void) headerGetExtension(pkg->header, RPMTAG_NVRA,
-			NULL, &NVRA, NULL);
-	    rpmError(RPMERR_BADSPEC, _("Package has no %%description: %s\n"),
-			NVRA);
-	    NVRA = _free(NVRA);
-	    spec = freeSpec(spec);
-	    return RPMERR_BADSPEC;
-	}
+	he->tag = RPMTAG_OS;
+	he->t = RPM_STRING_TYPE;
+	he->p.str = os;
+	he->c = 1;
+	xx = headerPut(pkg->header, he, 0);
 
-	(void) headerAddEntry(pkg->header, RPMTAG_OS, RPM_STRING_TYPE, os, 1);
-	(void) headerAddEntry(pkg->header, RPMTAG_ARCH,
-		RPM_STRING_TYPE, arch, 1);
-	(void) headerAddEntry(pkg->header, RPMTAG_PLATFORM,
-		RPM_STRING_TYPE, platform, 1);
+	he->tag = RPMTAG_ARCH;
+	he->t = RPM_STRING_TYPE;
+	he->p.str = arch;
+	he->c = 1;
+	xx = headerPut(pkg->header, he, 0);
+
+	he->tag = RPMTAG_PLATFORM;
+	he->t = RPM_STRING_TYPE;
+	he->p.str = platform;
+	he->c = 1;
+	xx = headerPut(pkg->header, he, 0);
+
+	he->tag = RPMTAG_SOURCERPM;
+	he->t = RPM_STRING_TYPE;
+	he->p.str = spec->sourceRpmName;
+	he->c = 1;
+	xx = headerPut(pkg->header, he, 0);
+
+	if (!headerIsEntry(pkg->header, RPMTAG_DESCRIPTION)) {
+	    he->tag = RPMTAG_NVRA;
+	    xx = headerGet(pkg->header, he, 0);
+	    rpmlog(RPMLOG_ERR, _("Package has no %%description: %s\n"),
+			he->p.str);
+	    he->p.ptr = _free(he->p.ptr);
+	    spec = freeSpec(spec);
+	    return RPMRC_FAIL;
+	}
 
 	pkg->ds = rpmdsThis(pkg->header, RPMTAG_REQUIRENAME, RPMSENSE_EQUAL);
 
@@ -630,4 +726,3 @@ int parseSpec(rpmts ts, const char *specFile, const char *rootURL,
 
     return 0;
 }
-/*@=boundswrite@*/
