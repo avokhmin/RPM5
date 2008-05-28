@@ -7,11 +7,13 @@ AM_CPPFLAGS = -I. \
 	-I$(top_srcdir)/lib \
 	-I$(top_srcdir)/rpmdb \
 	-I$(top_srcdir)/rpmio \
-	-I$(top_srcdir)/misc
+	-I$(top_srcdir)/misc \
+	@WITH_DB_CPPFLAGS@ \
+	@WITH_XAR_CPPFLAGS@
 
 EXTRA_DIST =	hashtab.h
 
-EXTRA_PROGRAMS = debugedit rpmkey txar
+EXTRA_PROGRAMS = debugedit rpmkey rpmrepo txar
 
 myLDADD = \
 	$(top_builddir)/build/librpmbuild.la \
@@ -20,6 +22,8 @@ myLDADD = \
 	$(top_builddir)/rpmio/librpmio.la \
 	$(top_builddir)/misc/librpmmisc.la \
 	@LTLIBINTL@
+
+bin_PROGRAMS =		rpm2cpio
 
 pkglibdir =		@USRLIBRPM@
 pkglib_PROGRAMS =	rpmcache rpmcmp rpmdeps rpmdigest @WITH_LIBELF_DEBUGEDIT@
@@ -39,6 +43,15 @@ rpmdeps_LDADD =		$(myLDADD)
 rpmdigest_SOURCES =	rpmdigest.c
 rpmdigest_LDADD =	$(myLDADD)
 
+rpmrepo_SOURCES =	rpmrepo.c
+rpmrepo_LDADD =		$(myLDADD)
+
+##
+## Traditional rpm2cpio
+##
+rpm2cpio_SOURCES =	rpm2cpio.c
+rpm2cpio_LDADD =	$(myLDADD)
+
 ##
 ##  keyctl(1) clone
 ##
@@ -46,10 +59,11 @@ rpmkey_SOURCES =        rpmkey.c
 rpmkey_LDADD =          $(myLDADD) -lkeyutils
 
 ##
-## XAR package format work-in-progress.
+## XAR <-> RPM package converter
 ##
 txar_SOURCES =		txar.c
-txar_LDADD =		$(myLDADD) -lxar
+txar_LDADD =		$(myLDADD) @WITH_XAR_LDFLAGS@
+txar_LIBS =		@WITH_XAR_LIBS@
 
 ##
 ##  provide Berkeley-DB tools
