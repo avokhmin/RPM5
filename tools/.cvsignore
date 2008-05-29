@@ -5,9 +5,11 @@ Makefile
 Makefile.in
 convertdb1
 debugedit
+rpm2cpio
 rpmcache
 rpmcmp
 rpmdeps
 rpmdigest
+rpmrepo
 db_tool
 txar
