@@ -9,7 +9,7 @@
 
 #include "debug.h"
 
-/*@-bounds@*/
+/*@access FD_t @*/		/* XXX fdGetFILE() */
 
 void argvPrint(const char * msg, ARGV_t argv, FILE * fp)
 {
@@ -40,11 +40,9 @@ ARGV_t argvFree(/*@only@*/ /*@null@*/ ARGV_t argv)
 {
     ARGV_t av;
     
-/*@-branchstate@*/
     if (argv)
     for (av = argv; *av; av++)
 	*av = _free(*av);
-/*@=branchstate@*/
     argv = _free(argv);
     return NULL;
 }
@@ -83,12 +81,33 @@ ARGV_t argvData(ARGV_t argv)
 
 int argvCmp(const void * a, const void * b)
 {
-/*@-boundsread@*/
     ARGstr_t astr = *(ARGV_t)a;
     ARGstr_t bstr = *(ARGV_t)b;
-/*@=boundsread@*/
     return strcmp(astr, bstr);
 }
+
+int argvStrcasecmp(const void * a, const void * b)
+{
+    ARGstr_t astr = *(ARGV_t)a;
+    ARGstr_t bstr = *(ARGV_t)b;
+    return xstrcasecmp(astr, bstr);
+}
+
+#if defined(RPM_VENDOR_OPENPKG) /* wildcard-matching-arbitrary-tagnames */
+int argvFnmatch(const void * a, const void * b)
+{
+    ARGstr_t astr = *(ARGV_t)a;
+    ARGstr_t bstr = *(ARGV_t)b;
+    return (fnmatch(astr, bstr, 0) == 0 ? 0 : 1);
+}
+
+int argvFnmatchCasefold(const void * a, const void * b)
+{
+    ARGstr_t astr = *(ARGV_t)a;
+    ARGstr_t bstr = *(ARGV_t)b;
+    return (fnmatch(astr, bstr, FNM_CASEFOLD) == 0 ? 0 : 1);
+}
+#endif
 
 int argvSort(ARGV_t argv, int (*compar)(const void *, const void *))
 {
@@ -107,6 +126,27 @@ ARGV_t argvSearch(ARGV_t argv, ARGstr_t val,
 	compar = argvCmp;
     return bsearch(&val, argv, argvCount(argv), sizeof(*argv), compar);
 }
+
+#if defined(RPM_VENDOR_OPENPKG) /* wildcard-matching-arbitrary-tagnames */
+ARGV_t argvSearchLinear(ARGV_t argv, ARGstr_t val,
+		int (*compar)(const void *, const void *))
+{
+    ARGV_t result;
+    ARGV_t av;
+    if (argv == NULL)
+        return NULL;
+    if (compar == NULL)
+        compar = argvCmp;
+    result = NULL;
+    for (av = argv; *av != NULL; av++) {
+        if (compar(av, &val) == 0) {
+            result = av;
+            break;
+        }
+    }
+    return result;
+}
+#endif
 
 int argiAdd(/*@out@*/ ARGI_t * argip, int ix, int val)
 {
@@ -174,22 +214,22 @@ int argvSplit(ARGV_t * argvp, const char * str, const char * seps)
     if (seps == NULL)
 	seps = whitespace;
 
-    for (argc = 1, s = str, t = dest; (c = *s); s++, t++) {
-	if (strchr(seps, c)) {
+    for (argc = 1, s = str, t = dest; (c = (int) *s); s++, t++) {
+	if (strchr(seps, c) && !(s[0] == ':' && s[1] == '/' && s[2] == '/')) {
 	    argc++;
-	    c = '\0';
+	    c = (int) '\0';
 	}
-	*t = c;
+	*t = (char) c;
     }
     *t = '\0';
 
     argv = xmalloc( (argc + 1) * sizeof(*argv));
 
-    for (c = 0, s = dest; s < t; s+= strlen(s) + 1) {
-	if (*s == '\0')
+    for (c = 0, s = dest; s < t; s += strlen(s) + 1) {
+	/* XXX Skip repeated seperators (i.e. whitespace). */
+	if (seps == whitespace && s[0] == '\0')
 	    continue;
-	argv[c] = xstrdup(s);
-	c++;
+	argv[c++] = xstrdup(s);
     }
     argv[c] = NULL;
     *argvp = argv;
@@ -232,9 +272,10 @@ int argvFgets(ARGV_t * argvp, void * fd)
 
     if (fp == NULL)
 	return -2;
-    while (!rc && (b = fgets(buf, sizeof(buf), fp)) != NULL) {
+    while (!rc && (b = fgets(buf, (int)sizeof(buf), fp)) != NULL) {
 	buf[sizeof(buf)-1] = '\0';
-	be = b + strlen(buf) - 1;
+	be = b + strlen(buf);
+	if (be > b) be--;
 	while (strchr("\r\n", *be) != NULL)
 	    *be-- = '\0';
 	rc = argvAdd(&av, b);
@@ -249,7 +290,7 @@ int argvFgets(ARGV_t * argvp, void * fd)
     else
 	av = argvFree(av);
     
+/*@-nullstate@*/	/* XXX *argvp may be NULL. */
     return rc;
+/*@=nullstate@*/
 }
-
-/*@=bounds@*/

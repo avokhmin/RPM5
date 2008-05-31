@@ -7,7 +7,7 @@
 #include <netinet/in.h>
 
 #include <rpmmacro.h>
-#include <rpmmessages.h>
+#include <rpmcb.h>
 #include <rpmio_internal.h>
 #ifdef WITH_NEON
 #include <rpmdav.h>
@@ -98,18 +98,16 @@ URLDBGREFS(0, (stderr, "--> url %p -- %d %s at %s:%u\n", u, u->nrefs, msg, file,
     if (u->ctrl) {
 #ifndef	NOTYET
 	void * fp = fdGetFp(u->ctrl);
-	/*@-branchstate@*/
 	if (fp) {
 	    fdPush(u->ctrl, fpio, fp, -1);   /* Push fpio onto stack */
 	    (void) Fclose(u->ctrl);
-	} else if (fdio->_fileno(u->ctrl) >= 0)
+	} else if (fdFileno(u->ctrl) >= 0)
 	    xx = fdio->close(u->ctrl);
-	/*@=branchstate@*/
 #else
-	(void) Fclose(u->ctrl);
+	xx = Fclose(u->ctrl);
 #endif
 
-	u->ctrl = fdio->_fdderef(u->ctrl, "persist ctrl (urlFree)", file, line);
+	u->ctrl = XfdFree(u->ctrl, "persist ctrl (urlFree)", file, line);
 	/*@-usereleased@*/
 	if (u->ctrl)
 	    fprintf(stderr, _("warning: u %p ctrl %p nrefs != 0 (%s %s)\n"),
@@ -123,13 +121,13 @@ URLDBGREFS(0, (stderr, "--> url %p -- %d %s at %s:%u\n", u, u->nrefs, msg, file,
 	if (fp) {
 	    fdPush(u->data, fpio, fp, -1);   /* Push fpio onto stack */
 	    (void) Fclose(u->data);
-	} else if (fdio->_fileno(u->data) >= 0)
+	} else if (fdFileno(u->data) >= 0)
 	    xx = fdio->close(u->data);
 #else
-	(void) Fclose(u->ctrl);
+	xx = Fclose(u->ctrl);
 #endif
 
-	u->data = fdio->_fdderef(u->data, "persist data (urlFree)", file, line);
+	u->data = XfdFree(u->data, "persist data (urlFree)", file, line);
 	/*@-usereleased@*/
 	if (u->data)
 	    fprintf(stderr, _("warning: u %p data %p nrefs != 0 (%s %s)\n"),
@@ -154,7 +152,6 @@ URLDBGREFS(0, (stderr, "--> url %p -- %d %s at %s:%u\n", u, u->nrefs, msg, file,
     return NULL;
 }
 
-/*@-boundswrite@*/
 void urlFreeCache(void)
 {
     if (_url_cache) {
@@ -173,7 +170,6 @@ void urlFreeCache(void)
     _url_cache = _free(_url_cache);
     _url_count = 0;
 }
-/*@=boundswrite@*/
 
 static int urlStrcmp(/*@null@*/ const char * str1, /*@null@*/ const char * str2)
 	/*@*/
@@ -186,7 +182,6 @@ static int urlStrcmp(/*@null@*/ const char * str1, /*@null@*/ const char * str2)
     return 0;
 }
 
-/*@-boundswrite@*/
 /*@-mods@*/
 static void urlFind(/*@null@*/ /*@in@*/ /*@out@*/ urlinfo * uret, int mustAsk)
 	/*@globals rpmGlobalMacroContext, h_errno, fileSystem, internalState @*/
@@ -329,7 +324,6 @@ static void urlFind(/*@null@*/ /*@in@*/ /*@out@*/ urlinfo * uret, int mustAsk)
     return;
 }
 /*@=mods@*/
-/*@=boundswrite@*/
 
 /**
  */
@@ -352,7 +346,6 @@ urltype urlIsURL(const char * url)
 {
     struct urlstring *us;
 
-/*@-boundsread@*/
     if (url && *url) {
 	for (us = urlstrings; us->leadin != NULL; us++) {
 	    if (strncmp(url, us->leadin, strlen(us->leadin)))
@@ -360,12 +353,10 @@ urltype urlIsURL(const char * url)
 	    return us->ret;
 	}
     }
-/*@=boundsread@*/
 
     return URL_IS_UNKNOWN;
 }
 
-/*@-boundswrite@*/
 /* Return path portion of url (or pointer to NUL if url == NULL) */
 urltype urlPath(const char * url, const char ** pathp)
 {
@@ -374,7 +365,6 @@ urltype urlPath(const char * url, const char ** pathp)
 
     path = url;
     urltype = urlIsURL(url);
-    /*@-branchstate@*/
     switch (urltype) {
     case URL_IS_FTP:
 	url += sizeof("ftp://") - 1;
@@ -408,14 +398,12 @@ urltype urlPath(const char * url, const char ** pathp)
 	path = "";
 	break;
     }
-    /*@=branchstate@*/
     if (pathp)
 	/*@-observertrans@*/
 	*pathp = path;
 	/*@=observertrans@*/
     return urltype;
 }
-/*@=boundswrite@*/
 
 /*
  * Split URL into components. The URL can look like
@@ -423,7 +411,6 @@ urltype urlPath(const char * url, const char ** pathp)
   * or as in RFC2732 for IPv6 address
   *    service://user:password@[ip:v6:ad:dr:es:s]:port/path
  */
-/*@-bounds@*/
 /*@-modfilesys@*/
 int urlSplit(const char * url, urlinfo *uret)
 {
@@ -464,7 +451,6 @@ int urlSplit(const char * url, urlinfo *uret)
     /* Look for ...@host... */
     fe = f = s;
     while (*fe && *fe != '@') fe++;
-    /*@-branchstate@*/
     if (*fe == '@') {
 	s = fe + 1;
 	*fe = '\0';
@@ -476,7 +462,6 @@ int urlSplit(const char * url, urlinfo *uret)
 	}
 	u->user = xstrdup(f);
     }
-    /*@=branchstate@*/
 
     /* Look for ...host:port or [v6addr]:port*/
     fe = f = s;
@@ -494,7 +479,7 @@ int urlSplit(const char * url, urlinfo *uret)
 	    char *end;
 	    u->port = strtol(u->portstr, &end, 0);
 	    if (!(end && *end == '\0')) {
-		rpmMessage(RPMMESS_ERROR, _("url port must be a number\n"));
+		rpmlog(RPMLOG_ERR, _("url port must be a number\n"));
 		myurl = _free(myurl);
 		u = urlFree(u, "urlSplit (error #3)");
 		return -1;
@@ -510,7 +495,7 @@ int urlSplit(const char * url, urlinfo *uret)
 	serv = getservbyname(u->scheme, "tcp");
 /*@=multithreaded =moduncon @*/
 	if (serv != NULL)
-	    u->port = ntohs(serv->s_port);
+	    u->port = (int) ntohs(serv->s_port);
 	else if (u->urltype == URL_IS_FTP)
 	    u->port = IPPORT_FTP;
 	else if (u->urltype == URL_IS_HKP)
@@ -531,7 +516,6 @@ int urlSplit(const char * url, urlinfo *uret)
     return 0;
 }
 /*@=modfilesys@*/
-/*@=bounds@*/
 
 int urlGetFile(const char * url, const char * dest)
 {
@@ -540,16 +524,12 @@ int urlGetFile(const char * url, const char * dest)
     FD_t tfd = NULL;
     const char * sfuPath = NULL;
     int urlType = urlPath(url, &sfuPath);
+#if defined(RPM_VENDOR_OPENPKG) /* support-external-download-command */
+    char *result;
+#endif
 
     if (*sfuPath == '\0')
 	return FTPERR_UNKNOWN;
-	
-    sfd = Fopen(url, "r");
-    if (sfd == NULL || Ferror(sfd)) {
-	rpmMessage(RPMMESS_DEBUG, D_("failed to open %s: %s\n"), url, Fstrerror(sfd));
-	rc = FTPERR_UNKNOWN;
-	goto exit;
-    }
 
     if (dest == NULL) {
 	if ((dest = strrchr(sfuPath, '/')) != NULL)
@@ -557,16 +537,36 @@ int urlGetFile(const char * url, const char * dest)
 	else
 	    dest = sfuPath;
     }
-
     if (dest == NULL)
 	return FTPERR_UNKNOWN;
+
+#if defined(RPM_VENDOR_OPENPKG) /* support-external-download-command */
+    if (rpmExpandNumeric("%{?__urlgetfile:1}%{!?__urlgetfile:0}")) {
+        result = rpmExpand("%(%{__urlgetfile ", url, " ", dest, "}; echo $?)", NULL);
+        if (result != NULL && strcmp(result, "0") == 0)
+            rc = 0;
+        else {
+            rpmlog(RPMLOG_DEBUG, D_("failed to fetch URL %s via external command\n"), url);
+            rc = FTPERR_UNKNOWN;
+        }
+        result = _free(result);
+        goto exit;
+    }
+#endif
+
+    sfd = Fopen(url, "r");
+    if (sfd == NULL || Ferror(sfd)) {
+	rpmlog(RPMLOG_DEBUG, D_("failed to open %s: %s\n"), url, Fstrerror(sfd));
+	rc = FTPERR_UNKNOWN;
+	goto exit;
+    }
 
     /* XXX this can fail if directory in path does not exist. */
     tfd = Fopen(dest, "w");
 if (_url_debug)
 fprintf(stderr, "*** urlGetFile sfd %p %s tfd %p %s\n", sfd, url, (tfd ? tfd : NULL), dest);
     if (tfd == NULL || Ferror(tfd)) {
-	rpmMessage(RPMMESS_DEBUG, D_("failed to create %s: %s\n"), dest, Fstrerror(tfd));
+	rpmlog(RPMLOG_DEBUG, D_("failed to create %s: %s\n"), dest, Fstrerror(tfd));
 	rc = FTPERR_UNKNOWN;
 	goto exit;
     }

@@ -16,14 +16,6 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-/**
- */
-typedef /*@abstract@*/ struct pgpDig_s * pgpDig;
-
-/**
- */
-typedef /*@abstract@*/ struct pgpDigParams_s * pgpDigParams;
-
 /** \ingroup rpmio
  * Hide libio API lossage.
  * The libio interface changed after glibc-2.1.3 to pass the seek offset
@@ -85,117 +77,18 @@ typedef int (*fdio_close_function_t) (void *cookie)
 	/*@globals errno, fileSystem, systemState @*/
 	/*@modifies *cookie, errno, fileSystem, systemState @*/;
 
-
-/**
- */
-typedef /*@only@*/ /*@null@*/ FD_t (*fdio_ref_function_t) ( /*@only@*/ void * cookie,
-		const char * msg, const char * file, unsigned line)
-	/*@globals fileSystem @*/
-	/*@modifies fileSystem @*/;
-
-/**
- */
-typedef /*@only@*/ /*@null@*/ FD_t (*fdio_deref_function_t) ( /*@only@*/ FD_t fd,
-		const char * msg, const char * file, unsigned line)
-	/*@globals fileSystem @*/
-	/*@modifies fd, fileSystem @*/;
-
-
-/**
- */
-typedef /*@only@*/ /*@null@*/ FD_t (*fdio_new_function_t) (const char * msg,
-		const char * file, unsigned line)
-	/*@globals fileSystem @*/
-	/*@modifies fileSystem @*/;
-
-
-/**
- */
-typedef int (*fdio_fileno_function_t) (void * cookie)
-	/*@globals fileSystem @*/
-	/*@modifies *cookie, fileSystem @*/;
-
-
-/**
- */
-typedef FD_t (*fdio_open_function_t) (const char * path, int flags, mode_t mode)
-	/*@globals errno, fileSystem @*/
-	/*@modifies errno, fileSystem @*/;
-
 /**
  */
 typedef FD_t (*fdio_fopen_function_t) (const char * path, const char * fmode)
-	/*@globals fileSystem @*/
-	/*@modifies fileSystem @*/;
-
-/**
- */
-typedef void * (*fdio_ffileno_function_t) (FD_t fd)
-	/*@globals fileSystem @*/
-	/*@modifies fileSystem @*/;
-
-/**
- */
-typedef int (*fdio_fflush_function_t) (FD_t fd)
-	/*@globals fileSystem @*/
-	/*@modifies fileSystem @*/;
-/*@}*/
-
-
-/** \ingroup rpmrpc
- * \name RPMRPC Vectors.
- */
-/*@{*/
-
-/**
- */
-typedef int (*fdio_mkdir_function_t) (const char * path, mode_t mode)
 	/*@globals errno, fileSystem @*/
 	/*@modifies errno, fileSystem @*/;
 
 /**
  */
-typedef int (*fdio_chdir_function_t) (const char * path)
+typedef FD_t (*fdio_fdopen_function_t) (void * cookie, const char * fmode)
 	/*@globals errno, fileSystem @*/
 	/*@modifies errno, fileSystem @*/;
 
-/**
- */
-typedef int (*fdio_rmdir_function_t) (const char * path)
-	/*@globals errno, fileSystem @*/
-	/*@modifies errno, fileSystem @*/;
-
-/**
- */
-typedef int (*fdio_rename_function_t) (const char * oldpath, const char * newpath)
-	/*@globals errno, fileSystem @*/
-	/*@modifies errno, fileSystem @*/;
-
-/**
- */
-typedef int (*fdio_unlink_function_t) (const char * path)
-	/*@globals errno, fileSystem @*/
-	/*@modifies errno, fileSystem @*/;
-/*@-typeuse@*/
-
-/**
- */
-typedef int (*fdio_stat_function_t) (const char * path, /*@out@*/ struct stat * st)
-	/*@globals errno, fileSystem @*/
-	/*@modifies *st, errno, fileSystem @*/;
-
-/**
- */
-typedef int (*fdio_lstat_function_t) (const char * path, /*@out@*/ struct stat * st)
-	/*@globals errno, fileSystem @*/
-	/*@modifies *st, errno, fileSystem @*/;
-
-/**
- */
-typedef int (*fdio_access_function_t) (const char * path, int amode)
-	/*@globals errno, fileSystem @*/
-	/*@modifies errno, fileSystem @*/;
-/*@=typeuse@*/
 /*@}*/
 
 
@@ -206,22 +99,8 @@ struct FDIO_s {
   fdio_write_function_t		write;
   fdio_seek_function_t		seek;
   fdio_close_function_t		close;
-
-  fdio_ref_function_t		_fdref;
-  fdio_deref_function_t		_fdderef;
-  fdio_new_function_t		_fdnew;
-  fdio_fileno_function_t	_fileno;
-
-  fdio_open_function_t		_open;
   fdio_fopen_function_t		_fopen;
-  fdio_ffileno_function_t	_ffileno;
-  fdio_fflush_function_t	_fflush;
-
-  fdio_mkdir_function_t		_mkdir;
-  fdio_chdir_function_t		_chdir;
-  fdio_rmdir_function_t		_rmdir;
-  fdio_rename_function_t	_rename;
-  fdio_unlink_function_t	_unlink;
+  fdio_fdopen_function_t	_fdopen;
 };
 
 
@@ -440,6 +319,7 @@ int Mknod(const char * path, mode_t mode, dev_t dev)
  * utime(2) clone.
  * @todo Implement remotely.
  */
+struct utimbuf;
 int Utime(const char * path, const struct utimbuf * buf)
 	/*@globals errno, fileSystem, internalState @*/
 	/*@modifies errno, fileSystem, internalState @*/;
@@ -585,28 +465,7 @@ off_t	fdSize(FD_t fd)
 	/*@globals fileSystem, internalState @*/
 	/*@modifies fileSystem, internalState @*/;
 
-#ifdef UNUSED
-/*@null@*/ FILE *fdFdopen( /*@only@*/ void * cookie, const char * mode);
-#endif
-
-/* XXX Legacy interfaces needed by gnorpm, rpmfind et al */
-
 /*@-exportlocal@*/
-/**
- */
-#ifndef H_RPMIO_INTERNAL	/* XXX avoid gcc warning */
-/*@unused@*/ int fdFileno(void * cookie)
-	/*@*/;
-#define	fdFileno(_fd)		fdio->_fileno(_fd)
-#endif
-
-/**
- */
-/*@null@*/ FD_t fdOpen(const char *path, int flags, mode_t mode)
-	/*@globals errno, fileSystem, internalState @*/
-	/*@modifies errno, fileSystem, internalState @*/;
-#define	fdOpen(_path, _flags, _mode)	fdio->_open((_path), (_flags), (_mode))
-
 /**
  */
 /*@-incondefs@*/
@@ -634,12 +493,24 @@ int fdClose( /*@only@*/ void * cookie)
 
 /**
  */
+/*@null@*/ FD_t fdOpen(const char *path, int flags, mode_t mode)
+	/*@globals errno, fileSystem, internalState @*/
+	/*@modifies errno, fileSystem, internalState @*/;
+#define	fdOpen(_path, _flags, _mode)	fdio->_open((_path), (_flags), (_mode))
+
+/**
+ */
 /*@unused@*/
 /*@only@*/ /*@null@*/
 FD_t fdLink (/*@only@*/ void * cookie, const char * msg)
 	/*@globals fileSystem @*/
 	/*@modifies *cookie, fileSystem @*/;
-#define	fdLink(_fd, _msg)	fdio->_fdref(_fd, _msg, __FILE__, __LINE__)
+/*@unused@*/
+/*@only@*/ /*@null@*/
+FD_t XfdLink (/*@only@*/ void * cookie, const char * msg, const char * fn, unsigned ln)
+	/*@globals fileSystem @*/
+	/*@modifies *cookie, fileSystem @*/;
+#define	fdLink(_fd, _msg)	XfdLink(_fd, _msg, __FILE__, __LINE__)
 
 /**
  */
@@ -648,7 +519,12 @@ FD_t fdLink (/*@only@*/ void * cookie, const char * msg)
 FD_t fdFree(/*@only@*/ FD_t fd, const char * msg)
 	/*@globals fileSystem @*/
 	/*@modifies fd, fileSystem @*/;
-#define	fdFree(_fd, _msg)	fdio->_fdderef(_fd, _msg, __FILE__, __LINE__)
+/*@unused@*/
+/*@only@*/ /*@null@*/
+FD_t XfdFree(/*@only@*/ FD_t fd, const char * msg, const char * fn, unsigned ln)
+	/*@globals fileSystem @*/
+	/*@modifies fd, fileSystem @*/;
+#define	fdFree(_fd, _msg)	XfdFree(_fd, _msg, __FILE__, __LINE__)
 
 /**
  */
@@ -657,7 +533,12 @@ FD_t fdFree(/*@only@*/ FD_t fd, const char * msg)
 FD_t fdNew (const char * msg)
 	/*@globals fileSystem @*/
 	/*@modifies fileSystem @*/;
-#define	fdNew(_msg)		fdio->_fdnew(_msg, __FILE__, __LINE__)
+/*@unused@*/
+/*@only@*/ /*@null@*/
+FD_t XfdNew (const char * msg, const char * fn, unsigned ln)
+	/*@globals fileSystem @*/
+	/*@modifies fileSystem @*/;
+#define	fdNew(_msg)		XfdNew(_msg, __FILE__, __LINE__)
 
 /**
  */
@@ -773,13 +654,6 @@ int ufdGetFile( /*@killref@*/ FD_t sfd, FD_t tfd)
 	/*@globals fileSystem, internalState @*/
 	/*@modifies sfd, tfd, fileSystem, internalState @*/;
 
-/**
- */
-/*@unused@*/ int timedRead(FD_t fd, /*@out@*/ void * bufptr, int length)
-	/*@globals fileSystem @*/
-	/*@modifies fd, *bufptr, fileSystem @*/;
-#define	timedRead	(ufdio->read)
-
 /*@-exportlocal@*/
 /**
  */
@@ -805,44 +679,41 @@ int ufdGetFile( /*@killref@*/ FD_t sfd, FD_t tfd)
  */
 /*@observer@*/ /*@unchecked@*/ extern FDIO_t lzdio;
 
-/**
- */
-/*@observer@*/ /*@unchecked@*/ extern FDIO_t fadio;
 /*@=exportlocal@*/
 /*@}*/
 
 /*@unused@*/ static inline int xislower(int c) /*@*/ {
-    return (c >= 'a' && c <= 'z');
+    return (c >= (int)'a' && c <= (int)'z');
 }
 /*@unused@*/ static inline int xisupper(int c) /*@*/ {
-    return (c >= 'A' && c <= 'Z');
+    return (c >= (int)'A' && c <= (int)'Z');
 }
 /*@unused@*/ static inline int xisalpha(int c) /*@*/ {
     return (xislower(c) || xisupper(c));
 }
 /*@unused@*/ static inline int xisdigit(int c) /*@*/ {
-    return (c >= '0' && c <= '9');
+    return (c >= (int)'0' && c <= (int)'9');
 }
 /*@unused@*/ static inline int xisalnum(int c) /*@*/ {
     return (xisalpha(c) || xisdigit(c));
 }
 /*@unused@*/ static inline int xisblank(int c) /*@*/ {
-    return (c == ' ' || c == '\t');
+    return (c == (int)' ' || c == (int)'\t');
 }
 /*@unused@*/ static inline int xisspace(int c) /*@*/ {
-    return (xisblank(c) || c == '\n' || c == '\r' || c == '\f' || c == '\v');
+    return (xisblank(c) || c == (int)'\n' || c == (int)'\r' || c == (int)'\f' || c == (int)'\v');
 }
 /*@unused@*/ static inline int xiscntrl(int c) /*@*/ {
-    return (c < ' ');
+    return (c < (int)' ');
 }
 /*@unused@*/ static inline int xisascii(int c) /*@*/ {
     return ((c & 0x80) != 0x80);
 }
 /*@unused@*/ static inline int xisprint(int c) /*@*/ {
-    return (c >= ' ' && xisascii(c));
+    return (c >= (int)' ' && xisascii(c));
 }
 /*@unused@*/ static inline int xisgraph(int c) /*@*/ {
-    return (c > ' ' && xisascii(c));
+    return (c > (int)' ' && xisascii(c));
 }
 /*@unused@*/ static inline int xispunct(int c) /*@*/ {
     return (xisgraph(c) && !xisalnum(c));
@@ -890,6 +761,13 @@ void * _free(/*@only@*/ /*@null@*/ /*@out@*/ const void * p)
 }
 #endif
 #endif
+
+/**
+ * Free all memory allocated by rpmio usage.
+ */
+void rpmioClean(void)
+	/*@globals internalState, fileSystem @*/
+	/*@modifies internalState, fileSystem @*/;
 
 #ifdef __cplusplus
 }

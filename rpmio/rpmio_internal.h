@@ -5,113 +5,13 @@
  * \file rpmio/rpmio_internal.h
  */
 
-
 #include <rpmio.h>
 #include <rpmurl.h>
 
-#ifdef HAVE_BEECRYPT_API_H
-#include <beecrypt/api.h>
-#endif
-
+#define	_RPMPGP_INTERNAL
 #include <rpmpgp.h>
-#include <rpmsw.h>
 
-/* Drag in the beecrypt includes. */
-#include <beecrypt/beecrypt.h>
-#include <beecrypt/base64.h>
-#include <beecrypt/dsa.h>
-#include <beecrypt/endianness.h>
-#include <beecrypt/md5.h>
-#include <beecrypt/mp.h>
-#include <beecrypt/rsa.h>
-#include <beecrypt/rsapk.h>
-#include <beecrypt/sha1.h>
-#include <beecrypt/sha256.h>
-#include <beecrypt/sha384.h>
-#include <beecrypt/sha512.h>
-
-/** \ingroup rpmio
- * Values parsed from OpenPGP signature/pubkey packet(s).
- */
-struct pgpDigParams_s {
-/*@only@*/ /*@null@*/
-    const char * userid;
-/*@only@*/ /*@null@*/
-    const byte * hash;
-    const char * params[4];
-    byte tag;
-
-    byte version;		/*!< version number. */
-    byte time[4];		/*!< time that the key was created. */
-    byte pubkey_algo;		/*!< public key algorithm. */
-
-    byte hash_algo;
-    byte sigtype;
-    byte hashlen;
-    byte signhash16[2];
-    byte signid[8];
-    byte saved;
-#define	PGPDIG_SAVED_TIME	(1 << 0)
-#define	PGPDIG_SAVED_ID		(1 << 1)
-
-};
-
-/** \ingroup rpmio
- * Container for values parsed from an OpenPGP signature and public key.
- */
-struct pgpDig_s {
-    struct pgpDigParams_s signature;
-    struct pgpDigParams_s pubkey;
-
-    int32_t sigtag;		/*!< Package signature tag. */
-    int32_t sigtype;		/*!< Package signature data type. */
-    const void * sig;		/*!< Package signature. */
-    int32_t siglen;		/*!< Package signature length. */
-
-    pgpVSFlags vsflags;		/*!< Digest/signature operation disablers. */
-    struct rpmop_s dops;	/*!< Digest operation statistics. */
-    struct rpmop_s sops;	/*!< Signature operation statistics. */
-
-    int (*findPubkey) (void * _ts, /*@null@*/ void * _dig)
-	/*@modifies *_ts, *_dig @*/;/*!< Find pubkey, i.e. rpmtsFindPubkey(). */
-/*@null@*/
-    void * _ts;			/*!< Find pubkey argument, i.e. rpmts. */
-
-    byte ** ppkts;
-    int npkts;
-    size_t nbytes;		/*!< No. bytes of plain text. */
-
-/*@only@*/ /*@null@*/
-    DIGEST_CTX sha1ctx;		/*!< (dsa) sha1 hash context. */
-/*@only@*/ /*@null@*/
-    DIGEST_CTX hdrsha1ctx;	/*!< (dsa) header sha1 hash context. */
-/*@only@*/ /*@null@*/
-    void * sha1;		/*!< (dsa) V3 signature hash. */
-    size_t sha1len;		/*!< (dsa) V3 signature hash length. */
-
-/*@only@*/ /*@null@*/
-    DIGEST_CTX md5ctx;		/*!< (rsa) md5 hash context. */
-/*@only@*/ /*@null@*/
-    DIGEST_CTX hdrmd5ctx;	/*!< (rsa) header md5 hash context. */
-/*@only@*/ /*@null@*/
-    void * md5;			/*!< (rsa) V3 signature hash. */
-    size_t md5len;		/*!< (rsa) V3 signature hash length. */
-
-    /* DSA parameters. */
-    mpbarrett p;
-    mpbarrett q;
-    mpnumber g;
-    mpnumber y;
-    mpnumber hm;
-    mpnumber r;
-    mpnumber s;
-
-    /* RSA parameters. */
-    rsapk rsa_pk;
-    mpnumber m;
-    mpnumber c;
-    mpnumber rsahm;
-};
+#include <rpmxar.h>
 
 /** \ingroup rpmio
  */
@@ -184,6 +84,11 @@ struct _FD_s {
     int		oflags;
     mode_t	omode;
 
+/*@refcounted@*/ /*@relnull@*/
+    rpmxar	xar;		/* xar archive wrapper */
+/*@refcounted@*/ /*@relnull@*/
+    pgpDig	dig;		/* signature parameters */
+
     FDSTAT_t	stats;		/* I/O statistics */
 
     int		ndigests;
@@ -233,6 +138,11 @@ extern int _dav_debug;
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/** \ingroup rpmio
+ */
+/*@observer@*/ const char * fdbg(/*@null@*/ FD_t fd)
+        /*@*/;
 
 /** \ingroup rpmio
  */
@@ -314,13 +224,56 @@ mode_t fdGetOMode(FD_t fd)
 /** \ingroup rpmio
  */
 /*@unused@*/ static inline
+void fdSetDig(FD_t fd, pgpDig dig)
+	/*@modifies fd, dig @*/
+{
+    FDSANE(fd);
+    fd->dig = pgpDigFree(fd->dig);
+    fd->dig = pgpDigLink(dig, "fdSetDig");
+}
+
+/** \ingroup rpmio
+ */
+/*@unused@*/ static inline
+/*@null@*/ pgpDig fdGetDig(FD_t fd)
+	/*@*/
+{
+    FDSANE(fd);
+    /*@-compdef -retexpose -refcounttrans -usereleased @*/
+    return fd->dig;
+    /*@=compdef =retexpose =refcounttrans =usereleased @*/
+}
+
+/** \ingroup rpmio
+ */
+/*@unused@*/ static inline
+void fdSetXAR(FD_t fd, rpmxar xar)
+	/*@modifies fd, xar @*/
+{
+    FDSANE(fd);
+    fd->xar = rpmxarLink(xar, "fdSetXAR");
+}
+
+/** \ingroup rpmio
+ */
+/*@unused@*/ static inline
+/*@null@*/ rpmxar fdGetXAR(FD_t fd)
+	/*@*/
+{
+    FDSANE(fd);
+    /*@-compdef -refcounttrans -retexpose -usereleased @*/
+    return fd->xar;
+    /*@=compdef =refcounttrans =retexpose =usereleased @*/
+}
+
+/** \ingroup rpmio
+ */
+/*@unused@*/ static inline
 /*@null@*/ FDIO_t fdGetIo(FD_t fd)
 	/*@*/
 {
     FDSANE(fd);
-/*@-boundsread@*/
     return fd->fps[fd->nfps].io;
-/*@=boundsread@*/
 }
 
 /** \ingroup rpmio
@@ -331,11 +284,9 @@ void fdSetIo(FD_t fd, /*@kept@*/ /*@null@*/ FDIO_t io)
 	/*@modifies fd @*/
 {
     FDSANE(fd);
-/*@-boundswrite@*/
     /*@-assignexpose@*/
     fd->fps[fd->nfps].io = io;
     /*@=assignexpose@*/
-/*@=boundswrite@*/
 }
 /*@=nullstate@*/
 
@@ -346,11 +297,9 @@ void fdSetIo(FD_t fd, /*@kept@*/ /*@null@*/ FDIO_t io)
 	/*@*/
 {
     FDSANE(fd);
-/*@-boundsread@*/
     /*@+voidabstract@*/
     return ((FILE *)fd->fps[fd->nfps].fp);
     /*@=voidabstract@*/
-/*@=boundsread@*/
 }
 
 /** \ingroup rpmio
@@ -360,9 +309,7 @@ void fdSetIo(FD_t fd, /*@kept@*/ /*@null@*/ FDIO_t io)
 	/*@*/
 {
     FDSANE(fd);
-/*@-boundsread@*/
     return fd->fps[fd->nfps].fp;
-/*@=boundsread@*/
 }
 
 /** \ingroup rpmio
@@ -373,11 +320,9 @@ void fdSetFp(FD_t fd, /*@kept@*/ /*@null@*/ void * fp)
 	/*@modifies fd @*/
 {
     FDSANE(fd);
-/*@-boundswrite@*/
     /*@-assignexpose@*/
     fd->fps[fd->nfps].fp = fp;
     /*@=assignexpose@*/
-/*@=boundswrite@*/
 }
 /*@=nullstate@*/
 
@@ -388,9 +333,7 @@ int fdGetFdno(FD_t fd)
 	/*@*/
 {
     FDSANE(fd);
-/*@-boundsread@*/
     return fd->fps[fd->nfps].fdno;
-/*@=boundsread@*/
 }
 
 /** \ingroup rpmio
@@ -400,9 +343,7 @@ void fdSetFdno(FD_t fd, int fdno)
 	/*@modifies fd @*/
 {
     FDSANE(fd);
-/*@-boundswrite@*/
     fd->fps[fd->nfps].fdno = fdno;
-/*@=boundswrite@*/
 }
 
 /** \ingroup rpmio
@@ -452,10 +393,8 @@ rpmop fdstat_op(/*@null@*/ FD_t fd, fdOpX opx)
 {
     rpmop op = NULL;
 
-/*@-boundsread@*/
     if (fd != NULL && fd->stats != NULL && opx >= 0 && opx < FDSTAT_MAX)
         op = fd->stats->ops + opx;
-/*@=boundsread@*/
     return op;
 }
 
@@ -496,7 +435,6 @@ void fdstat_exit(/*@null@*/ FD_t fd, int opx, ssize_t rc)
 
 /** \ingroup rpmio
  */
-/*@-boundsread@*/
 /*@unused@*/ static inline
 void fdstat_print(/*@null@*/ FD_t fd, const char * msg, FILE * fp)
 	/*@globals fileSystem @*/
@@ -529,7 +467,6 @@ void fdstat_print(/*@null@*/ FD_t fd, const char * msg, FILE * fp)
 	}
     }
 }
-/*@=boundsread@*/
 
 /** \ingroup rpmio
  */
@@ -652,17 +589,56 @@ void fdFiniDigest(FD_t fd, pgpHashAlgo hashalgo,
 	fddig->hashctx = NULL;
 	break;
     }
-/*@-boundswrite@*/
     if (i < 0) {
 	if (datap) *(void **)datap = NULL;
 	if (lenp) *lenp = 0;
     }
-/*@=boundswrite@*/
 
     fd->ndigests = imax;
     if (i < imax)
 	fd->ndigests++;		/* convert index to count */
 }
+
+/** \ingroup rpmio
+ */
+/*@-mustmod@*/
+/*@unused@*/ static inline
+void fdStealDigest(FD_t fd, pgpDig dig)
+	/*@modifies fd, dig @*/
+{
+    int i;
+/*@-type@*/	/* FIX: getters for pgpDig internals */
+    for (i = fd->ndigests - 1; i >= 0; i--) {
+	FDDIGEST_t fddig = fd->digests + i;
+	if (fddig->hashctx != NULL)
+	switch (fddig->hashalgo) {
+	case PGPHASHALGO_MD5:
+assert(dig->md5ctx == NULL);
+/*@-onlytrans@*/
+	    dig->md5ctx = fddig->hashctx;
+/*@=onlytrans@*/
+	    fddig->hashctx = NULL;
+	    /*@switchbreak@*/ break;
+	case PGPHASHALGO_SHA1:
+	case PGPHASHALGO_RIPEMD160:
+#if defined(HAVE_BEECRYPT_API_H)
+	case PGPHASHALGO_SHA256:
+	case PGPHASHALGO_SHA384:
+	case PGPHASHALGO_SHA512:
+#endif
+assert(dig->sha1ctx == NULL);
+/*@-onlytrans@*/
+	    dig->sha1ctx = fddig->hashctx;
+/*@=onlytrans@*/
+	    fddig->hashctx = NULL;
+	    /*@switchbreak@*/ break;
+	default:
+	    /*@switchbreak@*/ break;
+	}
+    }
+/*@=type@*/
+}
+/*@=mustmod@*/
 
 /*@-shadow@*/
 /** \ingroup rpmio
@@ -674,9 +650,7 @@ int fdFileno(/*@null@*/ void * cookie)
     FD_t fd;
     if (cookie == NULL) return -2;
     fd = c2f(cookie);
-/*@-boundsread@*/
     return fd->fps[0].fdno;
-/*@=boundsread@*/
 }
 /*@=shadow@*/
 
@@ -688,7 +662,7 @@ int fdFileno(/*@null@*/ void * cookie)
  * @return		0 on success
  */
 int rpmioSlurp(const char * fn,
-                /*@out@*/ byte ** bp, /*@out@*/ ssize_t * blenp)
+                /*@out@*/ uint8_t ** bp, /*@out@*/ ssize_t * blenp)
         /*@globals h_errno, fileSystem, internalState @*/
         /*@modifies *bp, *blenp, fileSystem, internalState @*/;
 

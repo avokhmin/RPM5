@@ -8,7 +8,7 @@
 typedef	const char * ARGstr_t;
 typedef ARGstr_t * ARGV_t;
 
-typedef	int * ARGint_t;
+typedef	uint32_t * ARGint_t;
 struct ARGI_s {
     unsigned nvals;
     ARGint_t vals;
@@ -83,7 +83,7 @@ ARGV_t argvData(/*@null@*/ ARGV_t argv)
 	/*@*/;
 
 /**
- * Compare argv arrays (qsort/bsearch).
+ * Compare argv arrays using strcmp (qsort/bsearch).
  * @param a		1st instance address
  * @param b		2nd instance address
  * @return		result of comparison
@@ -92,6 +92,35 @@ ARGV_t argvData(/*@null@*/ ARGV_t argv)
 int argvCmp(const void * a, const void * b)
 	/*@*/;
 /*@=exportlocal@*/
+
+/**
+ * Compare argv arrays using strcasecmp (qsort/bsearch).
+ * @param a		1st instance address
+ * @param b		2nd instance address
+ * @return		result of comparison
+ */
+int argvStrcasecmp(const void * a, const void * b)
+	/*@*/;
+
+#if defined(RPM_VENDOR_OPENPKG) /* wildcard-matching-arbitrary-tagnames */
+/**
+ * Wildcard-match argv arrays using fnmatch.
+ * @param a		1st instance address
+ * @param b		2nd instance address
+ * @return		result of comparison
+ */
+int argvFnmatch(const void * a, const void * b)
+	/*@*/;
+
+/**
+ * Wildcard-match argv arrays using fnmatch (case-insensitive).
+ * @param a		1st instance address
+ * @param b		2nd instance address
+ * @return		result of comparison
+ */
+int argvFnmatchCasefold(const void * a, const void * b)
+	/*@*/;
+#endif
 
 /**
  * Sort an argv array.
@@ -113,6 +142,20 @@ int argvSort(ARGV_t argv, int (*compar)(const void *, const void *))
 ARGV_t argvSearch(ARGV_t argv, ARGstr_t val,
 		int (*compar)(const void *, const void *))
 	/*@*/;
+
+#if defined(RPM_VENDOR_OPENPKG) /* wildcard-matching-arbitrary-tagnames */
+/**
+ * Find an element in an argv array (via linear searching and just match/no-match comparison).
+ * @param argv		argv array
+ * @param val		string to find
+ * @param compar	strcmp-like comparison function, or NULL for argvCmp()
+ * @return		found string (NULL on failure)
+ */
+/*@dependent@*/ /*@null@*/
+ARGV_t argvSearchLinear(ARGV_t argv, ARGstr_t val,
+		int (*compar)(const void *, const void *))
+	/*@*/;
+#endif
 
 /**
  * Add an int to an argi array.
@@ -136,10 +179,10 @@ int argvAdd(/*@out@*/ ARGV_t * argvp, ARGstr_t val)
 /**
  * Append one argv array to another.
  * @retval *argvp	argv array
- * @param av		argv array to append
+ * @param av		argv array to append (NULL does nothing)
  * @return		0 always
  */
-int argvAppend(/*@out@*/ ARGV_t * argvp, const ARGV_t av)
+int argvAppend(/*@out@*/ ARGV_t * argvp, /*@null@*/ const ARGV_t av)
 	/*@modifies *argvp @*/;
 
 /**
@@ -168,7 +211,8 @@ char * argvJoin(ARGV_t argv)
  * @return		0 on success
  */
 int argvFgets(ARGV_t * argvp, void * fd)
-	/*@modifies *argvp, fd @*/;
+	/*@globals fileSystem@*/
+	/*@modifies *argvp, fd, fileSystem @*/;
 
 #ifdef __cplusplus
 }
