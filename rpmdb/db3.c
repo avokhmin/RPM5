@@ -12,11 +12,13 @@ static int _debug = 1;	/* XXX if < 0 debugging, > 0 unusual error returns */
 #include <sys/ipc.h>
 #endif
 
-#include <rpmlib.h>
 #include <rpmio.h>
+#include <rpmlog.h>
 #include <rpmmacro.h>
 #include <rpmurl.h>	/* XXX urlPath proto */
 
+#define	_RPMTAG_INTERNAL
+#include <rpmtag.h>
 #define	_RPMDB_INTERNAL
 #include <rpmdb.h>
 
@@ -160,10 +162,10 @@ static int cvtdberr(/*@unused@*/ dbiIndex dbi, const char * msg, int error, int 
     if (printit && rc) {
 	/*@-moduncon@*/ /* FIX: annotate db3 methods */
 	if (msg)
-	    rpmError(RPMERR_DBERR, _("db%d error(%d) from %s: %s\n"),
+	    rpmlog(RPMLOG_ERR, _("db%d error(%d) from %s: %s\n"),
 		DB_VERSION_MAJOR, rc, msg, db_strerror(error));
 	else
-	    rpmError(RPMERR_DBERR, _("db%d error(%d): %s\n"),
+	    rpmlog(RPMLOG_ERR, _("db%d error(%d): %s\n"),
 		DB_VERSION_MAJOR, rc, db_strerror(error));
 	/*@=moduncon@*/
     }
@@ -173,22 +175,27 @@ static int cvtdberr(/*@unused@*/ dbiIndex dbi, const char * msg, int error, int 
 /*@=globuse =mustmod @*/
 
 /**
- * Return (possibly renamed) tagName. Handles Filedigests -> Filemd5s renaming.
- * @param value		tag value
+ * Return (possibly renamed) tagName. Handles arbitrary tags.
+ * @param rpmdb		rpm database
+ * @param dbi		rpm database index
  * @return		tag string
  */
 /*@observer@*/
-static const char * mapTagName(int value)
+static const char * mapTagName(rpmdb rpmdb, dbiIndex dbi)
 	/*@*/
 {
-    const char * s = tagName(value);
-    if (s == NULL)
-	s = "";
-#ifdef	NOTYET
-    else if (!strcmp(s, "Filedigests"))
-	s = "Filemd5s";
-#endif
-    return s;
+    tagStore_t dbiTags = rpmdb->db_tags;
+    int dbix = 0;
+
+    if (dbiTags != NULL)
+    while (dbix < rpmdb->db_ndbi) {
+	if (dbi->dbi_rpmtag == dbiTags->tag)
+	    return dbiTags->str;
+	dbiTags++;
+	dbix++;
+    }
+    /* XXX should never reach here */
+    return tagName(dbi->dbi_rpmtag);
 }
 
 static int db_fini(dbiIndex dbi, const char * dbhome,
@@ -208,7 +215,7 @@ static int db_fini(dbiIndex dbi, const char * dbhome,
     rc = cvtdberr(dbi, "dbenv->close", rc, _debug);
 
     if (dbfile)
-	rpmMessage(RPMMESS_DEBUG, D_("closed   db environment %s/%s\n"),
+	rpmlog(RPMLOG_DEBUG, D_("closed   db environment %s/%s\n"),
 			dbhome, dbfile);
 
     if (rpmdb->db_remove_env) {
@@ -227,7 +234,7 @@ static int db_fini(dbiIndex dbi, const char * dbhome,
 	    xx = cvtdberr(dbi, "dbenv->remove", xx, _debug);
 
 	    if (dbfile)
-		rpmMessage(RPMMESS_DEBUG, D_("removed  db environment %s/%s\n"),
+		rpmlog(RPMLOG_DEBUG, D_("removed  db environment %s/%s\n"),
 			dbhome, dbfile);
 	}
 
@@ -251,7 +258,7 @@ static int db3_fsync_disable(/*@unused@*/ int fd)
  * @return		
  */
 static int db3is_alive(/*@unused@*/ DB_ENV *dbenv, pid_t pid, /*@unused@*/ db_threadid_t tid,
-		u_int32_t flags)
+		uint32_t flags)
 	/*@*/
 {
     int is_alive = 1;	/* assume all processes are alive */
@@ -306,7 +313,7 @@ static int db_init(dbiIndex dbi, const char * dbhome,
     if (eflags & DB_JOINENV) eflags &= DB_JOINENV;
 
     if (dbfile)
-	rpmMessage(RPMMESS_DEBUG, D_("opening  db environment %s/%s %s\n"),
+	rpmlog(RPMLOG_DEBUG, D_("opening  db environment %s/%s %s\n"),
 		dbhome, dbfile, prDbiOpenFlags(eflags, 1));
 
     /* XXX Can't do RPC w/o host. */
@@ -936,6 +943,7 @@ static int db3close(/*@only@*/ dbiIndex dbi, /*@unused@*/ unsigned int flags)
     const char * dbfile;
     const char * dbsubfile;
     DB * db = dbi->dbi_db;
+    const char * dbiBN = mapTagName(rpmdb, dbi);
     int _printit;
     int rc = 0, xx;
 
@@ -963,9 +971,9 @@ static int db3close(/*@only@*/ dbiIndex dbi, /*@unused@*/ unsigned int flags)
     } else {
 #ifdef	HACK	/* XXX necessary to support dbsubfile */
 	dbfile = (dbi->dbi_file ? dbi->dbi_file : db3basename);
-	dbsubfile = (dbi->dbi_subfile ? dbi->dbi_subfile : mapTagName(dbi->dbi_rpmtag));
+	dbsubfile = (dbi->dbi_subfile ? dbi->dbi_subfile : dbiBN);
 #else
-	dbfile = (dbi->dbi_file ? dbi->dbi_file : mapTagName(dbi->dbi_rpmtag));
+	dbfile = (dbi->dbi_file ? dbi->dbi_file : dbiBN);
 	dbsubfile = NULL;
 #endif
     }
@@ -977,8 +985,8 @@ static int db3close(/*@only@*/ dbiIndex dbi, /*@unused@*/ unsigned int flags)
 	rc = cvtdberr(dbi, "db->close", rc, _printit);
 	db = dbi->dbi_db = NULL;
 
-	rpmMessage(RPMMESS_DEBUG, D_("closed   db index       %s/%s\n"),
-		dbhome, (dbfile ? dbfile : mapTagName(dbi->dbi_rpmtag)));
+	rpmlog(RPMLOG_DEBUG, D_("closed   db index       %s/%s\n"),
+		dbhome, (dbfile ? dbfile : dbiBN));
 
     }
 
@@ -1049,9 +1057,9 @@ static int db3close(/*@only@*/ dbiIndex dbi, /*@unused@*/ unsigned int flags)
 		rc = db->verify(db, dbf, NULL, NULL, flags);
 		rc = cvtdberr(dbi, "db->verify", rc, _debug);
 
-		rpmMessage(RPMMESS_DEBUG, D_("verified db index       %s/%s\n"),
+		rpmlog(RPMLOG_DEBUG, D_("verified db index       %s/%s\n"),
 			(dbhome ? dbhome : ""),
-			(dbfile ? dbfile : mapTagName(dbi->dbi_rpmtag)));
+			(dbfile ? dbfile : dbiBN));
 
 	        /*
 		 * The DB handle may not be accessed again after
@@ -1090,6 +1098,7 @@ static int db3open(rpmdb rpmdb, rpmTag rpmtag, dbiIndex * dbip)
     const char * dbhome;
     const char * dbfile;
     const char * dbsubfile;
+    const char * dbiBN;
     dbiIndex dbi = NULL;
     int rc = 0;
     int xx;
@@ -1100,7 +1109,7 @@ static int db3open(rpmdb rpmdb, rpmTag rpmtag, dbiIndex * dbip)
     DB_TXN * txnid = NULL;
 #endif
     DBTYPE dbi_type = DB_UNKNOWN;
-    u_int32_t oflags;
+    uint32_t oflags;
     int _printit;
 
     if (dbip)
@@ -1116,6 +1125,7 @@ static int db3open(rpmdb rpmdb, rpmTag rpmtag, dbiIndex * dbip)
 	/*@=nullstate@*/
     /*@=mods@*/
     dbi->dbi_api = DB_VERSION_MAJOR;
+    dbiBN = mapTagName(rpmdb, dbi);
 
     /*
      * Get the prefix/root component and directory path.
@@ -1139,9 +1149,9 @@ static int db3open(rpmdb rpmdb, rpmTag rpmtag, dbiIndex * dbip)
     } else {
 #ifdef	HACK	/* XXX necessary to support dbsubfile */
 	dbfile = (dbi->dbi_file ? dbi->dbi_file : db3basename);
-	dbsubfile = (dbi->dbi_subfile ? dbi->dbi_subfile : mapTagName(dbi->dbi_rpmtag));
+	dbsubfile = (dbi->dbi_subfile ? dbi->dbi_subfile : dbiBN);
 #else
-	dbfile = (dbi->dbi_file ? dbi->dbi_file : mapTagName(dbi->dbi_rpmtag));
+	dbfile = (dbi->dbi_file ? dbi->dbi_file : dbiBN);
 	dbsubfile = NULL;
 #endif
     }
@@ -1215,7 +1225,17 @@ static int db3open(rpmdb rpmdb, rpmTag rpmtag, dbiIndex * dbip)
 	    const char * dbf = rpmGetPath(dbhome, "/__db.001", NULL);
 	    /*@=mods@*/
 
+#if defined(RPM_VENDOR_OPENPKG) /* bdb-allow-zero-sized-files */
+	    /* Make sure RPM passes DB_CREATE to Berkeley-DB also
+	       if file exists, but is (still) zero-sized. */
+	    struct stat sb;
+	    long size = -1;
+	    if (stat(dbf, &sb) == 0)
+		size = (long)sb.st_size;
+	    if (access(dbf, F_OK) == -1 || size == 0) {
+#else
 	    if (access(dbf, F_OK) == -1) {
+#endif
 		/* ... non-existent (or unwritable) DBENV, will create ... */
 		dbi->dbi_oeflags |= DB_CREATE;
 		dbi->dbi_eflags &= ~DB_JOINENV;
@@ -1238,7 +1258,7 @@ static int db3open(rpmdb rpmdb, rpmTag rpmtag, dbiIndex * dbip)
      */
     if ((oflags & DB_CREATE) && (oflags & DB_RDONLY)) {
 	/* dbhome is writable, and DB->open flags may conflict. */
-	const char * dbfn = (dbfile ? dbfile : mapTagName(dbi->dbi_rpmtag));
+	const char * dbfn = (dbfile ? dbfile : dbiBN);
 	/*@-mods@*/
 	const char * dbf = rpmGetPath(dbhome, "/", dbfn, NULL);
 	/*@=mods@*/
@@ -1275,13 +1295,18 @@ static int db3open(rpmdb rpmdb, rpmTag rpmtag, dbiIndex * dbip)
     if (dbi->dbi_use_dbenv) {
 	/*@-mods@*/
 	if (rpmdb->db_dbenv == NULL) {
+	    static int runrecoverycount = 0;
 	    rc = db_init(dbi, dbhome, dbfile, dbsubfile, &dbenv);
 	    switch (rc) {
 	    default:
 		break;
 
 	    case DB_RUNRECOVERY:
-		rpmError(RPMERR_DBERR, _("Runnning db->verify ...\n"));
+		if (runrecoverycount++ >= 1) {
+		    rpmlog(RPMLOG_ERR, _("RUNRECOVERY failed, exiting ...\n"));
+		   exit(EXIT_FAILURE);
+		}
+		rpmlog(RPMLOG_ERR, _("Runnning db->verify ...\n"));
 		rpmdb = rpmdbLink(rpmdb, "DB_RUNRECOVERY");
 		rpmdb->db_remove_env = 1;
 		rpmdb->db_verifying = 1;
@@ -1339,13 +1364,18 @@ assert(dbenv);
 	} else {
 assert(rpmdb && rpmdb->db_dbenv);
 	    dbenv = rpmdb->db_dbenv;
+#define	PLD_CHROOT
+#ifdef	PLD_CHROOT
+	    if (rpmdb->db_chrootDone)
+		xx = dbenv->set_data_dir(dbenv, dbhome);
+#endif
 	    rpmdb->db_opens++;
 	}
 	/*@=mods@*/
     }
 
-    rpmMessage(RPMMESS_DEBUG, D_("opening  db index       %s/%s %s mode=0x%x\n"),
-		dbhome, (dbfile ? dbfile : mapTagName(dbi->dbi_rpmtag)),
+    rpmlog(RPMLOG_DEBUG, D_("opening  db index       %s/%s %s mode=0x%x\n"),
+		dbhome, (dbfile ? dbfile : dbiBN),
 		prDbiOpenFlags(oflags, 0), dbi->dbi_mode);
 
     if (rc == 0) {
@@ -1507,9 +1537,15 @@ assert(rpmdb && rpmdb->db_dbenv);
 		dbpath = (!dbi->dbi_use_dbenv && !dbi->dbi_temporary)
 			? dbfullpath : dbfile;
 #else
+#ifdef	PLD_CHROOT
+		/* XXX Make dbpath relative. */
+		dbpath = (!dbi->dbi_use_dbenv)
+			? dbfullpath : dbfile;
+#else
 		dbpath = (!dbi->dbi_temporary)
 			? dbfullpath : dbfile;
-#endif
+#endif	/* PLD_CHROOT */
+#endif	/* HACK */
 
 #if (DB_VERSION_MAJOR == 4 && DB_VERSION_MINOR >= 1)
 		rc = (db->open)(db, txnid, dbpath, dbsubfile,
@@ -1580,13 +1616,13 @@ assert(rpmdb && rpmdb->db_dbenv);
 				(dbi->dbi_eflags & DB_INIT_CDB) &&
 				!(dbi->dbi_eflags & DB_PRIVATE))
 			    ? 0 : 1);
-			rpmError( (rc ? RPMERR_FLOCK : RPMWARN_FLOCK),
+			rpmlog( (rc ? RPMLOG_ERR : RPMLOG_WARNING),
 				_("cannot get %s lock on %s/%s\n"),
 				((dbi->dbi_mode & (O_RDWR|O_WRONLY))
 					? _("exclusive") : _("shared")),
 				dbhome, (dbfile ? dbfile : ""));
 		    } else if (dbfile) {
-			rpmMessage(RPMMESS_DEBUG,
+			rpmlog(RPMLOG_DEBUG,
 				D_("locked   db index       %s/%s\n"),
 				dbhome, dbfile);
 		    }
