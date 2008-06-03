@@ -8,6 +8,8 @@
 
 #include "rpmio_internal.h"
 
+#include <rpmbc.h>
+
 #include "md2.h"
 #include "md4.h"
 #include "sha224.h"
@@ -320,7 +322,6 @@ struct DIGEST_CTX_s {
     void * param;		/*!< Digest parameters. */
 };
 
-/*@-boundsread@*/
 DIGEST_CTX
 rpmDigestDup(DIGEST_CTX octx)
 {
@@ -329,7 +330,6 @@ rpmDigestDup(DIGEST_CTX octx)
     nctx->param = memcpy(xcalloc(1, nctx->paramsize), octx->param, nctx->paramsize);
     return nctx;
 }
-/*@=boundsread@*/
 
 DIGEST_CTX
 rpmDigestInit(pgpHashAlgo hashalgo, rpmDigestFlags flags)
@@ -634,9 +634,7 @@ rpmDigestInit(pgpHashAlgo hashalgo, rpmDigestFlags flags)
 	/*@notreached@*/ break;
     }
 
-/*@-boundsread@*/
     xx = (*ctx->Reset) (ctx->param);
-/*@=boundsread@*/
 
 DPRINTF((stderr, "*** Init(%x) ctx %p param %p\n", flags, ctx, ctx->param));
     return ctx;
@@ -650,19 +648,15 @@ rpmDigestUpdate(DIGEST_CTX ctx, const void * data, size_t len)
 	return -1;
 
 DPRINTF((stderr, "*** Update(%p,%p,%d) param %p \"%s\"\n", ctx, data, len, ctx->param, ((char *)data)));
-/*@-boundsread@*/
     return (*ctx->Update) (ctx->param, data, len);
-/*@=boundsread@*/
 }
 /*@=mustmod@*/
 
-/*@-boundswrite@*/
 int
 rpmDigestFinal(DIGEST_CTX ctx, void * datap, size_t *lenp, int asAscii)
 {
     byte * digest;
     char * t;
-    int i;
 
     if (ctx == NULL)
 	return -1;
@@ -674,7 +668,6 @@ DPRINTF((stderr, "*** Final(%p,%p,%p,%d) param %p digest %p\n", ctx, datap, lenp
 /*@=noeffectuncon@*/
 
     /* Return final digest. */
-/*@-branchstate@*/
     if (!asAscii) {
 	if (lenp) *lenp = ctx->digestsize;
 	if (datap) {
@@ -686,6 +679,7 @@ DPRINTF((stderr, "*** Final(%p,%p,%p,%d) param %p digest %p\n", ctx, datap, lenp
 	if (datap) {
 	    const byte * s = (const byte *) digest;
 	    static const char hex[] = "0123456789abcdef";
+	    size_t i;
 
 	    *(char **)datap = t = xmalloc((2*ctx->digestsize) + 1);
 	    for (i = 0 ; i < ctx->digestsize; i++) {
@@ -695,7 +689,6 @@ DPRINTF((stderr, "*** Final(%p,%p,%p,%d) param %p digest %p\n", ctx, datap, lenp
 	    *t = '\0';
 	}
     }
-/*@=branchstate@*/
     if (digest) {
 	memset(digest, 0, ctx->digestsize);	/* In case it's sensitive */
 	free(digest);
@@ -706,7 +699,6 @@ DPRINTF((stderr, "*** Final(%p,%p,%p,%d) param %p digest %p\n", ctx, datap, lenp
     free(ctx);
     return 0;
 }
-/*@=boundswrite@*/
 
 pgpHashAlgo rpmDigestHashAlgo = PGPHASHALGO_MD5;
 
@@ -752,5 +744,9 @@ struct poptOption rpmDigestPoptTable[] = {
 	NULL, NULL },
  { "jlu32",'\0', POPT_ARG_VAL,&rpmDigestHashAlgo, PGPHASHALGO_JLU32,
 	NULL, NULL },
+ { "nodigest",'\0', POPT_ARG_VAL|POPT_ARGFLAG_DOC_HIDDEN, &rpmDigestHashAlgo, PGPHASHALGO_NONE,
+	N_("no hash algorithm"), NULL },
+ { "alldigests",'\0', POPT_ARG_VAL|POPT_ARGFLAG_DOC_HIDDEN, &rpmDigestHashAlgo, 256,
+	N_("all hash algorithm(s)"), NULL },
     POPT_TABLEEND
 };
