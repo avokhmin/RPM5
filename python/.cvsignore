@@ -1,11 +1,10 @@
 .deps
-.depend
+.libs
 Makefile
 Makefile.in
-getdate.c
-.libs
+config.h.in
 *.gcda
 *.gcno
 *.la
-*.lcd
 *.lo
+*.pyc

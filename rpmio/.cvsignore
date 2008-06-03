@@ -9,4 +9,16 @@ Makefile.in
 *.la
 *.lcd
 *.lo
-tfr
+tax
+tdigest
+tdir
+tficl
+tfts
+tget
+tglob
+thkp
+tinv
+tkey
+tput
+tring
+trpmio
