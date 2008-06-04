@@ -504,22 +504,6 @@ INPUT                  = @top_srcdir@/Doxyheader \
                          @top_srcdir@/doc/manual/spec \
                          @top_srcdir@/doc/manual/triggers \
                          @top_srcdir@/doc/manual/tsort \
-                         @top_srcdir@/file/src/apprentice.c \
-                         @top_srcdir@/file/src/apptype.c \
-                         @top_srcdir@/file/src/ascmagic.c \
-                         @top_srcdir@/file/src/compress.c \
-                         @top_srcdir@/file/src/file.c \
-                         @top_srcdir@/file/src/file.h \
-                         @top_srcdir@/file/src/fsmagic.c \
-                         @top_srcdir@/file/src/funcs.c \
-                         @top_srcdir@/file/src/is_tar.c \
-                         @top_srcdir@/file/src/magic.c \
-                         @top_srcdir@/file/src/magic.h \
-                         @top_srcdir@/file/src/names.h \
-                         @top_srcdir@/file/src/print.c \
-                         @top_srcdir@/file/src/readelf.c \
-                         @top_srcdir@/file/src/readelf.h \
-                         @top_srcdir@/file/src/softmagic.c \
                          @top_srcdir@/file/src/tar.h \
                          @top_srcdir@/lib/cpio.c \
                          @top_srcdir@/lib/cpio.h \
@@ -572,8 +556,8 @@ INPUT                  = @top_srcdir@/Doxyheader \
                          @top_srcdir@/lib/rpmte.h \
                          @top_srcdir@/lib/rpmts.c \
                          @top_srcdir@/lib/rpmts.h \
-                         @top_srcdir@/lib/stringbuf.c \
-                         @top_srcdir@/lib/stringbuf.h \
+                         @top_srcdir@/lib/rpmversion.c \
+                         @top_srcdir@/lib/rpmversion.h \
                          @top_srcdir@/lib/transaction.c \
                          @top_srcdir@/lib/tar.c \
                          @top_srcdir@/lib/tar.h \
@@ -619,13 +603,12 @@ INPUT                  = @top_srcdir@/Doxyheader \
 			 @top_srcdir@/lua/lzio.h \
                          @top_srcdir@/rpmdb/db3.c \
                          @top_srcdir@/rpmdb/dbconfig.c \
+                         @top_srcdir@/rpmdb/db_emu.h \
                          @top_srcdir@/rpmdb/fprint.c \
                          @top_srcdir@/rpmdb/fprint.h \
-                         @top_srcdir@/rpmdb/hdrNVR.c \
                          @top_srcdir@/rpmdb/hdrfmt.c \
-                         @top_srcdir@/rpmdb/hdrinline.h \
+                         @top_srcdir@/rpmdb/hdrNVR.c \
                          @top_srcdir@/rpmdb/header.c \
-                         @top_srcdir@/rpmdb/header.h \
                          @top_srcdir@/rpmdb/header_internal.c \
                          @top_srcdir@/rpmdb/header_internal.h \
                          @top_srcdir@/rpmdb/legacy.c \
@@ -636,8 +619,11 @@ INPUT                  = @top_srcdir@/Doxyheader \
                          @top_srcdir@/rpmdb/poptDB.c \
                          @top_srcdir@/rpmdb/rpmdb.c \
                          @top_srcdir@/rpmdb/rpmdb.h \
+                         @top_srcdir@/rpmdb/rpmtag.h \
                          @top_srcdir@/rpmdb/signature.c \
                          @top_srcdir@/rpmdb/signature.h \
+                         @top_srcdir@/rpmdb/sqlite.c \
+                         @top_srcdir@/rpmdb/sqlite.h \
                          @top_srcdir@/rpmdb/tagname.c \
                          @top_srcdir@/rpmdb/tagtbl.c \
                          @top_srcdir@/rpmio/argv.c \
@@ -647,10 +633,12 @@ INPUT                  = @top_srcdir@/Doxyheader \
                          @top_srcdir@/rpmio/fts.h \
                          @top_srcdir@/rpmio/getpass.c \
                          @top_srcdir@/rpmio/lookup3.c \
+                         @top_srcdir@/rpmio/lzdio.c \
                          @top_srcdir@/rpmio/macro.c \
+                         @top_srcdir@/rpmio/mount.c \
+                         @top_srcdir@/rpmio/rpmcb.h \
                          @top_srcdir@/rpmio/rpmlog.c \
                          @top_srcdir@/rpmio/rpmlog.h \
-                         @top_srcdir@/rpmio/rpmerr.h \
                          @top_srcdir@/rpmio/rpmhash.c \
                          @top_srcdir@/rpmio/rpmhash.h \
                          @top_srcdir@/rpmio/rpmio.c \
@@ -658,7 +646,6 @@ INPUT                  = @top_srcdir@/Doxyheader \
                          @top_srcdir@/rpmio/rpmio_internal.h \
                          @top_srcdir@/rpmio/rpmmacro.h \
                          @top_srcdir@/rpmio/rpmmalloc.c \
-                         @top_srcdir@/rpmio/rpmmessages.h \
                          @top_srcdir@/rpmio/rpmmg.c \
                          @top_srcdir@/rpmio/rpmmg.h \
                          @top_srcdir@/rpmio/rpmpgp.c \
@@ -670,6 +657,8 @@ INPUT                  = @top_srcdir@/Doxyheader \
                          @top_srcdir@/rpmio/rpmsw.h \
                          @top_srcdir@/rpmio/rpmurl.h \
                          @top_srcdir@/rpmio/strcasecmp.c \
+                         @top_srcdir@/rpmio/stringbuf.h \
+                         @top_srcdir@/rpmio/stringbuf.c \
                          @top_srcdir@/rpmio/stubs.c \
                          @top_srcdir@/rpmio/ugid.c \
                          @top_srcdir@/rpmio/ugid.h \
@@ -701,7 +690,13 @@ INPUT                  = @top_srcdir@/Doxyheader \
                          @top_srcdir@/python/rpmte-py.h \
                          @top_srcdir@/python/rpmts-py.c \
                          @top_srcdir@/python/rpmts-py.h \
-                         @top_srcdir@/tools/rpmdeps.c
+                         @top_srcdir@/tools/rpm2cpio.c \
+                         @top_srcdir@/tools/rpmcache.c \
+                         @top_srcdir@/tools/rpmcmp.c \
+                         @top_srcdir@/tools/rpmdeps.c \
+                         @top_srcdir@/tools/rpmdigest.c \
+                         @top_srcdir@/tools/rpmmtree.c \
+                         @top_srcdir@/tools/rpmrepo.c
 
 # If the value of the INPUT tag contains directories, you can use the 
 # FILE_PATTERNS tag to specify one or more wildcard pattern (like *.cpp 
