@@ -8,17 +8,17 @@
 #define __power_pc() 0
 #endif
 
+#define _MIRE_INTERNAL
 #include <rpmio_internal.h> /* for rpmioSlurp() */
-#include <rpmcli.h>
-#include <rpmmacro.h>
 #include <rpmlua.h>
+#include <rpmluaext.h>
+#include <rpmmacro.h>
+#include <rpmcli.h>
 #include <rpmds.h>
 
-#define _MIRE_INTERNAL
-#include <mire.h>
-
-#include "misc.h"
 #include "debug.h"
+
+/*@access miRE@*/
 
 /*@unchecked@*/ /*@null@*/
 static const char * configTarget = NULL;
@@ -231,7 +231,7 @@ const char * lookupInDefaultTable(const char * name,
     return name;
 }
 
-static void setVarDefault(/*@unused@*/ int var, const char * macroname,
+static void addMacroDefault(const char * macroname,
 		const char * val, /*@null@*/ const char * body)
 	/*@globals rpmGlobalMacroContext, internalState @*/
 	/*@modifies rpmGlobalMacroContext, internalState @*/
@@ -241,8 +241,7 @@ static void setVarDefault(/*@unused@*/ int var, const char * macroname,
     addMacro(NULL, macroname, NULL, body, RMIL_DEFAULT);
 }
 
-static void setPathDefault(/*@unused@*/ int var, const char * macroname,
-		const char * subdir)
+static void setPathDefault(const char * macroname, const char * subdir)
 	/*@globals rpmGlobalMacroContext, h_errno, internalState @*/
 	/*@modifies rpmGlobalMacroContext, internalState @*/
 {
@@ -285,30 +284,30 @@ static void setDefaults(void)
 
     addMacro(NULL, "___build_pre", NULL, ___build_pre, RMIL_DEFAULT);
 
-    setVarDefault(-1,			"_topdir",
+    addMacroDefault("_topdir",
 		"%{_usr}/src/rpm",      NULL);
-    setVarDefault(-1,			"_tmppath",
+    addMacroDefault("_tmppath",
 		"%{_var}/tmp",          NULL);
-    setVarDefault(-1,			"_dbpath",
+    addMacroDefault("_dbpath",
 		"%{_var}/lib/rpm",      NULL);
-    setVarDefault(-1,			"_defaultdocdir",
+    addMacroDefault("_defaultdocdir",
 		"%{_usr}/share/doc",    NULL);
 
-    setVarDefault(-1,			"_rpmfilename",
+    addMacroDefault("_rpmfilename",
 	"%%{ARCH}/%%{NAME}-%%{VERSION}-%%{RELEASE}.%%{ARCH}.rpm",NULL);
 
-    setVarDefault(-1,			"optflags",
+    addMacroDefault("optflags",
 		"-O2 -g",			NULL);
-    setVarDefault(-1,			"sigtype",
+    addMacroDefault("sigtype",
 		"none",			NULL);
-    setVarDefault(-1,			"_buildshell",
+    addMacroDefault("_buildshell",
 		"/bin/sh",		NULL);
 
-    setPathDefault(-1,			"_builddir",	"BUILD");
-    setPathDefault(-1,			"_rpmdir",	"RPMS");
-    setPathDefault(-1,			"_srcrpmdir",	"SRPMS");
-    setPathDefault(-1,			"_sourcedir",	"SOURCES");
-    setPathDefault(-1,			"_specdir",	"SPECS");
+    setPathDefault("_builddir",	"BUILD");
+    setPathDefault("_rpmdir",	"RPMS");
+    setPathDefault("_srcrpmdir",	"SRPMS");
+    setPathDefault("_sourcedir",	"SOURCES");
+    setPathDefault("_specdir",	"SPECS");
 
 }
 
@@ -384,6 +383,7 @@ static int parseCVOG(const char * str, CVOG_t *cvogp)
  * @param nre		no of patterns in array
  * @return		NULL always 
  */
+/*@-onlytrans@*/	/* XXX miRE array, not refcounted. */
 /*@null@*/
 static void * mireFreeAll(/*@only@*/ /*@null@*/ miRE mire, int nre)
 	/*@modifies mire@*/
@@ -396,6 +396,7 @@ static void * mireFreeAll(/*@only@*/ /*@null@*/ miRE mire, int nre)
     }
     return NULL;
 }
+/*@=onlytrans@*/
 
 /**
  * Append pattern to array.
@@ -405,6 +406,7 @@ static void * mireFreeAll(/*@only@*/ /*@null@*/ miRE mire, int nre)
  * @retval *mi_rep	platform pattern array
  * @retval *mi_nrep	no. of patterns in array
  */
+/*@-onlytrans@*/	/* XXX miRE array, not refcounted. */
 /*@null@*/
 static int mireAppend(rpmMireMode mode, int tag, const char * pattern,
 		miRE * mi_rep, int * mi_nrep)
@@ -413,7 +415,9 @@ static int mireAppend(rpmMireMode mode, int tag, const char * pattern,
     miRE mire;
 
     mire = (*mi_rep);
+/*@-refcounttrans@*/
     mire = xrealloc(mire, ((*mi_nrep) + 1) * sizeof(*mire));
+/*@=refcounttrans@*/
     (*mi_rep) = mire;
     mire += (*mi_nrep);
     (*mi_nrep)++;
@@ -422,32 +426,34 @@ static int mireAppend(rpmMireMode mode, int tag, const char * pattern,
     mire->tag = tag;
     return mireRegcomp(mire, pattern);
 }
+/*@=onlytrans@*/
 
 /**
  * Read and configure /etc/rpm/platform patterns.
  * @param platform	path to platform patterns
- * @return		0 on success
+ * @return		RPMRC_OK on success
  */
-static int rpmPlatform(const char * platform)
+/*@-onlytrans@*/	/* XXX miRE array, not refcounted. */
+static rpmRC rpmPlatform(const char * platform)
 	/*@globals nplatpat, platpat,
 		rpmGlobalMacroContext, h_errno, fileSystem, internalState @*/
 	/*@modifies nplatpat, platpat,
 		rpmGlobalMacroContext, fileSystem, internalState @*/
 {
     CVOG_t cvog = NULL;
-    byte * b = NULL;
+    uint8_t * b = NULL;
     ssize_t blen = 0;
     int init_platform = 0;
     miRE mi_re = NULL;
     int mi_nre = 0;
     char * p, * pe;
-    int rc;
+    rpmRC rc;
     int xx;
 
     rc = rpmioSlurp(platform, &b, &blen);
 
     if (rc || b == NULL || blen <= 0) {
-	rc = -1;
+	rc = RPMRC_FAIL;
 	goto exit;
     }
 
@@ -477,15 +483,20 @@ static int rpmPlatform(const char * platform)
 	    addMacro(NULL, "_host_os", NULL, cvog->os, -1);
 	}
 
+#if defined(RPM_VENDOR_OPENPKG) /* explicit-platform */
+	/* do not use vendor and GNU attribution */
+	p = rpmExpand("%{_host_cpu}-%{_host_os}", NULL);
+#else
 	p = rpmExpand("%{_host_cpu}-%{_host_vendor}-%{_host_os}",
 		(cvog && *cvog->gnu ? "-" : NULL),
 		(cvog ? cvog->gnu : NULL), NULL);
+#endif
 	xx = mireAppend(RPMMIRE_STRCMP, 0, p, &mi_re, &mi_nre);
 	p = _free(p);
 	
 	init_platform++;
     }
-    rc = (init_platform ? 0 : -1);
+    rc = (init_platform ? RPMRC_OK : RPMRC_FAIL);
 
 exit:
     if (cvog) {
@@ -495,14 +506,16 @@ exit:
 /*@-modobserver@*/
     b = _free(b);
 /*@=modobserver@*/
-    if (rc == 0) {
+    if (rc == RPMRC_OK) {
 	platpat = mireFreeAll(platpat, nplatpat);
 	platpat = mi_re;
 	nplatpat = mi_nre;
     }
     return rc;
 }
+/*@=onlytrans@*/
 
+/*@-onlytrans@*/	/* XXX miRE array, not refcounted. */
 int rpmPlatformScore(const char * platform, void * mi_re, int mi_nre)
 {
     miRE mire;
@@ -520,6 +533,7 @@ int rpmPlatformScore(const char * platform, void * mi_re, int mi_nre)
     }
     return 0;
 }
+/*@=onlytrans@*/
 
 /**
  */
@@ -528,16 +542,81 @@ static void defaultMachine(/*@out@*/ const char ** arch,
 	/*@globals rpmGlobalMacroContext, h_errno, fileSystem, internalState @*/
 	/*@modifies *arch, *os, rpmGlobalMacroContext, fileSystem, internalState @*/
 {
+#if defined(RPM_VENDOR_OPENPKG) /* larger-utsname */
+    /* utsname fields on some platforms (like HP-UX) are very small
+       (just about 8 characters). This is too small for OpenPKG, so cheat! */
+    static struct utsname un_real;
+    static struct {
+        char sysname[32];
+        char nodename[32];
+        char release[32];
+        char version[32];
+        char machine[32];
+    } un;
+#else
     static struct utsname un;
+#endif
     static int gotDefaults = 0;
     int rc;
 
     while (!gotDefaults) {
 	CVOG_t cvog = NULL;
+#if defined(RPM_VENDOR_OPENPKG) /* larger-utsname */
+	const char *cp;
+#endif
+#if defined(RPM_VENDOR_OPENPKG) /* larger-utsname */
+	/* utsname fields on some platforms (like HP-UX) are very small
+	   (just about 8 characters). This is too small for OpenPKG, so cheat! */
+	rc = uname(&un_real);
+	strncpy(un.sysname,  un_real.sysname,  sizeof(un.sysname));  un.sysname [sizeof(un.sysname) -1] = '\0';
+	strncpy(un.nodename, un_real.nodename, sizeof(un.nodename)); un.nodename[sizeof(un.nodename)-1] = '\0';
+	strncpy(un.release,  un_real.release,  sizeof(un.release));  un.release [sizeof(un.release) -1] = '\0';
+	strncpy(un.version,  un_real.version,  sizeof(un.version));  un.version [sizeof(un.version) -1] = '\0';
+	strncpy(un.machine,  un_real.machine,  sizeof(un.machine));  un.machine [sizeof(un.machine) -1] = '\0';
+#else
 	rc = uname(&un);
+#endif
 	if (rc < 0) return;
 
-	if (!rpmPlatform(platform)) {
+#if defined(RPM_VENDOR_OPENPKG) /* platform-major-minor-only */
+    /* Reduce the platform version to major and minor version numbers */
+    {
+        char *cp;
+        char *cpR;
+        int n;
+        cpR = un.release;
+        if ((n = strcspn(cpR, "0123456789")) > 0)
+            cpR += n;
+        if ((n = strspn(cpR, "0123456789.")) > 0) {
+            /* terminate after "N.N.N...." prefix */
+            cpR[n] = '\0';
+            /* shorten to "N.N" if longer */
+            if ((cp = strchr(cpR, '.')) != NULL) {
+                if ((cp = strchr(cp+1, '.')) != NULL)
+                    *cp = '\0';
+            }
+            strcat(un.sysname, cpR);
+        }
+        /* fix up machine hardware name containing white-space as it
+           happens to be on Power Macs running MacOS X */
+        if (!strncmp(un.machine, "Power Macintosh", 15))
+            sprintf(un.machine, "powerpc");
+    }
+#endif
+
+	if (!strncmp(un.machine, "Power Macintosh", 15)) {
+	    sprintf(un.machine, "ppc");
+	}
+
+#if defined(RPM_VENDOR_OPENPKG) /* explicit-platform */
+	/* allow the path to the "platforms" file be overridden under run-time */
+	cp = rpmExpand("%{?__platform}", NULL);
+	if (cp == NULL || cp[0] == '\0')
+	    cp = platform;
+	if (rpmPlatform(cp) == RPMRC_OK) {
+#else
+	if (rpmPlatform(platform) == RPMRC_OK) {
+#endif
 	    const char * s;
 	    gotDefaults = 1;
 	    s = rpmExpand("%{?_host_cpu}", NULL);
@@ -553,6 +632,12 @@ static void defaultMachine(/*@out@*/ const char ** arch,
 	    }
 	    s = _free(s);
 	}
+
+#if defined(RPM_VENDOR_OPENPKG) /* explicit-platform */
+	/* cleanup after above processing */
+	if (cp != NULL && cp != platform)
+	    cp = _free(cp);
+#endif
 
 	if (configTarget && !parseCVOG(configTarget, &cvog) && cvog != NULL) {
 	    gotDefaults = 1;
@@ -596,9 +681,11 @@ void rpmSetTables(int archTable, int osTable)
     }
 }
 
-void rpmSetMachine(const char * arch, const char * os)
-	/*@globals current @*/
-	/*@modifies current @*/
+static void rpmSetMachine(const char * arch, const char * os)
+	/*@globals current, rpmGlobalMacroContext, h_errno,
+		fileSystem, internalState @*/
+	/*@modifies current, rpmGlobalMacroContext,
+		fileSystem, internalState @*/
 {
     if (arch == NULL) {
 /*@i@*/	defaultMachine(&arch, NULL);
@@ -871,6 +958,9 @@ int rpmReadConfigFiles(/*@unused@*/ const char * file, const char * target)
     /* Force Lua state initialization */
 #ifdef WITH_LUA
     (void)rpmluaGetPrintBuffer(NULL);
+#if defined(RPM_VENDOR_OPENPKG) /* rpm-lua-extensions-based-on-rpm-lib-functionality */
+    (void)rpmluaextActivate(rpmluaGetGlobalState());
+#endif /* RPM_VENDOR_OPENPKG */
 #endif
 
     return 0;
@@ -970,7 +1060,9 @@ int rpmShowRC(FILE * fp)
 	    ds = rpmdsFree(ds);
 	    fprintf(fp, "\n");
 	}
+    }
 
+    if (rpmIsDebug()) {
 	xx = rpmdsGetconf(&ds, NULL);
 	if (ds != NULL) {
 	    fprintf(fp,
