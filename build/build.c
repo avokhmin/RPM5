@@ -5,7 +5,8 @@
 
 #include "system.h"
 
-#include <rpmio_internal.h>
+#include <rpmio_internal.h>	/* XXX fdGetFp */
+#define	_RPMTAG_INTERNAL
 #include <rpmbuild.h>
 #include "signature.h"		/* XXX rpmTempFile */
 
@@ -16,11 +17,29 @@ static int _build_debug = 0;
 
 /**
  */
+#if defined(RPM_VENDOR_OPENPKG) /* splitted-source-directory */
+const char * getSourceDir(rpmfileAttrs attr, const char *filename)
+#else
 const char * getSourceDir(rpmfileAttrs attr)
-    /*@globals rpmGlobalMacroContext @*/
+#endif
 {
     const char * dir = NULL;
+#if defined(RPM_VENDOR_OPENPKG) /* splitted-source-directory */
+    const char *fn;
 
+    /*	support splitted source directories, i.e., source files which
+	are alternatively placed into the .spec directory and picked
+	up from there, too. */
+    if (attr & (RPMFILE_SOURCE|RPMFILE_PATCH|RPMFILE_ICON) && filename != NULL)
+    {
+	fn = rpmGetPath("%{_specdir}/", filename, NULL);
+	if (access(fn, F_OK) == 0)
+		dir = "%{_specdir}/";
+	fn = _free(fn);
+    }
+    if (dir != NULL) {
+    } else
+#endif
     if (attr & RPMFILE_SOURCE)
         dir = "%{_sourcedir}/";
     else if (attr & RPMFILE_PATCH)
@@ -52,7 +71,11 @@ static void doRmSource(Spec spec)
 	const char *dn, *fn;
     if (sp->flags & RPMFILE_GHOST)
         continue;
+#if defined(RPM_VENDOR_OPENPKG) /* splitted-source-directory */
+    if (! (dn = getSourceDir(sp->flags, sp->source)))
+#else
     if (! (dn = getSourceDir(sp->flags)))
+#endif
         continue;
 	fn = rpmGenPath(NULL, dn, sp->source);
 	rc = Unlink(fn);
@@ -63,7 +86,7 @@ static void doRmSource(Spec spec)
 /*
  * @todo Single use by %%doc in files.c prevents static.
  */
-int doScript(Spec spec, int what, const char *name, StringBuf sb, int test)
+rpmRC doScript(Spec spec, int what, const char *name, StringBuf sb, int test)
 {
     const char * rootURL = spec->rootURL;
     const char * rootDir;
@@ -83,11 +106,12 @@ int doScript(Spec spec, int what, const char *name, StringBuf sb, int test)
 
     FD_t fd;
     FD_t xfd;
-    int child;
+    pid_t pid;
+    pid_t child;
     int status;
-    int rc;
+    rpmRC rc;
+    size_t i;
     
-    /*@-branchstate@*/
     switch (what) {
     case RPMBUILD_PREP:
 	name = "%prep";
@@ -130,6 +154,23 @@ int doScript(Spec spec, int what, const char *name, StringBuf sb, int test)
 	mPost = "%{__spec_clean_post}";
 	mCmd = "%{__spec_clean_cmd}";
 	break;
+    /* support "%track" script/section */
+    case RPMBUILD_TRACK:
+	name = "%track";
+	sb = NULL;
+	if (spec->foo)
+	for (i = 0; i < spec->nfoo; i++) {
+	    if (spec->foo[i].str == NULL || spec->foo[i].val == NULL)
+		continue;
+	    if (xstrcasecmp(spec->foo[i].str, "track"))
+		continue;
+	    sb = spec->foo[i].val;
+	    /*@loopbreak@*/ break;
+	}
+	mTemplate = "%{__spec_track_template}";
+	mPost = "%{__spec_track_post}";
+	mCmd = "%{__spec_track_cmd}";
+	break;
     case RPMBUILD_STRINGBUF:
     default:
 	mTemplate = "%{___build_template}";
@@ -139,37 +180,32 @@ int doScript(Spec spec, int what, const char *name, StringBuf sb, int test)
     }
     if (name == NULL)	/* XXX shouldn't happen */
 	name = "???";
-    /*@=branchstate@*/
 
     if ((what != RPMBUILD_RMBUILD) && sb == NULL) {
-	rc = 0;
+	rc = RPMRC_OK;
 	goto exit;
     }
     
     if (rpmTempFile(rootURL, &scriptName, &fd) || fd == NULL || Ferror(fd)) {
-	rpmError(RPMERR_SCRIPT, _("Unable to open temp file.\n"));
-	rc = RPMERR_SCRIPT;
+	rpmlog(RPMLOG_ERR, _("Unable to open temp file.\n"));
+	rc = RPMRC_FAIL;
 	goto exit;
     }
 
-    /*@-branchstate@*/
     if (fdGetFp(fd) == NULL)
 	xfd = Fdopen(fd, "w.fpio");
     else
 	xfd = fd;
-    /*@=branchstate@*/
 
     /*@-type@*/ /* FIX: cast? */
     if ((fp = fdGetFp(xfd)) == NULL) {
-	rc = RPMERR_SCRIPT;
+	rc = RPMRC_FAIL;
 	goto exit;
     }
     /*@=type@*/
     
     (void) urlPath(rootURL, &rootDir);
-    /*@-branchstate@*/
     if (*rootDir == '\0') rootDir = "/";
-    /*@=branchstate@*/
 
     (void) urlPath(scriptName, &buildScript);
 
@@ -178,7 +214,8 @@ int doScript(Spec spec, int what, const char *name, StringBuf sb, int test)
 
     (void) fputs(buildTemplate, fp);
 
-    if (what != RPMBUILD_PREP && what != RPMBUILD_RMBUILD && spec->buildSubdir)
+    /* support "%track" script/section */
+    if (what != RPMBUILD_PREP && what != RPMBUILD_RMBUILD && spec->buildSubdir && what != RPMBUILD_TRACK)
 	fprintf(fp, "cd '%s'\n", spec->buildSubdir);
 
     if (what == RPMBUILD_RMBUILD) {
@@ -192,19 +229,17 @@ int doScript(Spec spec, int what, const char *name, StringBuf sb, int test)
     (void) Fclose(xfd);
 
     if (test) {
-	rc = 0;
+	rc = RPMRC_OK;
 	goto exit;
     }
     
 if (_build_debug)
 fprintf(stderr, "*** rootURL %s buildDirURL %s\n", rootURL, buildDirURL);
-/*@-boundsread@*/
     if (buildDirURL && buildDirURL[0] != '/' &&
 	(urlSplit(buildDirURL, &u) != 0)) {
-	rc = RPMERR_SCRIPT;
+	rc = RPMRC_FAIL;
 	goto exit;
     }
-/*@=boundsread@*/
     if (u != NULL) {
 	switch (u->urltype) {
 	case URL_IS_HTTPS:
@@ -229,34 +264,41 @@ fprintf(stderr, "*** addMacros\n");
     buildCmd = rpmExpand(mCmd, " ", buildScript, NULL);
     (void) poptParseArgvString(buildCmd, &argc, &argv);
 
-    rpmMessage(RPMMESS_NORMAL, _("Executing(%s): %s\n"), name, buildCmd);
+    if (what != RPMBUILD_TRACK)		/* support "%track" script/section */
+	rpmlog(RPMLOG_NOTICE, _("Executing(%s): %s\n"), name, buildCmd);
     if (!(child = fork())) {
 
 	/*@-mods@*/
 	errno = 0;
 	/*@=mods@*/
-/*@-boundsread@*/
 	(void) execvp(argv[0], (char *const *)argv);
-/*@=boundsread@*/
 
-	rpmError(RPMERR_SCRIPT, _("Exec of %s failed (%s): %s\n"),
+	rpmlog(RPMLOG_ERR, _("Exec of %s failed (%s): %s\n"),
 		scriptName, name, strerror(errno));
 
 	_exit(-1);
     }
 
-    rc = waitpid(child, &status, 0);
+    pid = waitpid(child, &status, 0);
 
     if (!WIFEXITED(status) || WEXITSTATUS(status)) {
-	rpmError(RPMERR_SCRIPT, _("Bad exit status from %s (%s)\n"),
+	rpmlog(RPMLOG_ERR, _("Bad exit status from %s (%s)\n"),
 		 scriptName, name);
-	rc = RPMERR_SCRIPT;
+	rc = RPMRC_FAIL;
     } else
-	rc = 0;
+	rc = RPMRC_OK;
     
 exit:
     if (scriptName) {
-	if (!rc)
+#if defined(RPM_VENDOR_OPENPKG) /* always-remove-tempfiles */
+	/* Unconditionally remove temporary files ("rpm-tmp.XXXXX") which
+	   were generated for the executed scripts. In OpenPKG we run the
+	   scripts in debug mode ("set -x") anyway, so we never need to
+	   see the whole generated script -- not even if it breaks.  Instead
+	   we would just have temporary files staying around forever. */
+#else
+	if (rc == RPMRC_OK)
+#endif
 	    (void) Unlink(scriptName);
 	scriptName = _free(scriptName);
     }
@@ -289,9 +331,9 @@ fprintf(stderr, "*** delMacros\n");
     return rc;
 }
 
-int buildSpec(rpmts ts, Spec spec, int what, int test)
+rpmRC buildSpec(rpmts ts, Spec spec, int what, int test)
 {
-    int rc = 0;
+    rpmRC rc = RPMRC_OK;
 
     if (!spec->recursing && spec->BACount) {
 	int x;
@@ -299,16 +341,19 @@ int buildSpec(rpmts ts, Spec spec, int what, int test)
 	/* packaging on the first run, and skip RMSOURCE altogether */
 	if (spec->BASpecs != NULL)
 	for (x = 0; x < spec->BACount; x++) {
-/*@-boundsread@*/
 	    if ((rc = buildSpec(ts, spec->BASpecs[x],
 				(what & ~RPMBUILD_RMSOURCE) |
 				(x ? 0 : (what & RPMBUILD_PACKAGESOURCE)),
 				test))) {
 		goto exit;
 	    }
-/*@=boundsread@*/
 	}
     } else {
+	/* support "%track" script/section */
+	if ((what & RPMBUILD_TRACK) &&
+	    (rc = doScript(spec, RPMBUILD_TRACK, NULL, NULL, test)))
+		goto exit;
+
 	if ((what & RPMBUILD_PREP) &&
 	    (rc = doScript(spec, RPMBUILD_PREP, NULL, NULL, test)))
 		goto exit;
@@ -357,9 +402,31 @@ int buildSpec(rpmts ts, Spec spec, int what, int test)
     if (what & RPMBUILD_RMSPEC)
 	(void) Unlink(spec->specFile);
 
+#if defined(RPM_VENDOR_OPENPKG) /* auto-remove-source-directories */
+    /* In OpenPKG we use per-package %{_sourcedir} and %{_specdir}
+       definitions (macros have trailing ".../%{name}"). On removal of
+       source(s) and .spec file, this per-package directory would be kept
+       (usually <prefix>/RPM/SRC/<name>/), because RPM does not know about
+       this OpenPKG convention. So, let RPM try(!) to remove the two
+       directories (if they are empty) and just ignore removal failures
+       (if they are still not empty). */
+    if (what & RPMBUILD_RMSOURCE) {
+        const char *pn;
+        pn = rpmGetPath("%{_sourcedir}", NULL);
+        Rmdir(pn); /* ignore error, it is ok if it fails (usually with ENOTEMPTY) */
+        pn = _free(pn);
+    }
+    if (what & RPMBUILD_RMSPEC) {
+        const char *pn;
+        pn = rpmGetPath("%{_specdir}", NULL);
+        Rmdir(pn); /* ignore error, it is ok if it fails (usually with ENOTEMPTY) */
+        pn = _free(pn);
+    }
+#endif
+
 exit:
-    if (rc && rpmlogGetNrecs() > 0) {
-	rpmMessage(RPMMESS_NORMAL, _("\n\nRPM build errors:\n"));
+    if (rc != RPMRC_OK && rpmlogGetNrecs() > 0) {
+	rpmlog(RPMLOG_NOTICE, _("\n\nRPM build errors:\n"));
 	rpmlogPrint(NULL);
     }
 

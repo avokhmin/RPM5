@@ -14,14 +14,33 @@
 
 void addChangelogEntry(Header h, time_t time, const char *name, const char *text)
 {
-    int_32 mytime = time;	/* XXX convert to int_32 in header */
+    HE_t he = memset(alloca(sizeof(*he)), 0, sizeof(*he));
+    uint32_t mytime = time;	/* XXX convert to uint32_t for header */
+    int xx;
 
-    (void) headerAddOrAppendEntry(h, RPMTAG_CHANGELOGTIME,
-		RPM_INT32_TYPE, &mytime, 1);
-    (void) headerAddOrAppendEntry(h, RPMTAG_CHANGELOGNAME,
-		RPM_STRING_ARRAY_TYPE, &name, 1);
-    (void) headerAddOrAppendEntry(h, RPMTAG_CHANGELOGTEXT,
-		RPM_STRING_ARRAY_TYPE, &text, 1);
+    he->tag = RPMTAG_CHANGELOGTIME;
+    he->t = RPM_UINT32_TYPE;
+    he->p.ui32p = &mytime;
+    he->c = 1;
+    he->append = 1;
+    xx = headerPut(h, he, 0);
+    he->append = 0;
+
+    he->tag = RPMTAG_CHANGELOGNAME;
+    he->t = RPM_STRING_ARRAY_TYPE;
+    he->p.argv = &name;
+    he->c = 1;
+    he->append = 1;
+    xx = headerPut(h, he, 0);
+    he->append = 0;
+
+    he->tag = RPMTAG_CHANGELOGTEXT;
+    he->t = RPM_STRING_ARRAY_TYPE;
+    he->p.argv = &text;
+    he->c = 1;
+    he->append = 1;
+    xx = headerPut(h, he, 0);
+    he->append = 0;
 }
 
 /**
@@ -30,7 +49,6 @@ void addChangelogEntry(Header h, time_t time, const char *name, const char *text
  * @retval secs		secs since the unix epoch
  * @return 		0 on success, -1 on error
  */
-/*@-boundswrite@*/
 static int dateToTimet(const char * datestr, /*@out@*/ time_t * secs)
 	/*@modifies *secs @*/
 {
@@ -92,14 +110,15 @@ static int dateToTimet(const char * datestr, /*@out@*/ time_t * secs)
     if (*secs == -1) return -1;
 
     /* determine timezone offset */
+/*@-nullpass@*/		/* gmtime(3) unlikely to return NULL soon. */
     timezone_offset = mktime(gmtime(secs)) - *secs;
+/*@=nullpass@*/
 
     /* adjust to UTC */
     *secs += timezone_offset;
 
     return 0;
 }
-/*@=boundswrite@*/
 
 /*@-redecl@*/
 extern time_t get_date(const char * p, void * now);     /* XXX expedient lies */
@@ -109,10 +128,9 @@ extern time_t get_date(const char * p, void * now);     /* XXX expedient lies */
  * Add %changelog section to header.
  * @param h		header
  * @param sb		changelog strings
- * @return		0 on success
+ * @return		RPMRC_OK on success
  */
-/*@-boundswrite@*/
-static int addChangelog(Header h, StringBuf sb)
+static rpmRC addChangelog(Header h, StringBuf sb)
 	/*@globals rpmGlobalMacroContext, h_errno @*/
 	/*@modifies h, rpmGlobalMacroContext @*/
 {
@@ -152,17 +170,17 @@ static int addChangelog(Header h, StringBuf sb)
 
     while (*s != '\0') {
 	if (*s != '*') {
-	    rpmError(RPMERR_BADSPEC,
+	    rpmlog(RPMLOG_ERR,
 			_("%%changelog entries must start with *\n"));
-	    return RPMERR_BADSPEC;
+	    return RPMRC_FAIL;
 	}
 
 	/* find end of line */
 	date = s;
 	while(*s && *s != '\n') s++;
 	if (! *s) {
-	    rpmError(RPMERR_BADSPEC, _("incomplete %%changelog entry\n"));
-	    return RPMERR_BADSPEC;
+	    rpmlog(RPMLOG_ERR, _("incomplete %%changelog entry\n"));
+	    return RPMRC_FAIL;
 	}
 /*@-modobserver@*/
 	*s = '\0';
@@ -178,21 +196,21 @@ static int addChangelog(Header h, StringBuf sb)
 	}
 	mySKIPSPACE(date);
 	if (dateToTimet(date, &time)) {
-	    rpmError(RPMERR_BADSPEC, _("bad date in %%changelog: %s\n"), date);
-	    return RPMERR_BADSPEC;
+	    rpmlog(RPMLOG_ERR, _("bad date in %%changelog: %s\n"), date);
+	    return RPMRC_FAIL;
 	}
 	if (lastTime && lastTime < time) {
-	    rpmError(RPMERR_BADSPEC,
+	    rpmlog(RPMLOG_ERR,
 		     _("%%changelog not in descending chronological order\n"));
-	    return RPMERR_BADSPEC;
+	    return RPMRC_FAIL;
 	}
 	lastTime = time;
 
 	/* skip space to the name */
 	mySKIPSPACE(s);
 	if (! *s) {
-	    rpmError(RPMERR_BADSPEC, _("missing name in %%changelog\n"));
-	    return RPMERR_BADSPEC;
+	    rpmlog(RPMLOG_ERR, _("missing name in %%changelog\n"));
+	    return RPMRC_FAIL;
 	}
 
 	/* name */
@@ -202,15 +220,15 @@ static int addChangelog(Header h, StringBuf sb)
 	    *s-- = '\0';
 
 	if (s == name) {
-	    rpmError(RPMERR_BADSPEC, _("missing name in %%changelog\n"));
-	    return RPMERR_BADSPEC;
+	    rpmlog(RPMLOG_ERR, _("missing name in %%changelog\n"));
+	    return RPMRC_FAIL;
 	}
 
 	/* text */
 	mySKIPSPACE(text);
 	if (! *text) {
-	    rpmError(RPMERR_BADSPEC, _("no description in %%changelog\n"));
-	    return RPMERR_BADSPEC;
+	    rpmlog(RPMLOG_ERR, _("no description in %%changelog\n"));
+	    return RPMRC_FAIL;
 	}
 	    
 	/* find the next leading '*' (or eos) */
@@ -239,22 +257,22 @@ static int addChangelog(Header h, StringBuf sb)
 
     return 0;
 }
-/*@=boundswrite@*/
 
 int parseChangelog(Spec spec)
 {
-    int nextPart, res, rc;
+    rpmParseState nextPart;
     StringBuf sb = newStringBuf();
+    rpmRC rc;
     
     /* There are no options to %changelog */
     if ((rc = readLine(spec, STRIP_COMMENTS)) > 0) {
 	sb = freeStringBuf(sb);
 	return PART_NONE;
     }
-    if (rc)
+    if (rc != RPMRC_OK)
 	return rc;
     
-    while (! (nextPart = isPart(spec->line))) {
+    while ((nextPart = isPart(spec)) == PART_NONE) {
 	const char * line;
 	line = xstrdup(spec->line);
 	line = xstrtolocale(line);
@@ -264,12 +282,12 @@ int parseChangelog(Spec spec)
 	    nextPart = PART_NONE;
 	    break;
 	}
-	if (rc)
+	if (rc != RPMRC_OK)
 	    return rc;
     }
 
-    res = addChangelog(spec->packages->header, sb);
+    rc = addChangelog(spec->packages->header, sb);
     sb = freeStringBuf(sb);
 
-    return (res) ? res : nextPart;
+    return (rc != RPMRC_OK ? rc : (rpmRC)nextPart);
 }

@@ -17,14 +17,14 @@
 
 /**
  */
-static int addTriggerIndex(Package pkg, const char *file,
+static uint32_t addTriggerIndex(Package pkg, const char *file,
 	const char *script, const char *prog)
 	/*@modifies pkg->triggerFiles @*/
 {
     struct TriggerFileEntry *tfe;
     struct TriggerFileEntry *list = pkg->triggerFiles;
     struct TriggerFileEntry *last = NULL;
-    int index = 0;
+    uint32_t index = 0;
 
     while (list) {
 	last = list;
@@ -70,9 +70,11 @@ static int addTriggerIndex(Package pkg, const char *file,
 /* We then pass the remaining arguments to parseRCPOT, along with   */
 /* an index we just determined.                                     */
 
-/*@-boundswrite@*/
 int parseScript(Spec spec, int parsePart)
 {
+    HE_t he = memset(alloca(sizeof(*he)), 0, sizeof(*he));
+    int xx;
+
     /* There are a few options to scripts: */
     /*  <pkg>                              */
     /*  -n <pkg>                           */
@@ -86,19 +88,19 @@ int parseScript(Spec spec, int parsePart)
     char *partname = NULL;
     rpmTag reqtag = 0;
     rpmTag tag = 0;
-    int tagflags = 0;
+    rpmsenseFlags tagflags = 0;
     rpmTag progtag = 0;
     int flag = PART_SUBNAME;
     Package pkg;
     StringBuf sb = NULL;
-    int nextPart;
-    int index;
+    rpmParseState nextPart;
     char reqargs[BUFSIZ];
 
-    int rc, argc;
+    int argc;
     int arg;
     const char **argv = NULL;
     poptContext optCon = NULL;
+    rpmRC rc;
     
     reqargs[0] = '\0';
     /*@-mods@*/
@@ -107,7 +109,6 @@ int parseScript(Spec spec, int parsePart)
     file = NULL;
     /*@=mods@*/
     
-    /*@-branchstate@*/
     switch (parsePart) {
       case PART_PRE:
 	tag = RPMTAG_PREIN;
@@ -179,16 +180,22 @@ int parseScript(Spec spec, int parsePart)
 	progtag = RPMTAG_TRIGGERSCRIPTPROG;
 	partname = "%triggerpostun";
 	break;
+      /* support "%sanitycheck" script/section */
+      case PART_SANITYCHECK:
+	tag = RPMTAG_SANITYCHECK;
+	tagflags = RPMSENSE_SCRIPT_SANITYCHECK;
+	progtag = RPMTAG_SANITYCHECKPROG;
+	partname = "%sanitycheck";
+	break;
     }
-    /*@=branchstate@*/
 
     if (tag == RPMTAG_TRIGGERSCRIPTS) {
 	/* break line into two */
 	p = strstr(spec->line, "--");
 	if (!p) {
-	    rpmError(RPMERR_BADSPEC, _("line %d: triggers must have --: %s\n"),
+	    rpmlog(RPMLOG_ERR, _("line %d: triggers must have --: %s\n"),
 		     spec->lineNum, spec->line);
-	    return RPMERR_BADSPEC;
+	    return RPMRC_FAIL;
 	}
 
 	*p = '\0';
@@ -196,9 +203,9 @@ int parseScript(Spec spec, int parsePart)
     }
     
     if ((rc = poptParseArgvString(spec->line, &argc, &argv))) {
-	rpmError(RPMERR_BADSPEC, _("line %d: Error parsing %s: %s\n"),
+	rpmlog(RPMLOG_ERR, _("line %d: Error parsing %s: %s\n"),
 		 spec->lineNum, partname, poptStrerror(rc));
-	return RPMERR_BADSPEC;
+	return RPMRC_FAIL;
     }
     
     optCon = poptGetContext(NULL, argc, argv, optionsTable, 0);
@@ -207,19 +214,19 @@ int parseScript(Spec spec, int parsePart)
 	case 'p':
 	    if (prog[0] == '<') {
 		if (prog[strlen(prog)-1] != '>') {
-		    rpmError(RPMERR_BADSPEC,
+		    rpmlog(RPMLOG_ERR,
 			     _("line %d: internal script must end "
 			     "with \'>\': %s\n"), spec->lineNum, prog);
-		    rc = RPMERR_BADSPEC;
+		    rc = RPMRC_FAIL;
 		    goto exit;
 		}
 	    } else if (prog[0] == '%') {
 		/* XXX check well-formed macro? */
 	    } else if (prog[0] != '/') {
-		rpmError(RPMERR_BADSPEC,
+		rpmlog(RPMLOG_ERR,
 			 _("line %d: script program must begin "
 			 "with \'/\': %s\n"), spec->lineNum, prog);
-		rc = RPMERR_BADSPEC;
+		rc = RPMRC_FAIL;
 		goto exit;
 	    }
 	    /*@switchbreak@*/ break;
@@ -230,11 +237,11 @@ int parseScript(Spec spec, int parsePart)
     }
     
     if (arg < -1) {
-	rpmError(RPMERR_BADSPEC, _("line %d: Bad option %s: %s\n"),
+	rpmlog(RPMLOG_ERR, _("line %d: Bad option %s: %s\n"),
 		 spec->lineNum,
 		 poptBadOption(optCon, POPT_BADOPTION_NOALIAS), 
 		 spec->line);
-	rc = RPMERR_BADSPEC;
+	rc = RPMRC_FAIL;
 	goto exit;
     }
 
@@ -244,34 +251,34 @@ int parseScript(Spec spec, int parsePart)
 	    name = poptGetArg(optCon);
 	/*@=mods@*/
 	if (poptPeekArg(optCon)) {
-	    rpmError(RPMERR_BADSPEC, _("line %d: Too many names: %s\n"),
+	    rpmlog(RPMLOG_ERR, _("line %d: Too many names: %s\n"),
 		     spec->lineNum,
 		     spec->line);
-	    rc = RPMERR_BADSPEC;
+	    rc = RPMRC_FAIL;
 	    goto exit;
 	}
     }
     
-    if (lookupPackage(spec, name, flag, &pkg)) {
-	rpmError(RPMERR_BADSPEC, _("line %d: Package does not exist: %s\n"),
+    if (lookupPackage(spec, name, flag, &pkg) != RPMRC_OK) {
+	rpmlog(RPMLOG_ERR, _("line %d: Package does not exist: %s\n"),
 		 spec->lineNum, spec->line);
-	rc = RPMERR_BADSPEC;
+	rc = RPMRC_FAIL;
 	goto exit;
     }
 
     if (tag != RPMTAG_TRIGGERSCRIPTS) {
 	if (headerIsEntry(pkg->header, progtag)) {
-	    rpmError(RPMERR_BADSPEC, _("line %d: Second %s\n"),
+	    rpmlog(RPMLOG_ERR, _("line %d: Second %s\n"),
 		     spec->lineNum, partname);
-	    rc = RPMERR_BADSPEC;
+	    rc = RPMRC_FAIL;
 	    goto exit;
 	}
     }
 
     if ((rc = poptParseArgvString(prog, &progArgc, &progArgv))) {
-	rpmError(RPMERR_BADSPEC, _("line %d: Error parsing %s: %s\n"),
+	rpmlog(RPMLOG_ERR, _("line %d: Error parsing %s: %s\n"),
 		 spec->lineNum, partname, poptStrerror(rc));
-	rc = RPMERR_BADSPEC;
+	rc = RPMRC_FAIL;
 	goto exit;
     }
 
@@ -281,7 +288,7 @@ int parseScript(Spec spec, int parsePart)
     } else {
 	if (rc)
 	    goto exit;
-	while (! (nextPart = isPart(spec->line))) {
+	while ((nextPart = isPart(spec)) == PART_NONE) {
 	    appendStringBuf(sb, spec->line);
 	    if ((rc = readLine(spec, STRIP_NOTHING)) > 0) {
 		nextPart = PART_NONE;
@@ -298,7 +305,7 @@ int parseScript(Spec spec, int parsePart)
     if (!strcmp(progArgv[0], "<lua>")) {
 	rpmlua lua = NULL; /* Global state. */
 	if (rpmluaCheckScript(lua, p, partname) != RPMRC_OK) {
-	    rc = RPMERR_BADSPEC;
+	    rc = RPMRC_FAIL;
 	    goto exit;
 	}
 	(void) rpmlibNeedsFeature(pkg->header,
@@ -306,12 +313,16 @@ int parseScript(Spec spec, int parsePart)
     } else
 #endif
     if (progArgv[0][0] == '<') {
-	rpmError(RPMERR_BADSPEC,
+	rpmlog(RPMLOG_ERR,
 		 _("line %d: unsupported internal script: %s\n"),
 		 spec->lineNum, progArgv[0]);
-	rc = RPMERR_BADSPEC;
+	rc = RPMRC_FAIL;
 	goto exit;
-    } else {
+    } else
+    if (!(rpmExpandNumeric("%{?_disable_shell_interpreter_deps}")
+     && !strcmp(progArgv[0], "/bin/sh")))
+    {
+
         (void) addReqProv(spec, pkg->header, RPMTAG_REQUIRENAME,
 		progArgv[0], NULL, (tagflags | RPMSENSE_INTERP), 0);
     }
@@ -320,24 +331,35 @@ int parseScript(Spec spec, int parsePart)
     /* get the index right.                                   */
     if (tag == RPMTAG_TRIGGERSCRIPTS) {
 	/* Add file/index/prog triple to the trigger file list */
-	index = addTriggerIndex(pkg, file, p, progArgv[0]);
+	uint32_t index = addTriggerIndex(pkg, file, p, progArgv[0]);
 
 	/* Generate the trigger tags */
 	if ((rc = parseRCPOT(spec, pkg, reqargs, reqtag, index, tagflags)))
 	    goto exit;
     } else {
-	if (progArgc == 1)
-	    (void) headerAddEntry(pkg->header, progtag, RPM_STRING_TYPE,
-			*progArgv, progArgc);
-	else {
+	if (progArgc == 1) {
+	    he->tag = progtag;
+	    he->t = RPM_STRING_TYPE;
+	    he->p.str = *progArgv;
+	    he->c = progArgc;
+	    xx = headerPut(pkg->header, he, 0);
+	} else {
 	    (void) rpmlibNeedsFeature(pkg->header,
 			"ScriptletInterpreterArgs", "4.0.3-1");
-	    (void) headerAddEntry(pkg->header, progtag, RPM_STRING_ARRAY_TYPE,
-			progArgv, progArgc);
+	    he->tag = progtag;
+	    he->t = RPM_STRING_ARRAY_TYPE;
+	    he->p.argv = progArgv;
+	    he->c = progArgc;
+	    xx = headerPut(pkg->header, he, 0);
 	}
 
-	if (*p != '\0')
-	    (void) headerAddEntry(pkg->header, tag, RPM_STRING_TYPE, p, 1);
+	if (*p != '\0') {
+	    he->tag = tag;
+	    he->t = RPM_STRING_TYPE;
+	    he->p.str = p;
+	    he->c = 1;
+	    xx = headerPut(pkg->header, he, 0);
+	}
 
 	if (file) {
 	    switch (parsePart) {
@@ -362,10 +384,13 @@ int parseScript(Spec spec, int parsePart)
 	      case PART_VERIFYSCRIPT:
 		pkg->verifyFile = xstrdup(file);
 		break;
+	      case PART_SANITYCHECK:
+		pkg->sanityCheckFile = xstrdup(file);
+	        break;
 	    }
 	}
     }
-    rc = nextPart;
+    rc = (rpmRC) nextPart;
     
 exit:
     sb = freeStringBuf(sb);
@@ -375,4 +400,3 @@ exit:
     
     return rc;
 }
-/*@=boundswrite@*/

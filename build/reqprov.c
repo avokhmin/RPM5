@@ -10,14 +10,13 @@
 #include "rpmbuild.h"
 #include "debug.h"
 
-int addReqProv(/*@unused@*/ Spec spec, Header h, /*@unused@*/ rpmTag tagN,
+int addReqProv(/*@unused@*/ Spec spec, Header h,
+		/*@unused@*/ rpmTag tagN,
 		const char * N, const char * EVR, rpmsenseFlags Flags,
-		int index)
+		uint32_t index)
 {
-    HGE_t hge = (HGE_t)headerGetEntryMinMemory;
-    HFD_t hfd = headerFreeData;
+    HE_t he = memset(alloca(sizeof(*he)), 0, sizeof(*he));
     const char ** names;
-    rpmTagType dnt;
     rpmTag nametag = 0;
     rpmTag versiontag = 0;
     rpmTag flagtag = 0;
@@ -25,7 +24,7 @@ int addReqProv(/*@unused@*/ Spec spec, Header h, /*@unused@*/ rpmTag tagN,
     int len;
     rpmsenseFlags extra = RPMSENSE_ANY;
     int xx;
-    
+
     if (Flags & RPMSENSE_PROVIDES) {
 	nametag = RPMTAG_PROVIDENAME;
 	versiontag = RPMTAG_PROVIDEVERSION;
@@ -54,33 +53,40 @@ int addReqProv(/*@unused@*/ Spec spec, Header h, /*@unused@*/ rpmTag tagN,
 
     Flags = (Flags & RPMSENSE_SENSEMASK) | extra;
 
-    /*@-branchstate@*/
     if (EVR == NULL)
 	EVR = "";
-    /*@=branchstate@*/
-    
+
     /* Check for duplicate dependencies. */
-    if (hge(h, nametag, &dnt, &names, &len)) {
+    he->tag = nametag;
+    xx = headerGet(h, he, 0);
+    names = he->p.argv;
+    len = he->c;
+    if (xx) {
 	const char ** versions = NULL;
-	rpmTagType dvt = RPM_STRING_ARRAY_TYPE;
-	int *flags = NULL;
-	int *indexes = NULL;
+	uint32_t * flags = NULL;
+	uint32_t * indexes = NULL;
 	int duplicate = 0;
 
 	if (flagtag) {
-	    xx = hge(h, versiontag, &dvt, &versions, NULL);
-	    xx = hge(h, flagtag, NULL, &flags, NULL);
+	    he->tag = versiontag;
+	    xx = headerGet(h, he, 0);
+	    versions = he->p.argv;
+	    he->tag = flagtag;
+	    xx = headerGet(h, he, 0);
+	    flags = he->p.ui32p;
 	}
-	if (indextag)
-	    xx = hge(h, indextag, NULL, &indexes, NULL);
+	if (indextag) {
+	    he->tag = indextag;
+	    xx = headerGet(h, he, 0);
+	    indexes = he->p.ui32p;
+	}
 
-/*@-boundsread@*/
 	while (len > 0) {
 	    len--;
 	    if (strcmp(names[len], N))
 		continue;
 	    if (flagtag && versions != NULL &&
-		(strcmp(versions[len], EVR) || flags[len] != Flags))
+		(strcmp(versions[len], EVR) || (rpmsenseFlags)flags[len] != Flags))
 		continue;
 	    if (indextag && indexes != NULL && indexes[len] != index)
 		continue;
@@ -90,28 +96,53 @@ int addReqProv(/*@unused@*/ Spec spec, Header h, /*@unused@*/ rpmTag tagN,
 
 	    break;
 	}
-/*@=boundsread@*/
-	names = hfd(names, dnt);
-	versions = hfd(versions, dvt);
+	names = _free(names);
+	versions = _free(versions);
+	flags = _free(flags);
+	indexes = _free(indexes);
 	if (duplicate)
 	    return 0;
     }
 
     /* Add this dependency. */
-    xx = headerAddOrAppendEntry(h, nametag, RPM_STRING_ARRAY_TYPE, &N, 1);
+    he->tag = nametag;
+    he->t = RPM_STRING_ARRAY_TYPE;
+    he->p.argv = &N;
+    he->c = 1;
+    he->append = 1;
+    xx = headerPut(h, he, 0);
+    he->append = 0;
+
     if (flagtag) {
-	xx = headerAddOrAppendEntry(h, versiontag,
-			       RPM_STRING_ARRAY_TYPE, &EVR, 1);
-	xx = headerAddOrAppendEntry(h, flagtag,
-			       RPM_INT32_TYPE, &Flags, 1);
+	he->tag = versiontag;
+	he->t = RPM_STRING_ARRAY_TYPE;
+	he->p.argv = &EVR;
+	he->c = 1;
+	he->append = 1;
+	xx = headerPut(h, he, 0);
+	he->append = 0;
+
+	he->tag = flagtag;
+	he->t = RPM_UINT32_TYPE;
+	he->p.ui32p = (uint32_t *) &Flags;
+	he->c = 1;
+	he->append = 1;
+	xx = headerPut(h, he, 0);
+	he->append = 0;
     }
-    if (indextag)
-	xx = headerAddOrAppendEntry(h, indextag, RPM_INT32_TYPE, &index, 1);
+    if (indextag) {
+	he->tag = indextag;
+	he->t = RPM_UINT32_TYPE;
+	he->p.ui32p = &index;
+	he->c = 1;
+	he->append = 1;
+	xx = headerPut(h, he, 0);
+	he->append = 0;
+    }
 
     return 0;
 }
 
-/*@-boundswrite@*/
 int rpmlibNeedsFeature(Header h, const char * feature, const char * featureEVR)
 {
     char * reqname = alloca(sizeof("rpmlib()") + strlen(feature));
@@ -122,4 +153,3 @@ int rpmlibNeedsFeature(Header h, const char * feature, const char * featureEVR)
    return addReqProv(NULL, h, RPMTAG_REQUIRENAME, reqname, featureEVR,
 	RPMSENSE_RPMLIB|(RPMSENSE_LESS|RPMSENSE_EQUAL), 0);
 }
-/*@=boundswrite@*/

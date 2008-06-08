@@ -40,7 +40,7 @@ struct Source {
 /*@dependent@*/
     const char * source;	/* Pointer into fullSource */
     int flags;
-    int num;
+    uint32_t num;
 /*@owned@*/
     struct Source * next;
 };
@@ -117,7 +117,9 @@ struct Spec_s {
 
 /*@owned@*/
     struct OpenFileInfo * fileStack;
-    char lbuf[10*BUFSIZ];
+/*@owned@*/
+    char *lbuf;
+    size_t lbuf_len;
 /*@dependent@*/
     char *lbufPtr;
     char nextpeekc;
@@ -136,6 +138,7 @@ struct Spec_s {
     const char ** BANames;
     int BACount;
     int recursing;		/*!< parse is recursive? */
+    int toplevel;
 
     int force;
     int anyarch;
@@ -164,8 +167,8 @@ struct Spec_s {
 /*@dependent@*/ /*@null@*/
     MacroContext macros;
 
-    int (*_parseRCPOT) (Spec spec, Package pkg, const char *field, rpmTag tagN,
-               int index, rpmsenseFlags tagflags);
+    rpmRC (*_parseRCPOT) (Spec spec, Package pkg, const char *field, rpmTag tagN,
+               uint32_t index, rpmsenseFlags tagflags);
 
 /*@only@*/
     StringBuf prep;		/*!< %prep scriptlet. */
@@ -177,6 +180,10 @@ struct Spec_s {
     StringBuf check;		/*!< %check scriptlet. */
 /*@only@*/
     StringBuf clean;		/*!< %clean scriptlet. */
+
+    size_t nfoo;
+/*@only@*/ /*@relnull@*/
+    tagStore_t foo;
 
 /*@owned@*/
     Package packages;		/*!< Package list. */
@@ -195,6 +202,7 @@ struct Package_s {
 
     int autoReq;
     int autoProv;
+    int noarch;
 
 /*@only@*/
     const char * preInFile;	/*!< %pre scriptlet. */
@@ -210,6 +218,8 @@ struct Package_s {
     const char * postTransFile;	/*!< %posttrans scriptlet. */
 /*@only@*/
     const char * verifyFile;	/*!< %verifyscript scriptlet. */
+/*@only@*/
+    const char * sanityCheckFile;/*!< %sanitycheck scriptlet. */
 
 /*@only@*/
     StringBuf specialDoc;
@@ -235,7 +245,7 @@ extern "C" {
  * @return spec		spec file control structure
  */
 /*@only@*/ Spec newSpec(void)
-	/*@globals rpmGlobalMacroContext @*/
+	/*@globals rpmGlobalMacroContext, h_errno @*/
 	/*@modifies rpmGlobalMacroContext @*/;
 
 /** \ingroup rpmbuild
@@ -266,33 +276,39 @@ struct OpenFileInfo * newOpenFileInfo(void)
 	/*@*/;
 
 /** \ingroup rpmbuild
+ * stashSt.
  * @param spec		spec file control structure
  * @param h		header
  * @param tag		tag
  * @param lang		locale
+ * @return		ptr to saved entry
  */
-spectag stashSt(Spec spec, Header h, int tag, const char * lang)
+spectag stashSt(Spec spec, Header h, rpmTag tag, const char * lang)
 	/*@modifies spec->st @*/;
 
 /** \ingroup rpmbuild
+ * addSource.
  * @param spec		spec file control structure
  * @param pkg		package control
  * @param field		field to parse
  * @param tag		tag
+ * @return		0 on success
  */
-int addSource(Spec spec, Package pkg, const char * field, int tag)
-	/*@globals rpmGlobalMacroContext, h_errno @*/
+int addSource(Spec spec, Package pkg, const char * field, rpmTag tag)
+	/*@globals rpmGlobalMacroContext, h_errno, fileSystem @*/
 	/*@modifies spec->sources, spec->numSources,
 		spec->st, spec->macros,
-		rpmGlobalMacroContext @*/;
+		rpmGlobalMacroContext, fileSystem @*/;
 
 /** \ingroup rpmbuild
+ * parseNoSource.
  * @param spec		spec file control structure
  * @param field		field to parse
  * @param tag		tag
+ * @return		0 on success
  */
-int parseNoSource(Spec spec, const char * field, int tag)
-	/*@modifies nothing @*/;
+int parseNoSource(Spec spec, const char * field, rpmTag tag)
+	/*@*/;
 
 /** \ingroup rpmbuild
  * Return the count of source set in specfile
@@ -300,7 +316,7 @@ int parseNoSource(Spec spec, const char * field, int tag)
  * @return  the count of source
  */
 int SpecSourceCount(Spec spec)
-	/*@modifies nothing @*/;
+	/*@*/;
 
 /** \ingroup rpmbuild
  * Return a source control structure
@@ -309,23 +325,25 @@ int SpecSourceCount(Spec spec)
  * @return          a SpecSource structure, NULL if not found
  */
 SpecSource getSource(Spec spec, int num)
-	/*@modifies nothing @*/;
+	/*@*/;
 
 /** \ingroup rpmbuild
  * Return a ptr to the source file name
  * @param source    SpecSource control structure
  * @return          ptr to filename
  */
+/*@exposed@*/
 const char * specSourceName(SpecSource source)
-	/*@modifies nothing @*/;
+	/*@*/;
 
 /** \ingroup rpmbuild
  * Return a ptr to the full url of the source
  * @param source    SpecSource control structure
  * @return          ptr to url
  */
+/*@exposed@*/
 const char * specFullSourceName(SpecSource source)
-	/*@modifies nothing @*/;
+	/*@*/;
 
 /** \ingroup rpmbuild
  * Return the spec or source patch number
@@ -333,7 +351,7 @@ const char * specFullSourceName(SpecSource source)
  * @return          the number of the source
  */
 int specSourceNum(SpecSource source)
-	/*@modifies nothing @*/;
+	/*@*/;
 
 /** \ingroup rpmbuild
  * Return flags set for the source
@@ -341,15 +359,20 @@ int specSourceNum(SpecSource source)
  * @return          flags
  */
 int specSourceFlags(SpecSource source)
-	/*@modifies nothing @*/;
+	/*@*/;
 
 /** \ingroup rpmbuild
  * Return the macro directory location from source file flags
  * @param attr      rpmfileAttrs from source
  * @return          string containings macros about location, NULL on failure
  */
+/*@null@*/
+#if defined(RPM_VENDOR_OPENPKG) /* splitted-source-directory */
+const char * getSourceDir(rpmfileAttrs attr, const char *filename)
+#else
 const char * getSourceDir(rpmfileAttrs attr)
-    /*@modifies nothing @*/;
+#endif
+	/*@*/;
 
 #ifdef __cplusplus
 }

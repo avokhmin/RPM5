@@ -5,7 +5,10 @@
 
 #include "system.h"
 
-#include <rpmio_internal.h>
+#include <rpmio.h>
+#ifdef	NOTYET
+#include <rpmmg.h>
+#endif
 #include <rpmbuild.h>
 #include "debug.h"
 
@@ -33,25 +36,25 @@
 /**
  * Check that file owner and group are known.
  * @param urlfn		file url
- * @return		0 on success
+ * @return		RPMRC_OK on success
  */
-static int checkOwners(const char * urlfn)
+static rpmRC checkOwners(const char * urlfn)
 	/*@globals h_errno, fileSystem, internalState @*/
 	/*@modifies fileSystem, internalState @*/
 {
     struct stat sb;
 
     if (Lstat(urlfn, &sb)) {
-	rpmError(RPMERR_BADSPEC, _("Bad source: %s: %s\n"),
+	rpmlog(RPMLOG_ERR, _("Bad source: %s: %s\n"),
 		urlfn, strerror(errno));
-	return RPMERR_BADSPEC;
+	return RPMRC_FAIL;
     }
     if (!getUname(sb.st_uid) || !getGname(sb.st_gid)) {
-	rpmError(RPMERR_BADSPEC, _("Bad owner/group: %s\n"), urlfn);
-	return RPMERR_BADSPEC;
+	rpmlog(RPMLOG_ERR, _("Bad owner/group: %s\n"), urlfn);
+	return RPMRC_FAIL;
     }
 
-    return 0;
+    return RPMRC_OK;
 }
 
 #ifndef	DYING
@@ -64,11 +67,11 @@ static int checkOwners(const char * urlfn)
  * @param reverse	include -R?
  * @param removeEmpties	include -E?
  * @param fuzz		include -F?
+ * @param subdir	sub-directory (i.e patch -d argument);
  * @return		expanded %patch macro (NULL on error)
  */
-/*@-boundswrite@*/
 /*@observer@*/
-static char *doPatch(Spec spec, int c, int strip, const char *db,
+static char *doPatch(Spec spec, uint32_t c, int strip, const char *db,
 		     int reverse, int removeEmpties, int fuzz, const char *subdir)
 	/*@globals rpmGlobalMacroContext, h_errno, fileSystem, internalState @*/
 	/*@modifies rpmGlobalMacroContext, fileSystem, internalState @*/
@@ -84,6 +87,11 @@ static char *doPatch(Spec spec, int c, int strip, const char *db,
     *t = '\0';
     if (db)
 	t = stpcpy( stpcpy(t, "-b --suffix "), db);
+#if defined(RPM_VENDOR_OPENPKG) /* always-backup-on-patching */
+    /* always create backup files in OpenPKG */
+    else
+	t = stpcpy(t, "-b --suffix .orig ");
+#endif
     if (subdir)
 	t = stpcpy( stpcpy(t, "-d "), subdir);
     if (fuzz) {
@@ -101,7 +109,7 @@ static char *doPatch(Spec spec, int c, int strip, const char *db,
 	    break;
     }
     if (sp == NULL) {
-	rpmError(RPMERR_BADSPEC, _("No patch number %d\n"), c);
+	rpmlog(RPMLOG_ERR, _("No patch number %d\n"), c);
 	return NULL;
     }
 
@@ -162,14 +170,20 @@ static char *doPatch(Spec spec, int c, int strip, const char *db,
 		"if [ $STATUS -ne 0 ]; then\n"
 		"  exit $STATUS\n"
 		"fi",
-		c, /*@-unrecog@*/ (const char *) basename(fn), /*@=unrecog@*/
+		c,
+/*@-moduncon@*/
+		(const char *) basename((char *)fn),
+/*@=moduncon@*/
 		zipper,
 		fn, patch, strip, args);
 	zipper = _free(zipper);
     } else {
 	sprintf(buf,
 		"echo \"Patch #%d (%s):\"\n"
-		"%s -p%d %s -s < '%s'", c, (const char *) basename(fn),
+		"%s -p%d %s -s < '%s'", c,
+/*@-moduncon@*/
+		(const char *) basename((char *)fn),
+/*@=moduncon@*/
 		patch, strip, args, fn);
     }
 
@@ -177,7 +191,6 @@ static char *doPatch(Spec spec, int c, int strip, const char *db,
     Lurlfn = _free(Lurlfn);
     return buf;
 }
-/*@=boundswrite@*/
 #endif
 
 /**
@@ -187,9 +200,8 @@ static char *doPatch(Spec spec, int c, int strip, const char *db,
  * @param quietly	should -vv be omitted from tar?
  * @return		expanded %setup macro (NULL on error)
  */
-/*@-boundswrite@*/
 /*@observer@*/
-static const char *doUntar(Spec spec, int c, int quietly)
+static const char *doUntar(Spec spec, uint32_t c, int quietly)
 	/*@globals rpmGlobalMacroContext, h_errno, fileSystem, internalState @*/
 	/*@modifies rpmGlobalMacroContext, fileSystem, internalState @*/
 {
@@ -208,7 +220,7 @@ static const char *doUntar(Spec spec, int c, int quietly)
 	}
     }
     if (sp == NULL) {
-	rpmError(RPMERR_BADSPEC, _("No source number %d\n"), c);
+	rpmlog(RPMLOG_ERR, _("No source number %d\n"), c);
 	return NULL;
     }
 
@@ -216,7 +228,11 @@ static const char *doUntar(Spec spec, int c, int quietly)
     taropts = ((rpmIsVerbose() && !quietly) ? "-xvvf" : "-xf");
     /*@=internalglobs@*/
 
+#if defined(RPM_VENDOR_OPENPKG) /* splitted-source-directory */
+    Lurlfn = rpmGenPath(NULL, getSourceDir(sp->flags, sp->source), sp->source);
+#else
     Lurlfn = rpmGenPath(NULL, getSourceDir(sp->flags), sp->source);
+#endif
 
     /* XXX On non-build parse's, file cannot be stat'd or read */
     if (!spec->force && (isCompressed(Lurlfn, &compressed) || checkOwners(Lurlfn))) {
@@ -239,6 +255,18 @@ static const char *doUntar(Spec spec, int c, int quietly)
 	return NULL;
 	/*@notreached@*/ break;
     }
+#ifdef	NOTYET
+    {	rpmmg mg;
+	
+_rpmmg_debug = 1;
+	mg = rpmmgNew(NULL, 0);
+	t = (char *) rpmmgFile(mg, fn);
+	mg = rpmmgFree(mg);
+fprintf(stderr, "==> %s: %s\n", fn, t);
+	t = _free(t);
+_rpmmg_debug = 0;
+    }
+#endif
 
     tar = rpmGetPath("%{__tar}", NULL);
     if (strcmp(tar, "%{__tar}") == 0)
@@ -263,10 +291,14 @@ static const char *doUntar(Spec spec, int c, int quietly)
 	    t = "%{__lzma} -dc";
 	    break;
 	case COMPRESSED_ZIP:
+#if defined(RPM_VENDOR_OPENPKG) /* use-bsdtar-for-zip-files */
+	    t = "%{__bsdtar} -x -f";
+#else
 	    if (rpmIsVerbose() && !quietly)
 		t = "%{__unzip}";
 	    else
 		t = "%{__unzip} -qq";
+#endif
 	    needtar = 0;
 	    break;
 	}
@@ -304,7 +336,6 @@ static const char *doUntar(Spec spec, int c, int quietly)
     Lurlfn = _free(Lurlfn);
     return buf;
 }
-/*@=boundswrite@*/
 
 /**
  * Parse %setup macro.
@@ -316,6 +347,7 @@ static const char *doUntar(Spec spec, int c, int quietly)
 static int doSetupMacro(Spec spec, char *line)
 	/*@globals rpmGlobalMacroContext, h_errno, fileSystem, internalState @*/
 	/*@modifies spec->buildSubdir, spec->macros, spec->prep,
+		spec->packages->header,
 		rpmGlobalMacroContext, fileSystem, internalState @*/
 {
     char buf[BUFSIZ];
@@ -327,7 +359,7 @@ static int doSetupMacro(Spec spec, char *line)
     int arg;
     const char * optArg;
     int rc;
-    int num;
+    uint32_t num;
 
     /*@-mods@*/
     leaveDirs = skipDefaultAction = 0;
@@ -336,9 +368,9 @@ static int doSetupMacro(Spec spec, char *line)
     /*@=mods@*/
 
     if ((rc = poptParseArgvString(line, &argc, &argv))) {
-	rpmError(RPMERR_BADSPEC, _("Error parsing %%setup: %s\n"),
+	rpmlog(RPMLOG_ERR, _("Error parsing %%setup: %s\n"),
 			poptStrerror(rc));
-	return RPMERR_BADSPEC;
+	return RPMRC_FAIL;
     }
 
     before = newStringBuf();
@@ -351,45 +383,48 @@ static int doSetupMacro(Spec spec, char *line)
 	/* We only parse -a and -b here */
 
 	if (parseNum(optArg, &num)) {
-	    rpmError(RPMERR_BADSPEC, _("line %d: Bad arg to %%setup: %s\n"),
+	    rpmlog(RPMLOG_ERR, _("line %d: Bad arg to %%setup: %s\n"),
 		     spec->lineNum, (optArg ? optArg : "???"));
 	    before = freeStringBuf(before);
 	    after = freeStringBuf(after);
 	    optCon = poptFreeContext(optCon);
 	    argv = _free(argv);
-	    return RPMERR_BADSPEC;
+	    return RPMRC_FAIL;
 	}
 
 	{   const char *chptr = doUntar(spec, num, quietly);
 	    if (chptr == NULL)
-		return RPMERR_BADSPEC;
+		return RPMRC_FAIL;
 
 	    appendLineStringBuf((arg == 'a' ? after : before), chptr);
 	}
     }
 
     if (arg < -1) {
-	rpmError(RPMERR_BADSPEC, _("line %d: Bad %%setup option %s: %s\n"),
+	rpmlog(RPMLOG_ERR, _("line %d: Bad %%setup option %s: %s\n"),
 		 spec->lineNum,
-		 poptBadOption(optCon, POPT_BADOPTION_NOALIAS), 
+		 poptBadOption(optCon, POPT_BADOPTION_NOALIAS),
 		 poptStrerror(arg));
 	before = freeStringBuf(before);
 	after = freeStringBuf(after);
 	optCon = poptFreeContext(optCon);
 	argv = _free(argv);
-	return RPMERR_BADSPEC;
+	return RPMRC_FAIL;
     }
 
     if (dirName) {
 	spec->buildSubdir = xstrdup(dirName);
     } else {
-	const char *name, *version;
-	(void) headerNEVRA(spec->packages->header, &name, NULL, &version, NULL, NULL);
-	sprintf(buf, "%s-%s", name, version);
+	const char *N, *V;
+	(void) headerNEVRA(spec->packages->header, &N, NULL, &V, NULL, NULL);
+	(void) snprintf(buf, sizeof(buf), "%s-%s", N, V);
+	buf[sizeof(buf)-1] = '\0';
+	N = _free(N);
+	V = _free(V);
 	spec->buildSubdir = xstrdup(buf);
     }
     addMacro(spec->macros, "buildsubdir", NULL, spec->buildSubdir, RMIL_SPEC);
-    
+
     optCon = poptFreeContext(optCon);
     argv = _free(argv);
 
@@ -402,7 +437,7 @@ static int doSetupMacro(Spec spec, char *line)
 	appendLineStringBuf(spec->prep, buf);
 	buildDirURL = _free(buildDirURL);
     }
-    
+
     /* delete any old sources */
     if (!leaveDirs) {
 	sprintf(buf, "rm -rf '%s'", spec->buildSubdir);
@@ -425,7 +460,7 @@ static int doSetupMacro(Spec spec, char *line)
    if (!createDir && !skipDefaultAction) {
 	const char *chptr = doUntar(spec, 0, quietly);
 	if (!chptr)
-	    return RPMERR_BADSPEC;
+	    return RPMRC_FAIL;
 	appendLineStringBuf(spec->prep, chptr);
     }
 
@@ -440,10 +475,10 @@ static int doSetupMacro(Spec spec, char *line)
     if (createDir && !skipDefaultAction) {
 	const char * chptr = doUntar(spec, 0, quietly);
 	if (chptr == NULL)
-	    return RPMERR_BADSPEC;
+	    return RPMRC_FAIL;
 	appendLineStringBuf(spec->prep, chptr);
     }
-    
+
     appendStringBuf(spec->prep, getStringBuf(after));
     after = freeStringBuf(after);
 
@@ -455,15 +490,13 @@ static int doSetupMacro(Spec spec, char *line)
 
 	for (fm = fixmacs; *fm; fm++) {
 	    const char *fix;
-/*@-boundsread@*/
 	    fix = rpmExpand(*fm, " .", NULL);
 	    if (fix && *fix != '%')
 		appendLineStringBuf(spec->prep, fix);
 	    fix = _free(fix);
-/*@=boundsread@*/
 	}
     }
-    
+
     return 0;
 }
 
@@ -472,10 +505,9 @@ static int doSetupMacro(Spec spec, char *line)
  * Parse %patch line.
  * @param spec		build info
  * @param line		current line from spec file
- * @return		0 on success
+ * @return		RPMRC_OK on success
  */
-/*@-boundswrite@*/
-static int doPatchMacro(Spec spec, char *line)
+static rpmRC doPatchMacro(Spec spec, char *line)
 	/*@globals rpmGlobalMacroContext, h_errno,
 		fileSystem, internalState @*/
 	/*@modifies spec->prep, rpmGlobalMacroContext,
@@ -484,9 +516,9 @@ static int doPatchMacro(Spec spec, char *line)
     char *s;
     char *opt_b;
     char *opt_d;
-    int opt_P, opt_p, opt_R, opt_E, opt_F;
+    uint32_t opt_P, opt_p, opt_R, opt_E, opt_F;
     char buf[BUFSIZ], *bp;
-    int patch_nums[1024];  /* XXX - we can only handle 1024 patches! */
+    uint32_t patch_nums[1024];  /* XXX - we can only handle 1024 patches! */
     int patch_index, x;
 
     memset(patch_nums, 0, sizeof(patch_nums));
@@ -501,7 +533,7 @@ static int doPatchMacro(Spec spec, char *line)
     } else {
 	strcpy(buf, line);
     }
-    
+
     /*@-internalglobs@*/	/* FIX: strtok has state */
     for (bp = buf; (s = strtok(bp, " \t\n")) != NULL;) {
 	if (bp) {	/* remove 1st token (%patch) */
@@ -518,19 +550,19 @@ static int doPatchMacro(Spec spec, char *line)
 	    /* orig suffix */
 	    opt_b = strtok(NULL, " \t\n");
 	    if (! opt_b) {
-		rpmError(RPMERR_BADSPEC,
+		rpmlog(RPMLOG_ERR,
 			_("line %d: Need arg to %%patch -b: %s\n"),
 			spec->lineNum, spec->line);
-		return RPMERR_BADSPEC;
+		return RPMRC_FAIL;
 	    }
 	} else if (!strcmp(s, "-z")) {
 	    /* orig suffix */
 	    opt_b = strtok(NULL, " \t\n");
 	    if (! opt_b) {
-		rpmError(RPMERR_BADSPEC,
+		rpmlog(RPMLOG_ERR,
 			_("line %d: Need arg to %%patch -z: %s\n"),
 			spec->lineNum, spec->line);
-		return RPMERR_BADSPEC;
+		return RPMRC_FAIL;
 	    }
 	} else if (!strcmp(s, "-F")) {
 	    /* fuzz factor */
@@ -540,19 +572,19 @@ static int doPatchMacro(Spec spec, char *line)
 
 	    opt_F = (fnum ? strtol(fnum, &end, 10) : 0);
 	    if (! opt_F || *end) {
-		rpmError(RPMERR_BADSPEC,
+		rpmlog(RPMLOG_ERR,
 			_("line %d: Bad arg to %%patch -F: %s\n"),
 			spec->lineNum, spec->line);
-		return RPMERR_BADSPEC;
+		return RPMRC_FAIL;
 	    }
 	} else if (!strcmp(s, "-d")) {
 	    /* subdirectory */
 	    opt_d = strtok(NULL, " \t\n");
 	    if (! opt_d) {
-		rpmError(RPMERR_BADSPEC,
+		rpmlog(RPMLOG_ERR,
 			_("line %d: Need arg to %%patch -d: %s\n"),
 			spec->lineNum, spec->line);
-		return RPMERR_BADSPEC;
+		return RPMRC_FAIL;
 	    }
 	} else if (!strncmp(s, "-p", sizeof("-p")-1)) {
 	    /* unfortunately, we must support -pX */
@@ -561,28 +593,28 @@ static int doPatchMacro(Spec spec, char *line)
 	    } else {
 		s = strtok(NULL, " \t\n");
 		if (s == NULL) {
-		    rpmError(RPMERR_BADSPEC,
+		    rpmlog(RPMLOG_ERR,
 			     _("line %d: Need arg to %%patch -p: %s\n"),
 			     spec->lineNum, spec->line);
-		    return RPMERR_BADSPEC;
+		    return RPMRC_FAIL;
 		}
 	    }
 	    if (parseNum(s, &opt_p)) {
-		rpmError(RPMERR_BADSPEC,
+		rpmlog(RPMLOG_ERR,
 			_("line %d: Bad arg to %%patch -p: %s\n"),
 			spec->lineNum, spec->line);
-		return RPMERR_BADSPEC;
+		return RPMRC_FAIL;
 	    }
 	} else {
 	    /* Must be a patch num */
 	    if (patch_index == 1024) {
-		rpmError(RPMERR_BADSPEC, _("Too many patches!\n"));
-		return RPMERR_BADSPEC;
+		rpmlog(RPMLOG_ERR, _("Too many patches!\n"));
+		return RPMRC_FAIL;
 	    }
 	    if (parseNum(s, &(patch_nums[patch_index]))) {
-		rpmError(RPMERR_BADSPEC, _("line %d: Bad arg to %%patch: %s\n"),
+		rpmlog(RPMLOG_ERR, _("line %d: Bad arg to %%patch: %s\n"),
 			 spec->lineNum, spec->line);
-		return RPMERR_BADSPEC;
+		return RPMRC_FAIL;
 	    }
 	    patch_index++;
 	}
@@ -594,21 +626,47 @@ static int doPatchMacro(Spec spec, char *line)
     if (! opt_P) {
 	s = doPatch(spec, 0, opt_p, opt_b, opt_R, opt_E, opt_F, opt_d);
 	if (s == NULL)
-	    return RPMERR_BADSPEC;
+	    return RPMRC_FAIL;
 	appendLineStringBuf(spec->prep, s);
     }
 
     for (x = 0; x < patch_index; x++) {
 	s = doPatch(spec, patch_nums[x], opt_p, opt_b, opt_R, opt_E, opt_F, opt_d);
 	if (s == NULL)
-	    return RPMERR_BADSPEC;
+	    return RPMRC_FAIL;
 	appendLineStringBuf(spec->prep, s);
     }
-    
-    return 0;
+
+    return RPMRC_OK;
 }
-/*@=boundswrite@*/
 #endif
+
+static void prepFetchVerbose(/*@unused@*/ struct Source *sp,
+		/*@unused@*/ struct stat *st)
+	/*@*/
+{
+    char *buf;
+    size_t buf_len;
+    int i;
+
+    if (!(rpmIsVerbose() && !quietly && (rpmBTArgs.buildAmount & RPMBUILD_FETCHSOURCE)))
+        return;
+    buf_len = 2*80;
+    if ((buf = (char *)malloc(buf_len)) == NULL)
+        return;
+    snprintf(buf, buf_len, "%s%d:", (sp->flags & RPMFILE_SOURCE) ? "Source" : "Patch", sp->num);
+    for (i = strlen(buf); i <= 11; i++)
+        buf[i] = ' ';
+    snprintf(buf+i, buf_len-i, "%-52.52s", sp->source);
+    i = strlen(buf);
+    if (st != NULL)
+        snprintf(buf+i, buf_len-i, " %9lu Bytes\n", (unsigned long)st->st_size);
+    else
+        snprintf(buf+i, buf_len-i, "      ...MISSING\n");
+    rpmlog(RPMLOG_NOTICE, "%s", buf);
+    buf = _free(buf);
+    return;
+}
 
 /**
  * Check that all sources/patches/icons exist locally, fetching if necessary.
@@ -617,12 +675,16 @@ static int prepFetch(Spec spec)
 	/*@globals rpmGlobalMacroContext, h_errno, fileSystem, internalState @*/
 	/*@modifies rpmGlobalMacroContext, fileSystem, internalState @*/
 {
+#if defined(RPM_VENDOR_OPENPKG) /* splitted-source-directory */
+    const char *Smacro;
+#endif
     const char *Lmacro, *Lurlfn = NULL;
     const char *Rmacro, *Rurlfn = NULL;
     struct Source *sp;
     struct stat st;
     rpmRC rpmrc;
     int ec, rc;
+    char *cp;
 
     /* XXX insure that %{_sourcedir} exists */
     rpmrc = RPMRC_OK;
@@ -651,11 +713,20 @@ static int prepFetch(Spec spec)
     if (rpmrc != RPMRC_OK)
 	return -1;
 
-/*@-branchstate@*/
+    if (rpmIsVerbose() && !quietly && (rpmBTArgs.buildAmount & RPMBUILD_FETCHSOURCE))
+        rpmlog(RPMLOG_NOTICE, "Checking source and patch file(s):\n");
+
     ec = 0;
     for (sp = spec->sources; sp != NULL; sp = sp->next) {
-    
+
+#if defined(RPM_VENDOR_OPENPKG) /* splitted-source-directory */
+	Smacro = "%{?_specdir}/";
+#endif
+#if defined(RPM_VENDOR_OPENPKG) /* splitted-source-directory */
+    if (! (Lmacro = getSourceDir(sp->flags, sp->source)))
+#else
     if (! (Lmacro = getSourceDir(sp->flags)))
+#endif
         continue;
 	if (sp->flags & RPMFILE_SOURCE) {
 	    Rmacro = "%{?_Rsourcedir}/";
@@ -668,53 +739,92 @@ static int prepFetch(Spec spec)
 	} else
 	    continue;
 
+#if defined(RPM_VENDOR_OPENPKG) /* splitted-source-directory */
+	/* support splitted source directories, i.e., source files which
+	   are alternatively placed into the .spec directory and picked
+	   up from there, too. */
+	Lurlfn = rpmGenPath(NULL, Smacro, sp->source);
+	rc = Lstat(Lurlfn, &st);
+	if (rc == 0) {
+            prepFetchVerbose(sp, &st);
+	    goto bottom;
+        }
+#endif
 	Lurlfn = rpmGenPath(NULL, Lmacro, sp->source);
 	rc = Lstat(Lurlfn, &st);
-	if (rc == 0)
+	if (rc == 0) {
+/*@-noeffect@*/
+            prepFetchVerbose(sp, &st);
+/*@=noeffect@*/
 	    goto bottom;
+        }
+/*@-noeffect@*/
+        prepFetchVerbose(sp, NULL);
+/*@=noeffect@*/
 	if (errno != ENOENT) {
 	    ec++;
-	    rpmError(RPMERR_BADFILENAME, _("Missing %s%d %s: %s\n"),
+	    rpmlog(RPMLOG_ERR, _("Missing %s%d %s: %s\n"),
 		((sp->flags & RPMFILE_SOURCE) ? "Source" : "Patch"),
 		sp->num, sp->source, strerror(ENOENT));
 	    goto bottom;
 	}
 
-	Rurlfn = rpmGenPath(NULL, Rmacro, sp->source);
-	if (Rurlfn == NULL || Rurlfn[0] == '\0' || !strcmp(Rurlfn, "/") || !strcmp(Lurlfn, Rurlfn)) {
-	    rpmError(RPMERR_BADFILENAME, _("file %s missing: %s\n"),
-		Lurlfn, strerror(errno));
-	    ec++;
-	    goto bottom;
-	}
+        /* try to fetch via macro-controlled remote locations */
+        cp = rpmExpand(Rmacro, NULL);
+        if (cp != NULL && strcmp(cp, "/") != 0) {
+            cp = _free(cp);
+            Rurlfn = rpmGenPath(NULL, Rmacro, sp->source);
+            if (!(Rurlfn == NULL || Rurlfn[0] == '\0' || !strcmp(Rurlfn, "/") || !strcmp(Lurlfn, Rurlfn))) {
+                rpmlog(RPMLOG_NOTICE, _("Fetching(%s%d): %s\n"),
+                       (sp->flags & RPMFILE_SOURCE) ? "Source" : "Patch", sp->num, Rurlfn);
+                rc = urlGetFile(Rurlfn, Lurlfn);
+                if (rc == 0)
+                    goto bottom;
+                else {
+                    rpmlog(RPMLOG_ERR, _("Fetching %s%d failed: %s\n"),
+                           (sp->flags & RPMFILE_SOURCE) ? "Source" : "Patch", sp->num, ftpStrerror(rc));
+                    ec++;
+                }
+            }
+        }
+        cp = _free(cp);
 
-	rc = urlGetFile(Rurlfn, Lurlfn);
-	if (rc != 0) {
-	    rpmError(RPMERR_BADFILENAME, _("Fetching %s failed: %s\n"),
-		Rurlfn, ftpStrerror(rc));
-	    ec++;
-	    goto bottom;
-	}
+        /* try to fetch from original location */
+        rpmlog(RPMLOG_NOTICE, _("Fetching(%s%d): %s\n"),
+               (sp->flags & RPMFILE_SOURCE) ? "Source" : "Patch", sp->num, sp->fullSource);
+        rc = urlGetFile(sp->fullSource, Lurlfn);
+        if (rc == 0)
+            goto bottom;
+        else {
+            rpmlog(RPMLOG_ERR, _("Fetching %s%d failed: %s\n"),
+                   (sp->flags & RPMFILE_SOURCE) ? "Source" : "Patch", sp->num, ftpStrerror(rc));
+            ec++;
+        }
+
+        rpmlog(RPMLOG_ERR, _("Missing %s%d: %s: %s\n"),
+            ((sp->flags & RPMFILE_SOURCE) ? "Source" : "Patch"),
+            sp->num, sp->source, strerror(ENOENT));
+        ec++;
 
 bottom:
 	Lurlfn = _free(Lurlfn);
 	Rurlfn = _free(Rurlfn);
     }
-/*@=branchstate@*/
 
     return ec;
 }
 
 int parsePrep(Spec spec, int verify)
 {
-    int nextPart, res, rc;
+    rpmParseState nextPart;
+    int res, rc;
     StringBuf sb;
     char **lines, **saveLines;
     char *cp;
 
     if (spec->prep != NULL) {
-	rpmError(RPMERR_BADSPEC, _("line %d: second %%prep\n"), spec->lineNum);
-	return RPMERR_BADSPEC;
+	rpmlog(RPMLOG_ERR, _("line %d: second %%prep\n"), spec->lineNum);
+	return RPMRC_FAIL;
     }
 
     spec->prep = newStringBuf();
@@ -729,12 +839,12 @@ int parsePrep(Spec spec, int verify)
     if (verify) {
 	rc = prepFetch(spec);
 	if (rc)
-	    return RPMERR_BADSPEC;
+	    return RPMRC_FAIL;
     }
-    
+
     sb = newStringBuf();
-    
-    while (! (nextPart = isPart(spec->line))) {
+
+    while ((nextPart = isPart(spec)) == PART_NONE) {
 	/* Need to expand the macros inline.  That way we  */
 	/* can give good line number information on error. */
 	appendStringBuf(sb, spec->line);
@@ -751,8 +861,7 @@ int parsePrep(Spec spec, int verify)
     for (lines = saveLines; *lines; lines++) {
 	res = 0;
 	for (cp = *lines; *cp == ' ' || *cp == '\t'; cp++)
-	    ;
-/*@-boundsread@*/
+	    {};
 	if (! strncmp(cp, "%setup", sizeof("%setup")-1)) {
 	    res = doSetupMacro(spec, cp);
 #ifndef	DYING
@@ -762,7 +871,6 @@ int parsePrep(Spec spec, int verify)
 	} else {
 	    appendLineStringBuf(spec->prep, *lines);
 	}
-/*@=boundsread@*/
 	if (res && !spec->force) {
 	    freeSplitString(saveLines);
 	    sb = freeStringBuf(sb);
