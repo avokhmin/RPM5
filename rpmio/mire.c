@@ -3,7 +3,7 @@
  */
 #include "system.h"
 
-#include <rpmerr.h>
+#include <rpmlog.h>
 #define	_MIRE_INTERNAL
 #include <mire.h>
 
@@ -28,6 +28,7 @@ _free(/*@only@*/ /*@null@*/ const void * p) /*@modifies p@*/
 
 int mireClean(miRE mire)
 {
+    if (mire == NULL) return 0;
 /*@-modfilesys@*/
 if (_mire_debug)
 fprintf(stderr, "--> mireClean(%p)\n", mire);
@@ -43,14 +44,44 @@ fprintf(stderr, "--> mireClean(%p)\n", mire);
     return 0;
 }
 
+miRE XmireUnlink(miRE mire, const char * msg, const char * fn, unsigned ln)
+{
+    if (mire == NULL) return NULL;
+/*@-modfilesys@*/
+if (_mire_debug && msg != NULL)
+fprintf(stderr, "--> mire %p -- %d %s at %s:%u\n", mire, mire->nrefs, msg, fn, ln);
+/*@=modfilesys@*/
+    mire->nrefs--;
+    return NULL;
+}
+
+miRE XmireLink(miRE mire, const char * msg, const char * fn, unsigned ln)
+{
+    if (mire == NULL) return NULL;
+    mire->nrefs++;
+
+/*@-modfilesys@*/
+if (_mire_debug && msg != NULL)
+fprintf(stderr, "--> mire %p ++ %d %s at %s:%u\n", mire, mire->nrefs, msg, fn, ln);
+/*@=modfilesys@*/
+
+    /*@-refcounttrans@*/ return mire; /*@=refcounttrans@*/
+}
+
 miRE mireFree(miRE mire)
 {
-/*@-modfilesys@*/
-if (_mire_debug)
-fprintf(stderr, "--> mireFree(%p)\n", mire);
-/*@=modfilesys@*/
+    if (mire == NULL)
+	return NULL;
+
+    if (mire->nrefs > 1)
+	return mireUnlink(mire, "mireFree");
+
     (void) mireClean(mire);
+    (void) mireUnlink(mire, "mireFree");
+/*@-refcounttrans -usereleased @*/
+    memset(mire, 0, sizeof(*mire));
     mire = _free(mire);
+/*@=refcounttrans =usereleased @*/
     return NULL;
 }
 
@@ -59,11 +90,7 @@ miRE mireNew(rpmMireMode mode, int tag)
     miRE mire = xcalloc(1, sizeof(*mire));
     mire->mode = mode;
     mire->tag = tag;
-/*@-modfilesys@*/
-if (_mire_debug)
-fprintf(stderr, "--> mireNew(%d, %d) mire %p\n", mode, tag, mire);
-/*@=modfilesys@*/
-    return mire;
+    return mireLink(mire,"mireNew");
 }
 
 int mireRegexec(miRE mire, const char * val)
@@ -77,14 +104,14 @@ int mireRegexec(miRE mire, const char * val)
 	break;
     case RPMMIRE_DEFAULT:
     case RPMMIRE_REGEX:
-/*@-boundswrite@*/
+/*@-nullpass@*/
 	rc = regexec(mire->preg, val, 0, NULL, mire->eflags);
-/*@=boundswrite@*/
+/*@=nullpass@*/
 	if (rc && rc != REG_NOMATCH) {
 	    char msg[256];
 	    (void) regerror(rc, mire->preg, msg, sizeof(msg)-1);
 	    msg[sizeof(msg)-1] = '\0';
-	    rpmError(RPMERR_REGEXEC, "%s: regexec failed: %s\n",
+	    rpmlog(RPMLOG_ERR, _("%s: regexec failed: %s\n"),
 			mire->pattern, msg);
 	    rc = -1;
 	}
@@ -110,15 +137,12 @@ int mireRegcomp(miRE mire, const char * pattern)
 {
     int rc = 0;
 
-/*@-boundswrite@*/
     mire->pattern = xstrdup(pattern);
-/*@=boundswrite@*/
 
-/*@-branchstate@*/
     switch (mire->mode) {
-    case RPMMIRE_DEFAULT:
     case RPMMIRE_STRCMP:
 	break;
+    case RPMMIRE_DEFAULT:
     case RPMMIRE_REGEX:
 	mire->preg = xcalloc(1, sizeof(*mire->preg));
 	if (mire->cflags == 0)
@@ -128,7 +152,7 @@ int mireRegcomp(miRE mire, const char * pattern)
 	    char msg[256];
 	    (void) regerror(rc, mire->preg, msg, sizeof(msg)-1);
 	    msg[sizeof(msg)-1] = '\0';
-	    rpmError(RPMERR_REGCOMP, "%s: regcomp failed: %s\n",
+	    rpmlog(RPMLOG_ERR, _("%s: regcomp failed: %s\n"),
 			mire->pattern, msg);
 	}
 	break;
@@ -140,7 +164,6 @@ int mireRegcomp(miRE mire, const char * pattern)
 	rc = -1;
 	break;
     }
-/*@=branchstate@*/
 
     if (rc)
 	(void) mireClean(mire);
