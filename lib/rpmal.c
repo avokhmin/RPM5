@@ -4,8 +4,9 @@
 
 #include "system.h"
 
-#include <rpmlib.h>
 #include <rpmio.h>
+#include <rpmcb.h>		/* XXX fnpyKey */
+#include <rpmlib.h>
 
 #include "rpmal.h"
 #define	_RPMDS_INTERNAL
@@ -36,7 +37,7 @@ struct availablePackage_s {
 /*@refcounted@*/ /*@null@*/
     rpmfi fi;			/*!< File info set. */
 
-    uint_32 tscolor;		/*!< Transaction color bits. */
+    uint32_t tscolor;		/*!< Transaction color bits. */
 
 /*@exposed@*/ /*@dependent@*/ /*@null@*/
     fnpyKey key;		/*!< Associated file name/python object */
@@ -85,7 +86,7 @@ struct fileIndexEntry_s {
     const char * baseName;	/*!< File basename. */
     int baseNameLen;
     alNum pkgNum;		/*!< Containing package index. */
-    uint_32 ficolor;
+    uint32_t ficolor;
 };
 
 typedef /*@abstract@*/ struct dirInfo_s *		dirInfo;
@@ -113,7 +114,7 @@ struct rpmal_s {
     int delta;			/*!< Delta for pkg list reallocation. */
     int size;			/*!< No. of pkgs in list. */
     int alloced;		/*!< No. of pkgs allocated for list. */
-    uint_32 tscolor;		/*!< Transaction color. */
+    uint32_t tscolor;		/*!< Transaction color. */
     int numDirs;		/*!< No. of directories. */
 /*@owned@*/ /*@null@*/
     dirInfo dirs;		/*!< Set of directories. */
@@ -151,7 +152,9 @@ static inline alNum alKey2Num(/*@unused@*/ /*@null@*/ const rpmal al,
 	/*@*/
 {
     /*@-nullret -temptrans -retalias @*/
-    return ((alNum)pkgKey);
+    union { alKey key; alNum num; } u;
+    u.key = pkgKey;
+    return u.num;
     /*@=nullret =temptrans =retalias @*/
 }
 
@@ -160,7 +163,10 @@ static inline alKey alNum2Key(/*@unused@*/ /*@null@*/ const rpmal al,
 	/*@*/
 {
     /*@-nullret -temptrans -retalias @*/
-    return ((alKey)pkgNum);
+    union { alKey key; alNum num; } u;
+    u.key = NULL;
+    u.num = pkgNum;
+    return u.key;
     /*@=nullret =temptrans =retalias @*/
 }
 
@@ -411,7 +417,7 @@ fprintf(stderr, "    die[%5d] memset(%p,0,0x%x)\n", al->numDirs, al->dirs + al->
 }
 
 alKey rpmalAdd(rpmal * alistp, alKey pkgKey, fnpyKey key,
-		rpmds provides, rpmfi fi, uint_32 tscolor)
+		rpmds provides, rpmfi fi, uint32_t tscolor)
 {
     alNum pkgNum;
     rpmal al;
@@ -606,9 +612,9 @@ static int indexcmp(const void * one, const void * two)
     return strcmp(a->entry, b->entry);
 }
 
-void rpmalAddProvides(rpmal al, alKey pkgKey, rpmds provides, uint_32 tscolor)
+void rpmalAddProvides(rpmal al, alKey pkgKey, rpmds provides, uint32_t tscolor)
 {
-    uint_32 dscolor;
+    uint32_t dscolor;
     const char * Name;
     alNum pkgNum = alKey2Num(al, pkgKey);
     availableIndex ai = &al->index;
@@ -670,7 +676,7 @@ void rpmalMakeIndex(rpmal al)
     ai->k = 0;
     for (i = 0; i < al->size; i++) {
 	alp = al->list + i;
-	rpmalAddProvides(al, (alKey)i, alp->provides, alp->tscolor);
+	rpmalAddProvides(al, alNum2Key(NULL, (alNum)i), alp->provides, alp->tscolor);
     }
 
     /* Reset size to the no. of provides added. */
@@ -681,8 +687,8 @@ void rpmalMakeIndex(rpmal al)
 fnpyKey *
 rpmalAllFileSatisfiesDepend(const rpmal al, const rpmds ds, alKey * keyp)
 {
-    uint_32 tscolor;
-    uint_32 ficolor;
+    uint32_t tscolor;
+    uint32_t ficolor;
     int found = 0;
     const char * dirName;
     const char * baseName;
