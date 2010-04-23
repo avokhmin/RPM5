@@ -19,7 +19,7 @@ EXTRA_PROGRAMS = bsdiff bspatch rpmborg rpmcpio rpmcurl rpmdpkg \
 	rpmgenbasedir rpmgenpkglist rpmgensrclist rpmgpg \
 	rpmpbzip2 rpmpigz rpmtar rpmz \
 	tdir tfts tget tglob thkp thtml tinv tkey tmacro tmagic tmire \
-	tnix tperl tpython tput tpw trpmio tsw ttcl dumpasn1 lookup3
+	tperl tpython tput tpw trpmio tsw ttcl dumpasn1 lookup3
 
 bin_PROGRAMS =
 man_MANS =
@@ -75,8 +75,8 @@ noinst_HEADERS = \
 	rpmdav.h rpmdir.h rpmficl.h rpmgc.h \
 	rpmhash.h rpmhook.h rpmio_internal.h rpmjs.h rpmjsio.h rpmkeyring.h \
 	rpmku.h rpmlua.h rpmmg.h rpmnix.h rpmnss.h rpmperl.h rpmpython.h \
-	rpmruby.h rpmsm.h rpmsp.h rpmsq.h rpmsql.h rpmsquirrel.h rpmssl.h \
-	rpmsx.h rpmsyck.h rpmtcl.h rpmurl.h rpmuuid.h rpmxar.h rpmz.h rpmzq.h \
+	rpmruby.h rpmsm.h rpmsp.h rpmsq.h rpmsquirrel.h rpmssl.h rpmsx.h \
+	rpmsyck.h rpmtcl.h rpmurl.h rpmuuid.h rpmxar.h rpmz.h rpmzq.h \
 	tar.h ugid.h rpmio-stub.h
 
 usrlibdir = $(libdir)
@@ -94,8 +94,8 @@ librpmio_la_SOURCES = \
 	rpmjs.c rpmjsio.c rpmkeyring.c \
 	rpmku.c rpmlog.c rpmlua.c rpmmalloc.c rpmmg.c rpmnix.c rpmnss.c \
 	rpmperl.c rpmpgp.c rpmpython.c rpmrpc.c rpmruby.c rpmsm.c rpmsp.c \
-	rpmsq.c rpmsql.c rpmsquirrel.c rpmssl.c rpmsyck.c rpmsw.c rpmsx.c \
-	rpmtcl.c rpmuuid.c rpmxar.c rpmzlog.c rpmzq.c \
+	rpmsq.c rpmsquirrel.c rpmssl.c rpmsyck.c rpmsw.c rpmsx.c rpmtcl.c \
+	rpmuuid.c rpmxar.c rpmzlog.c rpmzq.c \
 	strcasecmp.c strtolocale.c tar.c url.c ugid.c xzdio.c yarn.c
 librpmio_la_LDFLAGS = -release $(LT_CURRENT).$(LT_REVISION)
 if HAVE_LD_VERSION_SCRIPT
@@ -341,27 +341,6 @@ tmagic_LDADD = $(RPMIO_LDADD_COMMON)
 
 tmire_SOURCES = tmire.c
 tmire_LDADD = $(RPMIO_LDADD_COMMON)
-
-#libtool: link: g++
-#	-I../../externals/inst-aterm/include -I./..
-#	-I./../libutil -I./../libstore -I./../libexpr -I./../libmain
-#	-I../libexpr
-#	-O2 -g -m32 -march=i686 -mtune=generic -fasynchronous-unwind-tables
-#	-o .libs/nix-instantiate nix-instantiate.o
-#	../libmain/.libs/libmain.so
-#	../libexpr/.libs/libexpr.so
-#	/X/nix/nix-0.15/src/libstore/.libs/libstore.so
-#	../libstore/.libs/libstore.so
-#	/X/nix/nix-0.15/src/libutil/.libs/libutil.so
-#	../libutil/.libs/libutil.so
-#	/X/nix/nix-0.15/src/boost/format/.libs/libformat.so
-#	../boost/format/.libs/libformat.so
-#	-L/X/nix/nix-0.15/externals/inst-aterm/lib /X/nix/nix-0.15/externals/inst-aterm/lib/libATerm.a
-#	-lpthread -Wl,-rpath -Wl,/usr/lib/nix
-tnix_SOURCES = tnix.cc
-tnix_LDADD = -L/usr/lib/nix -lmain -lexpr -lstore -lutil -lformat \
-	/usr/lib/nix/libATerm.a
-tnix_LDFLAGS =	-Wl,-rpath -Wl,/usr/lib/nix
 
 tperl_SOURCES = tperl.c
 tperl_LDADD = $(RPMIO_LDADD_COMMON)
