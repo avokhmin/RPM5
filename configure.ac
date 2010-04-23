@@ -1343,7 +1343,7 @@ dnl # Berkeley-DB & SQLite
 DBLIBSRCS=""
 RPM_CHECK_LIB(
     [Berkeley-DB], [db],
-    [db-5.0 db], [db_create], [db.h],
+    [db-4.8 db], [db_create], [db.h],
     [yes,internal:external], [db3],
     [ DBLIBSRCS="$DBLIBSRCS db3.c"
       AM_CONDITIONAL(WITH_DB, [ true ])
@@ -1365,37 +1365,23 @@ RPM_CHECK_LIB(
       fi
     ])
 
-dnl RPM_CHECK_LIB(
-dnl     [Berkeley DB SQL], [dbsql],
-dnl     [db_sql-5.0 db_sql], [sqlite3_open], [],
-dnl     [yes,internal:external:none], [db3/sql],
-dnl     [],
-dnl     [])
-
 RPM_CHECK_LIB(
     [SQLite], [sqlite],
     [sqlite3], [sqlite3_open], [sqlite3.h],
     [no,external:none], [],
     [ DBLIBSRCS="$DBLIBSRCS sqlite.c" ],
     [])
-
 DBLIBOBJS=`echo $DBLIBSRCS | sed -e "s/\.c/\.lo/g"`
-
 AC_SUBST(DBLIBSRCS)
 AC_SUBST(DBLIBOBJS)
-
 AC_ARG_WITH(db-largefile, AS_HELP_STRING([--with-db-largefile], [build Berkeley-DB with LARGEFILE support]))
 AC_ARG_WITH(db-mutex,     AS_HELP_STRING([--with-db-mutex=ARG], [build Berkeley-DB with MUTEX type ARG]))
 AC_ARG_WITH(db-rpc,       AS_HELP_STRING([--with-db-rpc],       [build Berkeley-DB with RPC support]))
+AC_ARG_WITH(db-sql,       AS_HELP_STRING([--with-db-sql],       [build Berkeley-DB with db_sql support (db-4.8.24 or later)]))
 AC_ARG_WITH(db-tools-integrated, AS_HELP_STRING([--with-db-tools-integrated], [install integrated Berkeley-DB tools]))
-
 AM_CONDITIONAL(WITH_DB_RPC, test ".$with_db_rpc" = .yes)
+AM_CONDITIONAL(WITH_DB_SQL, test ".$with_db_sql" = .yes)
 AM_CONDITIONAL(WITH_DB_TOOLS_INTEGRATED, test ".$with_db_tools_integrated" = .yes)
-
-dnl # determine whether the db sqlite3 tool/library should be built
-dnl XXX hot-wire --with-dbsql; --with-dbsql=external will need RPM_CHECK_LIB
-AM_CONDITIONAL(WITH_DBSQL, true)
-AM_CONDITIONAL(WITH_DBSQL_CODEGEN, true)
 
 dnl # determine default RPM DB API and configuration
 DBAPI=0
@@ -2192,7 +2178,7 @@ AC_CONFIG_FILES([ po/Makefile.in
     doc/Makefile
     doc/manual/Makefile doc/fr/Makefile doc/ja/Makefile doc/ko/Makefile
     doc/pl/Makefile doc/ru/Makefile doc/sk/Makefile
-    js/Makefile js/src/Makefile python/Makefile
+    js/Makefile python/Makefile
     ruby/Makefile scripts/rpm.pc lib/rpmversion.h rpmconstant/Makefile
     tests/Makefile tests/macros
 ])
