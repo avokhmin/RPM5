@@ -43,12 +43,12 @@ rpm2cpio =	$(abs_top_builddir)/tools/rpm2cpio
 rpmcache =	$(abs_top_builddir)/tools/rpmcache --macros $(macros)
 rpmdigest =	$(abs_top_builddir)/tools/rpmdigest
 rpmrepo =	$(abs_top_builddir)/tools/rpmrepo
-dbsql =		$(abs_top_builddir)/tools/sqlite3
 
 tpgp =		./tpgp --macros $(macros)
 
 chroot =	$(abs_top_builddir)/tools/chroot
 cp =		$(abs_top_builddir)/tools/cp
+echo =		/bin/echo
 find =		$(abs_top_builddir)/tools/find
 grep =		$(abs_top_builddir)/tools/grep
 lua =		$(abs_top_builddir)/lua/lua
@@ -149,15 +149,15 @@ check-pubkeys: tpgp $(POPTPKGS)
 	@${cp} ref/DB_CONFIG tmp/rpmdb
 	@${rpm} --import tmp/DSA.pubpem
 	@${rpm} --import tmp/RSA.pubpem
-	@echo -n "--> default:"
+	@${echo} -n "--> default:"
 	@${tpgp}
-	@echo -n "--> beecrypt:"
+	@${echo} -n "--> beecrypt:"
 	@${tpgp} --usecrypto bc
 	@echo "--> gcrypt(note: MPI padding is BROKEN atm):"
 	@-${tpgp} --usecrypto gc
-	@echo -n "--> nss:"
+	@${echo} -n "--> nss:"
 	@-${tpgp} --usecrypto nss
-	@echo -n "--> openssl:"
+	@${echo} -n "--> openssl:"
 	@-${tpgp} --usecrypto ssl
 	@${rpm} --import $(top_srcdir)/pubkeys/JBJ-GPG-KEY
 	@${rpm} -Kv $(POPTPKGS) > tmp/popt.Kv
@@ -414,12 +414,6 @@ check-tools:
 	@mkdir -p tmp/cp && ${cp} -R $(POPTURI) tmp/cp
 	@diff -ru tmp/{wget,cp}
 	@${grep} -i HREF $(POPTURI) > tmp/grep
-
-check-sql:
-	@echo "=== $@ ==="
-	@rm -rf tmp/sqldb*
-	@-${dbsql} -echo tmp/sqldb '.read ref/sqldb-basic.sql' > tmp/sqldb-basic.out
-	@-diff -u {tmp,ref}/sqldb-basic.out || cp {tmp,ref}/sqldb-basic.out
 
 check-local: check-init check-pubkeys check-markup check-macros \
 	check-build check-sign check-ACID check-install \
