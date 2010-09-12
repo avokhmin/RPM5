@@ -33,6 +33,7 @@
 #include "rpmte.h"
 
 #define	_RPMTS_INTERNAL
+#define	_RPMBAG_INTERNAL
 #include "rpmts.h"
 
 #include <rpmcli.h>
@@ -213,14 +214,30 @@ rpmmi rpmtsInitIterator(const rpmts ts, rpmTag rpmtag,
 
 int rpmtsCloseSDB(rpmts ts)
 {
+    rpmbag bag = ts->bag;
     int rc = 0;
 
-    if (ts->sdb != NULL) {
-	(void) rpmswAdd(rpmtsOp(ts, RPMTS_OP_DBGET), &ts->sdb->db_getops);
-	(void) rpmswAdd(rpmtsOp(ts, RPMTS_OP_DBPUT), &ts->sdb->db_putops);
-	(void) rpmswAdd(rpmtsOp(ts, RPMTS_OP_DBDEL), &ts->sdb->db_delops);
-	rc = rpmdbClose(ts->sdb);
-	ts->sdb = NULL;
+    if (bag != NULL) {
+	rpmsdb * sdbp = bag->sdbp;
+	int i = bag->nsdbp;
+	if (sdbp)
+	while (--i >= 0) {
+	    rpmdb sdb;
+	    if (sdbp[i] == NULL)
+		continue;
+	    sdb = sdbp[i]->_db;
+	    if (sdb) {
+		int xx;
+		(void) rpmswAdd(rpmtsOp(ts, RPMTS_OP_DBGET), &sdb->db_getops);
+		(void) rpmswAdd(rpmtsOp(ts, RPMTS_OP_DBPUT), &sdb->db_putops);
+		(void) rpmswAdd(rpmtsOp(ts, RPMTS_OP_DBDEL), &sdb->db_delops);
+		xx = rpmdbClose(sdb);
+		if (xx && rc == 0)
+		    rc = xx;
+	    }
+	    (void) rpmbagDel(bag, i);
+	}
+	ts->bag = rpmbagFree(ts->bag);
     }
     return rc;
 }
@@ -228,32 +245,80 @@ int rpmtsCloseSDB(rpmts ts)
 int rpmtsOpenSDB(rpmts ts, int dbmode)
 {
     static int has_sdbpath = -1;
+    rpmbag bag = ts->bag;
+    rpmsdb * sdbp = NULL;
+    rpmdb sdb = NULL;
+    int sdbmode = O_RDONLY;
+    const char * s = NULL;
+    ARGV_t av = NULL;
+    int ac = 0;
     int rc = 0;
+    int xx;
+    int i;
 
-    if (ts->sdb != NULL && ts->sdbmode == dbmode)
-	return 0;
+    if (bag == NULL) {
+	bag = ts->bag = rpmbagNew(NULL, 0);
+	if (bag == NULL)
+	    goto exit;
+    }
+    sdbp = bag->sdbp;
+    sdb = (sdbp[0] ? sdbp[0]->_db : NULL);
+    sdbmode = (sdbp[0] ? sdbp[0]->dbmode : O_RDONLY);
+
+    if (sdb != NULL && sdbmode == dbmode) {
+	rc = 0;
+	goto exit;
+    }
 
     if (has_sdbpath < 0)
 	has_sdbpath = rpmExpandNumeric("%{?_solve_dbpath:1}");
 
     /* If not configured, don't try to open. */
-    if (has_sdbpath <= 0)
-	return 1;
-
-    addMacro(NULL, "_dbpath", NULL, "%{_solve_dbpath}", RMIL_DEFAULT);
-
-    rc = rpmdbOpen(ts->rootDir, &ts->sdb, ts->sdbmode, (mode_t)0644);
-    if (rc) {
-	const char * dn;
-	dn = rpmGetPath(ts->rootDir, "%{_dbpath}", NULL);
-	rpmlog(RPMLOG_WARNING,
-			_("cannot open Solve database in %s\n"), dn);
-	dn = _free(dn);
-	/* XXX only try to open the solvedb once. */
-	has_sdbpath = 0;
+    if (has_sdbpath <= 0) {
+	rc = 1;
+	goto exit;
     }
-    delMacro(NULL, "_dbpath");
 
+    s = rpmExpand("%{?_solve_dbpath}", NULL);
+    xx = argvSplit(&av, s, ":");
+    ac = argvCount(av);
+
+    for (i = 0; i < ac; i++) {
+	const char * fn;
+	urltype ut;
+
+	if (av[i] == NULL || *av[i] == '\0')
+	    continue;
+
+	fn = NULL;
+	ut = urlPath(av[i], &fn);
+
+	/* XXX Lstat(fn, &sb) to ensure a directory? */
+	addMacro(NULL, "_dbpath", NULL, fn, RMIL_DEFAULT);
+	xx = rpmdbOpen(ts->rootDir, &sdb, dbmode, (mode_t)0644);
+	delMacro(NULL, "_dbpath");
+
+	if (xx) {
+	    const char * dn = rpmGetPath(ts->rootDir, fn, NULL);
+	    rpmlog(RPMLOG_WARNING, _("cannot open Solve database in %s\n"), dn);
+	    dn = _free(dn);
+	    if (rc == 0)
+		rc = xx;
+
+	    /* XXX only try to open the solvedb once. */
+	    has_sdbpath = 0;
+	    continue;
+	}
+
+	xx = rpmbagAdd(bag, sdb, dbmode);
+    }
+
+    av = argvFree(av);
+    s = _free(s);
+
+exit:
+if (_rpmts_debug)
+fprintf(stderr, "<-- %s(%p, 0%o) rc %d\n", __FUNCTION__, ts, dbmode, rc);
     return rc;
 }
 
@@ -274,9 +339,10 @@ static int sugcmp(const void * a, const void * b)
 int rpmtsSolve(rpmts ts, rpmds ds, /*@unused@*/ const void * data)
 {
     HE_t he = memset(alloca(sizeof(*he)), 0, sizeof(*he));
-    const char * errstr;
+    rpmbag bag = ts->bag;
+    rpmsdb * sdbp = NULL;
+    const char * errstr = NULL;
     const char * str = NULL;
-    const char * qfmt;
     rpmmi mi;
     Header bh = NULL;
     Header h = NULL;
@@ -285,19 +351,23 @@ int rpmtsSolve(rpmts ts, rpmds ds, /*@unused@*/ const void * data)
     rpmTag rpmtag;
     const char * keyp;
     size_t keylen = 0;
-    int rc = 1;	/* assume not found */
+    int rc = 1;		/* assume not found */
     int xx;
+    int i;
+
+if (_rpmts_debug)
+fprintf(stderr, "--> %s(%p,%p,%p)\n", __FUNCTION__, ts, ds, data);
 
     /* Make suggestions only for installing Requires: */
     if (ts->goal != TSM_INSTALL)
-	return rc;
+	goto exit;
 
     switch (rpmdsTagN(ds)) {
     case RPMTAG_CONFLICTNAME:
     default:
-	return rc;
+	goto exit;
 	/*@notreached@*/ break;
-    case RPMTAG_DIRNAMES:	/* XXX perhaps too many wrong answers */
+    case RPMTAG_DIRNAMES:	/* XXX perhaps too many wrong answers? */
     case RPMTAG_REQUIRENAME:
     case RPMTAG_FILELINKTOS:
 	break;
@@ -305,63 +375,90 @@ int rpmtsSolve(rpmts ts, rpmds ds, /*@unused@*/ const void * data)
 
     keyp = rpmdsN(ds);
     if (keyp == NULL)
-	return rc;
+	goto exit;
 
-    if (ts->sdb == NULL) {
-	xx = rpmtsOpenSDB(ts, ts->sdbmode);
-	if (xx) return rc;
+    if (bag == NULL) {
+	xx = rpmtsOpenSDB(ts, O_RDONLY);
+	if (xx)
+	    goto exit;
+	bag = ts->bag;
+	if (bag == NULL)
+	    goto exit;
     }
 
-    /* Look for a matching Provides: in suggested universe. */
-    rpmtag = (*keyp == '/' ? RPMTAG_BASENAMES : RPMTAG_PROVIDENAME);
-    mi = rpmmiInit(ts->sdb, rpmtag, keyp, keylen);
-    while ((h = rpmmiNext(mi)) != NULL) {
-	size_t hnamelen;
-	time_t htime;
+    sdbp = bag->sdbp;
 
-	if (rpmtag == RPMTAG_PROVIDENAME && !rpmdsAnyMatchesDep(h, ds, 1))
+    if (sdbp)
+    for (i = 0; i < (int)bag->nsdbp; i++) {
+	rpmdb sdb = NULL;
+
+	if (sdbp[i] == NULL)
+	    continue;
+	sdb = sdbp[i]->_db;
+	if (sdb == NULL)
 	    continue;
 
-	he->tag = RPMTAG_NAME;
-	xx = headerGet(h, he, 0);
-	hnamelen = ((xx && he->p.str) ? strlen(he->p.str) : 0);
-	he->p.ptr = _free(he->p.ptr);
+	/* Look for a matching Provides: in suggested universe. */
+	rpmtag = (*keyp == '/' ? RPMTAG_FILEPATHS : RPMTAG_PROVIDENAME);
+	mi = rpmmiInit(sdb, rpmtag, keyp, keylen);
+	while ((h = rpmmiNext(mi)) != NULL) {
+	    size_t hnamelen;
+	    time_t htime;
 
-	/* XXX Prefer the shortest pkg N for basenames/provides resp. */
-	if (bhnamelen > 0 && hnamelen > bhnamelen)
-	    continue;
+	    if (rpmtag == RPMTAG_PROVIDENAME && !rpmdsAnyMatchesDep(h, ds, 1))
+		continue;
 
-	/* XXX Prefer the newest build if given alternatives. */
-	he->tag = RPMTAG_BUILDTIME;
-	xx = headerGet(h, he, 0);
-	htime = (xx && he->p.ui32p ? he->p.ui32p[0] : 0);
-	he->p.ptr = _free(he->p.ptr);
+	    he->tag = RPMTAG_NAME;
+	    xx = headerGet(h, he, 0);
+	    hnamelen = ((xx && he->p.str) ? strlen(he->p.str) : 0);
+	    he->p.ptr = _free(he->p.ptr);
 
-	if (htime <= bhtime)
-	    continue;
+	    /* XXX Prefer the shortest pkg N for basenames/provides resp. */
+	    if (bhnamelen > 0 && hnamelen > bhnamelen)
+		continue;
 
-	/* Save new "best" candidate. */
-	(void)headerFree(bh);
-	bh = NULL;
-	bh = headerLink(h);
-	bhtime = htime;
-	bhnamelen = hnamelen;
+	    /* XXX Prefer the newest build if given alternatives. */
+	    he->tag = RPMTAG_BUILDTIME;
+	    xx = headerGet(h, he, 0);
+	    htime = (xx && he->p.ui32p ? he->p.ui32p[0] : 0);
+	    he->p.ptr = _free(he->p.ptr);
+
+	    if (htime <= bhtime)
+		continue;
+
+	    /* Save new "best" candidate. */
+	    (void)headerFree(bh);
+	    bh = NULL;
+	    bh = headerLink(h);
+	    bhtime = htime;
+	    bhnamelen = hnamelen;
+	}
+	mi = rpmmiFree(mi);
     }
-    mi = rpmmiFree(mi);
 
     /* Is there a suggested resolution? */
     if (bh == NULL)
 	goto exit;
 
-    /* Format the suggested resolution path. */
-    qfmt = rpmExpand("%{?_solve_name_fmt}", NULL);
-    if (qfmt == NULL || *qfmt == '\0')
-	goto exit;
-    str = headerSprintf(bh, qfmt, NULL, rpmHeaderFormats, &errstr);
-    (void)headerFree(bh);
+    /* Get the path to the package file. */
+    he->tag = RPMTAG_PACKAGEORIGIN;
+    he->p.ptr = NULL;
+    xx = headerGet(bh, he, 0);
+    if (he->p.str) {
+	str = he->p.str;
+	he->p.str = NULL;
+    } else {
+	/* Format the suggested resolution path. */
+	const char * qfmt = rpmExpand("%{?_solve_name_fmt}", NULL);
+	if (qfmt == NULL || *qfmt == '\0')
+	    goto exit;
+	str = headerSprintf(bh, qfmt, NULL, rpmHeaderFormats, &errstr);
+	qfmt = _free(qfmt);
+    }
+
+    (void) headerFree(bh);
     bh = NULL;
-    qfmt = _free(qfmt);
-    if (str == NULL) {
+    if (errstr) {
 	rpmlog(RPMLOG_ERR, _("incorrect solve path format: %s\n"), errstr);
 	goto exit;
     }
@@ -385,6 +482,7 @@ int rpmtsSolve(rpmts ts, rpmds ds, /*@unused@*/ const void * data)
 	xx = Fclose(fd);
 	switch (rpmrc) {
 	default:
+	    str = _free(str);
 	    break;
 	case RPMRC_NOTTRUSTED:
 	case RPMRC_NOKEY:
@@ -398,7 +496,6 @@ int rpmtsSolve(rpmts ts, rpmds ds, /*@unused@*/ const void * data)
 	    }
 	    break;
 	}
-	str = _free(str);
 	(void)headerFree(h);
 	h = NULL;
 	goto exit;
@@ -426,9 +523,9 @@ int rpmtsSolve(rpmts ts, rpmds ds, /*@unused@*/ const void * data)
 	qsort(ts->suggests, ts->nsuggests, sizeof(*ts->suggests), sugcmp);
 
 exit:
-/*@-nullstate@*/ /* FIX: ts->suggests[] may be NULL */
+if (_rpmts_debug)
+fprintf(stderr, "<-- %s(%p,%p,%p) rc %d N %s EVR %s F 0x%x\n", __FUNCTION__, ts, ds, data, rc, rpmdsN(ds), rpmdsEVR(ds), rpmdsFlags(ds));
     return rc;
-/*@=nullstate@*/
 }
 
 int rpmtsAvailable(rpmts ts, const rpmds ds)
@@ -452,9 +549,7 @@ int rpmtsAvailable(rpmts ts, const rpmds ds)
 	ts->suggests[ts->nsuggests] = NULL;
     }
     sugkey = _free(sugkey);
-/*@-nullstate@*/ /* FIX: ts->suggests[] may be NULL */
     return rc;
-/*@=nullstate@*/
 }
 
 int rpmtsSetSolveCallback(rpmts ts,
@@ -1375,8 +1470,7 @@ rpmts rpmtsCreate(void)
 
     ts->PRCO = NULL;
 
-    ts->sdb = NULL;
-    ts->sdbmode = O_RDONLY;
+    ts->bag = NULL;
 
     ts->rdb = NULL;
     ts->dbmode = O_RDONLY;

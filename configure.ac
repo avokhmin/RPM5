@@ -8,7 +8,7 @@ dnl ##
 
 AC_PREREQ(2.63)
 m4_define([PACKAGE_BUGREPORT_DEFAULT], [rpm-devel@rpm5.org])
-AC_INIT([rpm],[5.3.DEVEL],[PACKAGE_BUGREPORT_DEFAULT])
+AC_INIT([rpm],[5.4.DEVEL],[PACKAGE_BUGREPORT_DEFAULT])
 PACKAGE_TIMESTAMP="2009" dnl # YYYY[-MM[-DD[ HH[:MM]]]]
 AC_MSG_TITLE([RPM Package Manager (RPM)], [$PACKAGE_VERSION])
 
@@ -1040,14 +1040,14 @@ pkgpyexecdir=""
 AC_ARG_WITH(python, AS_HELP_STRING([--with-python], [build with RPM Python language bindings]), [
     if test ".$withval" != .no; then
         case "$withval" in
-             2.x|2.3|2.4|2.5|2.6)
+             2.x|2.3|2.4|2.5|2.6|2.7)
                   python_version=$withval
                   ;;
              yes)
-                  python_version="2.6 2.5 2.4 2.3 2.x"
+                  python_version="2.7 2.6 2.5 2.4 2.3 2.x"
                   ;;
              *)
-                  AC_MSG_WARN([--with-python only supports values "2.x", "2.3", "2.4", "2.5", or "2.6" ignoring...])
+                  AC_MSG_WARN([--with-python only supports values "2.x", "2.3", "2.4", "2.5", "2.6" or "2.7" ignoring...])
                   python_version=""
                   ;;
         esac
@@ -1356,11 +1356,14 @@ RPM_CHECK_LIB(
     [File (magic)], [file],
     [magic], [magic_open], [magic.h],
     [yes,external:internal:none], [file:src:src],
-    [ if test ".$RPM_CHECK_LIB_LOCATION" = .internal; then
+    [ AM_CONDITIONAL(WITH_FILE_INTERNAL, [ test ".$RPM_CHECK_LIB_LOCATION" = .internal ])
+      if test ".$RPM_CHECK_LIB_LOCATION" = .internal; then
           WITH_FILE_INTERNAL=true
           AC_DEFINE(HAVE_MAGIC_H, 1, [Define to 1 if you have <magic.h>])
       fi
-    ], [])
+    ],
+    [ AM_CONDITIONAL(WITH_FILE_INTERNAL, [ false ])
+    ])
 
 dnl # Berkeley-DB & SQLite
 DBLIBSRCS=""
@@ -1388,19 +1391,29 @@ RPM_CHECK_LIB(
       fi
     ])
 
-dnl RPM_CHECK_LIB(
-dnl     [Berkeley DB SQL], [dbsql],
-dnl     [db_sql-5.0 db_sql], [sqlite3_open], [],
-dnl     [yes,internal:external:none], [db3/sql],
-dnl     [],
-dnl     [])
-
+dnl # Sqlite external
 RPM_CHECK_LIB(
     [SQLite], [sqlite],
     [sqlite3], [sqlite3_open], [sqlite3.h],
-    [no,external:none], [],
+    [no,external:none], [sqlite],
     [ DBLIBSRCS="$DBLIBSRCS sqlite.c" ],
     [])
+
+dnl # Sqlite 3.6.23.1 internal from db-5.0.x
+RPM_CHECK_LIB(
+    [Berkeley DB SQL], [dbsql],
+    [db_sql-5.0 db_sql], [sqlite3_open], [],
+    [no,internal:none], [db3/sql],
+    [
+      AM_CONDITIONAL(WITH_DBSQL, [ true ])
+      if test ".$RPM_CHECK_LIB_LOCATION" = .internal; then
+        WITH_DB_LIBS="${WITH_DBSQL_LIBS}"
+        AC_DEFINE(WITH_SQLITE, 1, [Define as 1 if building with SQLite library])
+        DBLIBSRCS="$DBLIBSRCS sqlite.c"
+      fi
+    ], [
+      AM_CONDITIONAL(WITH_DBSQL, [ false ])
+    ])
 
 DBLIBOBJS=`echo $DBLIBSRCS | sed -e "s/\.c/\.lo/g"`
 
@@ -1417,7 +1430,6 @@ AM_CONDITIONAL(WITH_DB_TOOLS_INTEGRATED, test ".$with_db_tools_integrated" = .ye
 
 dnl # determine whether the db sqlite3 tool/library should be built
 dnl XXX hot-wire --with-dbsql; --with-dbsql=external will need RPM_CHECK_LIB
-AM_CONDITIONAL(WITH_DBSQL, true)
 AM_CONDITIONAL(WITH_DBSQL_CODEGEN, true)
 
 dnl # determine default RPM DB API and configuration
@@ -1485,14 +1497,19 @@ RPM_CHECK_LIB(
 
 dnl # Ruby
 WITH_RUBY_SUBDIR=""
+WITH_RUBY_CPPFLAGS=""
 RPM_CHECK_LIB(
     [Ruby], [ruby],
     [ruby], [ruby_init], [ruby.h],
     [no,external:none], [],
-    [ AC_DEFINE(WITH_RUBYEMBED, 1, [Define to 1 if you want embedded Ruby])
-      WITH_RUBY_SUBDIR=ruby
+    [
+        AC_DEFINE(WITH_RUBYEMBED, 1, [Define to 1 if you want embedded Ruby])
+        WITH_RUBY_SUBDIR=ruby
+
+        WITH_RUBY_CPPFLAGS="-I`ruby -rrbconfig -e 'puts RbConfig::expand(RbConfig::CONFIG[[\"rubyhdrdir\"]])'` -I`ruby -rrbconfig -e 'puts RbConfig::expand(\"#{RbConfig::CONFIG[\"rubyhdrdir\"]}/$(arch)\")'`"
     ], [])
 AC_SUBST(WITH_RUBY_SUBDIR)
+AC_SUBST(WITH_RUBY_CPPFLAGS)
 
 dnl # Squirrel
 RPM_CHECK_LIB(

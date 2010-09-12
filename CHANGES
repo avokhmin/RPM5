@@ -1,9 +1,47 @@
-5.3.2 -> 5.4a1:
+5.3.3 -> 5.4a1:
+    - jbj: gpsee: replace WITH_JS everwhere with WITH_GPSEE. GPSEE->JS always.
+    - jbj: rpmjs: resecusitate sufficiently to use with jx/ngsr.c. more todo++.
+    - eveith: Fix ruby include paths
+    - rpm.org: git-v1:339f31face44d877c3a6e2fc780e740e7e236eae.
+    - jbj: rpmrepo: refactor the methods that don't need/use a header.
+    - jbj: rpmrepo: handle all CLI argv processing in rpmrepoNew().
+    - afb: tests: set up local magic path for internal file.
+    - jbj: rpmrepo: move CLI tables and global __rpmrepo structure.
+    - afb: tests: target POSIX make instead of GNU make.
+    - jbj: rpmrepo: move the data structures into the rpmrepo object.
+    - jbj: rpmrepo: stub-in a rpmrepo wrapper to bury the CLI tool in a library.
+    - jbj: tests: resurrect rpmrepo test cases in check-rpmrepo target.
+    - jbj: rpmrepo: fix: don't segfault processing RPMv3 headers w/o digest.
+    - jbj: rpmrepo: rescusitate .olddata cleanup iff using sqlite from db-5.0.26.
+    - jbj: rpmbin: install /usr/lib/rpm/bin/{sqlite3,dbsql} (both for now).
+    - jbj: tests: rescusitate: --with-file=external --with-dbsql=internal churn.
+    - jbj: permit --with-dbsql=internal as sqlite replacement.
+    - jbj: permit building --without-sqlite again.
+
+5.3.2 -> 5.3.3:
+    - jbj: beecrypt: finish up --with-beecrypt=internal wiring into -lrpmmisc.
+    - jbj: neon: finish up --with-neon=internal wiring into -lrpmmisc.
+    - jbj: misc: add ne_* symbols to loader map for --with-neon=internal.
+    - jbj: grep: leave rpmgrep internal, autopoint gets heartburn.
+    - jbj: pcre: upgrade to pcre-8.10.
+    - jbj: db: upgrade to db-5.0.26.
+    - jbj: solve: commit to a test framework based on EDOS and Poky.
+    - jbj: solve: use RPMTAG_PACKAGEORIGIN paths when available.
+    - jbj: neon: fix: permit building w neon-0.25.x.
+    - jbj: ssl: fix: permit building w/o ECDSA.
+    - jbj: ruby: fix: retrofit RSTRING_PTR/RSTRING_LEN into ruby-1.8.5.
+    - jbj: solve: loop over solve db's in a bag.
+    - jbj: solve: stub-in toy add/del methods.
+    - jbj: solve: permit multiple solvedb's in a rpmbag.
+    - jbj: solve: generalize %_dbpath to permit multiple rpmdb's.
+    - jbj: solve: flip --aid "opt-in" behavior to --noaid "opt-out".
+    - jbj: solve: fix: don't free the package file name when depsolving.
+    - jbj: stub in bag/svn/cvs/git objects.
     - jbj: tpm: stub in client startup code and ttpm executable.
     - jbj: tpm: rework the AutoFu through *.pc to set CFLAGS.
     - jbj: tpm: glue in an rpmtpm object wrapper.
     - jbj: tpm: stub in the AutoFu to detect libtpm.
-    - jbj: fix: debugedit produce empty list file on MIPS (#61).
+    - jbj: fix: debugedit produce empty list file on MIPS.
     - jbj: asn1: wire up ctor's and dtor's internally.
     - jbj: asn1: stub in a wrapper object for libtasn1 (and PKIX and ASN.1).
     - jbj: cdsa: wire up RSA/DSA generate/sign/verify methods.
