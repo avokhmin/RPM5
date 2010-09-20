@@ -1,4 +1,12 @@
 5.3.3 -> 5.4a1:
+    - jbj: mongo: handle endianness at runtime, remove MONGO_BIG_ENDIAN.
+    - jbj: mongo: replace internal md5 digest with rpmDigestInit().
+    - jbj: mongo: refactor to export from -lrpmio (with no AutoFu!).
+    - jbj: mongo: refactor to export the mongo-c-driver API in -lrpmdb.
+    - jbj: mongo: bundle up the mongo-c-driver in rpmdb/rpmmdb.c.
+    - jbj: mongo: stub-in AutoFu sufficient to get WITH_MONGO defined.
+    - jbj: mongo: stub-in a rpmmdb object to carry the Mongo DB C driver.
+    - jbj: mongo: stub-in a mongo spewage alias as --wdj:srpm.mongo.
     - jbj: gpsee: replace WITH_JS everwhere with WITH_GPSEE. GPSEE->JS always.
     - jbj: rpmjs: resecusitate sufficiently to use with jx/ngsr.c. more todo++.
     - eveith: Fix ruby include paths

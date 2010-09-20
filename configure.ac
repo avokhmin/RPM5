@@ -1590,6 +1590,14 @@ RPM_CHECK_LIB(
       fi
     ], [])
 
+dnl # Mongo
+dnl # XXX mostly bogus tests, but sufficient to get WITH_MONGO defined
+dnl RPM_CHECK_LIB(
+dnl     [Mongo DB], [mongo],
+dnl     [mongoclient], [md5_init], [targetver.h],
+dnl     [no,external:none], [mongo],
+dnl     [], [])
+
 dnl # Rc
 RPM_CHECK_LIB(
     [Rc], [rc],
@@ -2245,7 +2253,7 @@ AC_CONFIG_FILES([ po/Makefile.in
     doc/pl/Makefile doc/ru/Makefile doc/sk/Makefile
     js/Makefile js/src/Makefile python/Makefile
     ruby/Makefile scripts/rpm.pc lib/rpmversion.h rpmconstant/Makefile
-    tests/Makefile tests/macros
+    tests/Makefile tests/macros tests/mongo/Makefile
 ])
 
 dnl # final step: generate output
