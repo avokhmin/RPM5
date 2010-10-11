@@ -1,4 +1,17 @@
 5.3.4 -> 5.4a1:
+    - jbj: mongo: add --json to spew document structured metadata in JSON.
+    - jbj: mongo: add --qf templates for primary/filelists/other imports.
+    - jbj: spewage: add :jsonescape header format extension.
+    - jbj: db: specify only db-5.1.19 external for building, remove the cruft.
+    - jbj: tests: resurrect the "check-ACID" target using external db51_utils.
+    - jbj: db: build against external db-5.1.19 using --with-db/--with-dbsql.
+    - jbj: rpmlio: disable for now, needs --with-db=internal.
+    - jbj: db_tool: disable for now, needs --with-db=internal.
+    - jbj: db: target db-5.1.19 using --with-db=external.
+    - proyvind: rpm46compat: mostly(?) fix rpmtd iterator
+    - jbj: add Fadvise wrapper for posix_dadvise(2).
+    - jbj: fix: eliminate dueling --noorder options.
+    - jbj: solvedb's never need a chroot prefix.
 
 5.3.3 -> 5.3.4:
     - jbj: release 5.3.4.

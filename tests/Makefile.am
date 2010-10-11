@@ -113,17 +113,17 @@ rpmdb_Tables = \
 	$(rpmdb)/Triggername	\
 	$(rpmdb)/Version
 
-db_tool =	$(abs_top_builddir)/tools/db_tool
-db_archive =	${db_tool} db_archive	-h $(rpmdb) -v
-db_checkpoint =	${db_tool} db_checkpoint -h $(rpmdb) -v
-db_dump =	${db_tool} db_dump	-h $(rpmdb)
-db_load =	${db_tool} db_load	-h $(rpmdb)
-db_log_verify =	${db_tool} db_log_verify -h $(rpmdb)
-db_printlog =	${db_tool} db_printlog	-h $(rpmdb)
-db_recover =	${db_tool} db_recover	-h $(rpmdb) -v
-db_stat =	${db_tool} db_stat	-h $(rpmdb)
-db_upgrade =	${db_tool} db_upgrade	-h $(rpmdb) -v
-db_verify =	${db_tool} db_verify	-h $(rpmdb)
+db_archive =	@__DB_ARCHIVE@	-h $(rpmdb) -v
+db_checkpoint =	@__DB_CHECKPOINT@ -h $(rpmdb) -v
+db_dump =	@__DB_DUMP@	-h $(rpmdb)
+db_load =	@__DB_LOAD@	-h $(rpmdb)
+db_log_verify =	@__DB_LOG_VERIFY@ -h $(rpmdb)
+db_printlog =	@__DB_PRINTLOG@	-h $(rpmdb)
+db_recover =	@__DB_RECOVER@	-h $(rpmdb) -v
+db_stat =	@__DB_STAT@	-h $(rpmdb)
+db_upgrade =	@__DB_UPGRADE@	-h $(rpmdb) -v
+db_verify =	@__DB_VERIFY@	-h $(rpmdb)
+
 dbsql	 =	$(abs_top_builddir)/tools/dbsql
 
 cpio =		@__CPIO@
@@ -139,7 +139,7 @@ rm =		@__RM@
 sqlite3 =	@__SQLITE3@
 tar =		@__TAR@
 
-#tdsa_SOURCES = tdsa.c
+#tdsa_SOURCES = tdsa.c 
 #tdsa_LDADD = $(RPMIO_LDADD)
 
 tecdsa_SOURCES = tecdsa.c
@@ -286,12 +286,6 @@ check-macros:
 	@-${rpm} -E '%{python:print "-->   python: Snake Eggs!",}'
 	@-${rpm} -E '%{ficl:.( -->     ficl: Das OpenBoot!)}'
 
-# use a GNU make "define" command, that looks like a harmless dummy rule
-# to BSD make, to hide parts of the Makefile from GNU make.
-define IGNORED_BY_GNU_MAKE:
-.if 0
-endef
-
 %.spec: $(wildcard %-*.src.rpm)
 	@${rpm2cpio} $(wildcard $*-*.src.rpm) | ${cpio} -i --quiet $@
 
@@ -306,7 +300,7 @@ $(BUILD_DIRS): $(wildcard %-*.src.rpm)
 	(cd $@ && ${rpm} -q --specfile $@.spec && ${rpm} -q --specsrpm $@.spec && ${rpm} -q --specfile --specedit $@.spec && ${rpm} -bb --nodeps $@.spec || :) > /dev/null
 
 define IGNORED_BY_GNU_MAKE:
-.endif
+.endif 
 
 # neither .endif nor endef can be followed by a colon; each creates
 # warnings or errors in one or other version of make. we need some
@@ -428,7 +422,7 @@ CM12_manifest =	$(testdir)/ref/cm12-bash.i586.manifest
 CM14_uri =	$(CM_mirror)/14/oficial/i586/media/main/release/
 CM14_manifest =	$(testdir)/ref/cm14-bash.i586.manifest
 CM15_uri =	$(CM_mirror)/15/oficial/i586/media/main/release/
-CM15_manifest =	$(testdir)/ref/cm15-minimal.manifest
+#CM15_manifest =	$(testdir)/ref/cm15-minimal.manifest
 # CAOS -- cAos
 CAOS_mirror =	http://mirror.caoslinux.org
 CAOS2_uri =	$(CAOS_mirror)/cAos-2/core/i386/
@@ -453,11 +447,13 @@ IDMS_manifest =	$(testdir)/ref/idms-minimal.i586.manifest
 #MYTHDORA_mirror = http://mirror.beww.org/mythdora
 #MYTHDORA1223 =	$(MYTHDORA_mirror)/12.23/i386/os/Packages/
 # MDV -- Mandriva
-MDV_mirror =	http://distrib-coffee.ipsl.jussieu.fr/pub/linux/MandrivaLinux/official
+MDV_mirror =	ftp://mirrors.us.kernel.org/mandriva/Mandrakelinux/official
 MDV2009_uri =	$(MDV_mirror)/2009.0/i586/media/main/release/
 MDV2009_manifest = $(testdir)/ref/Mandriva2009.0-bash.i586.manifest
 MDV2010_uri =	$(MDV_mirror)/2010.0/i586/media/main/release/
 MDV2010_manifest = $(testdir)/ref/Mandriva2010.0-bash.i586.manifest
+MDV20101_uri =	$(MDV_mirror)/2010.1/i586/media/main/release/
+MDV20101_manifest = $(testdir)/ref/Mandriva2010.1-bash.i586.manifest
 # MEEGO -- MeeGo
 # XXX lt-find: rpmdav.c:1331: htmlParse: Assertion `he > h' failed.
 #MEEGO_mirror =	http://repo.meego.com/MeeGo/builds/trunk/1.0.90.3.20100921.1
@@ -511,6 +507,7 @@ UL_uri =	$(UL_mirror)/2009/x86_64/unity/
 # VINE -- Vine Linux
 VINE_mirror =	http://ring.u-toyama.ac.jp/pub/linux/Vine
 VINE51_uri =	$(VINE_mirror)/Vine-5.1/i386/Vine/RPMS/
+VINE51_manifest = $(testdir)/ref/vine51-everything.manifest
 # YDL -- Yellow Dog Linug (ppc)
 YDL_mirror =	http://ydl.oregonstate.edu/releases
 YDL61_uri =	$(YDL_mirror)/yellowdog-6.1/os/YellowDog/
@@ -574,6 +571,16 @@ manifests:
 	  then ${find} $< -name '*.rpm' | sort -u > $@; \
 	fi
 
+.PRECIOUS: %/repodata
+%/repodata: %/RPMS
+	@rm -f ${@D}/generate
+#	-rm -f ${@D}/repodata
+	@echo "`${now}` ==> ${@D}: Generating ..." | tee -a ${@D}/generate
+	${rpmrepo} --uncompressed --database --stats ${@D} 2>&1 | tee -a ${@D}/generate
+	@ls -al ${@D}/repodata
+	@echo "`${now}` <== ${@D}: Generated." | tee -a ${@D}/generate
+
+#	  -D '_dbi_tags Packages:Name:Nvra:Providename:Dirnames:Basenames:Filepaths'
 .PRECIOUS: %/solve
 %/solve: %/todo
 	@rm -f ${@D}/import
@@ -583,11 +590,11 @@ manifests:
 	@echo "`${now}` <== ${@D}: Created." | tee -a ${@D}/import
 	@echo "`${now}` ==> ${@D}: Importing ..." | tee -a ${@D}/import
 	@-${rpm} -i -D '_dbpath ${@D}/solve' --justdb --stats \
-	  --replacepkgs --replacefiles --oldpackage \
-	  --noaid --ignoresize --nodeps --noorder \
-	  --noscripts --notriggers --noparentdirs --nolinktos --nosignature \
+	  -D '__dbi_txn create nofsync lock log mpool txn auto_commit thread thread_count=64' \
+	  --noaid --ignoresize --nodeps --noorder --nosignature \
 	  $< \
 	  2>&1 | tee -a ${@D}/import
+	ls -al ${@D}/solve
 	@echo "`${now}` <== ${@D}: Imported." | tee -a ${@D}/import
 
 Install-%: %/solve
@@ -597,7 +604,7 @@ Install-%: %/solve
 	@${sudo} rm -rf $(<D)/ROOT
 	@mkdir -p $(<D)/ROOT/var/lib/rpm/log $(<D)/ROOT/var/lib/rpm/tmp
 	@${cp} $(testdir)/ref/DB_CONFIG $(<D)/ROOT/var/lib/rpm
-	@-${sudo} ${rpm} -Uvh --nofdigests \
+	@-${sudo} ${rpm} -Uvh --nofdigests --stats \
 	  -r $(testdir)/$(<D)/ROOT \
 	  -D '_dbpath /var/lib/rpm' \
 	  -D '_solve_A $(<D)/solve' \
@@ -663,10 +670,7 @@ check-triggers:
 
 check-query:
 	@echo "=== $@ ==="
-	@${rpm} -qW . > /dev/null 2>&1
-#XXX	-${rpm} -Uvv --justdb */*.rpm > /dev/null 2>&1
-#XXX	-${rpm} -Uvh --justdb --nodeps */*.rpm > /dev/null 2>&1
-#XXX	-${rpm} -i --justdb --nodeps */*.rpm > /dev/null 2>&1
+#XXX	@${rpm} -qW . > /dev/null 2>&1
 	@${rpm} -qa > /dev/null
 	@${rpm} -qa 'arch=noarch' > /dev/null
 	@${rpm} -qa 'arch=!noarch' > /dev/null
