@@ -1,4 +1,25 @@
 5.3.4 -> 5.4a1:
+    - proyvind: ditch %gem_unpack macro and make %setup automatically handle
+	ruby gem extraction in stead.
+    - jbj: sqlite: fix: permit building without sqlite, <db51/dbsql.h> instead.
+    - jbj: beecrypt: fix: polluted builds due to my brain fart. revert.
+    - jbj: popt: permit builds with --with-popt=internal all over again. todo++.
+    - jbj: tests: fix: eliminate the need to jump start "make check"
+        by copy macros from within tree to /usr/lib/rpm.
+    - jbj: tests: lose all the *.spec build peculier macros just added.
+    - proyvind: add gem_helper.rb and it's corresponding macros %gem_unpack,
+	%gem_build & gem_install for simplifying & streamlining ruby gem
+	packaging.
+    - proyvind: add cmake macros from fedora/mandriva.
+    - proyvind: add tcl macros from mandriva.
+    - proyvind: add ruby macros from mandriva.
+    - proyvind: add macros from mandriva that's fairly generic enough to
+	possibly be of use to others, in mandriva/macros.
+    - devzero2000: add an --setfscontext popt alias (lp#660406)
+    - jbj: spewage: use RPMTAG_SHA1HEADER as the primary retrieval key.
+    - jbj: rpmpopt: fix: permit popt aliases to be used w "make check".
+    - jbj: pgp: add a 2nd parameter to pgpDigNew to generate a keypair.
+    - jbj: rpmbc: refactor rpmbcExport{Pubkey,Signature} out of rpmbuild code.
     - jbj: mongo: add --json to spew document structured metadata in JSON.
     - jbj: mongo: add --qf templates for primary/filelists/other imports.
     - jbj: spewage: add :jsonescape header format extension.

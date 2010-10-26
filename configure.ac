@@ -463,6 +463,7 @@ AC_PATH_PROG(__CAT, cat, /bin/cat, $MYPATH)
 AC_PATH_PROG(__CHGRP, chgrp, /bin/chgrp, $MYPATH)
 AC_PATH_PROG(__CHMOD, chmod, /bin/chmod, $MYPATH)
 AC_PATH_PROG(__CHOWN, chown, /bin/chown, $MYPATH)
+AC_PATH_PROG(__CMAKE, cmake, %{_bindir}/cmake, $MYPATH)
 AC_PATH_PROG(__CPIO, cpio, /bin/cpio, $MYPATH)
 AC_PATH_PROG(__CURL, curl, %{_bindir}/curl, $MYPATH)
 AC_PATH_PROG(__CVS, cvs, %{_bindir}/cvs, $MYPATH)
@@ -503,6 +504,7 @@ AC_PATH_PROG(__PHP, php, %{_bindir}/php, $MYPATH)
 AC_PATH_PROG(__PYTHON, python, %{_bindir}/python, $MYPATH)
 AC_PATH_PROG(__RM, rm, /bin/rm, $MYPATH)
 AC_PATH_PROG(__RSH, rsh, %{_bindir}/rsh, $MYPATH)
+AC_PATH_PROG(__RUBY, ruby, %{_bindir}/ruby, $MYPATH)
 AC_PATH_PROG(__SED, sed, /bin/sed, $MYPATH)
 AC_PATH_PROG(__SH, sh, /bin/sh, $MYPATH)
 AC_PATH_PROG(__SQLITE3, sqlite3, %{_bindir}/sqlite3, $MYPATH)
@@ -1178,7 +1180,7 @@ dnl # POPT
 RPM_CHECK_LIB(
     [POPT], [popt],
     [popt], [poptGetContext], [popt.h],
-    [yes,external], [],
+    [yes,internal:external], [popt],
     [], [AC_MSG_ERROR([mandatory POPT library not found])])
 
 HAVE_RPM_COMPRESSION=no
@@ -1224,7 +1226,7 @@ dnl # BeeCrypt
 RPM_CHECK_LIB(
     [BeeCrypt], [beecrypt],
     [beecrypt], [mpfprintln], [beecrypt/api.h],
-    [yes,internal:external], [beecrypt:include/beecrypt],
+    [yes,internal:external], [beecrypt:include],
     [], [ AC_MSG_ERROR([mandatory BeeCrypt library not found]) ])
     if test ".$WITH_BEECRYPT" = .no; then
          AC_MSG_ERROR([BEECRYPT is mandatory])
@@ -2215,6 +2217,7 @@ AC_DEFINE_UNQUOTED(
 AC_SUBST(RPMLUAFILES)
 AC_MSG_RESULT([$RPMLUAFILES])
 
+DISTRO_MACROS="#"
 dnl # determine whether to build using a specific vendor's changes or not
 AC_MSG_CHECKING([if building for a specfic vendor])
 AC_ARG_WITH(
@@ -2224,6 +2227,7 @@ AC_ARG_WITH(
 	    case "$withval" in
 	    "mandriva")
 		    AC_DEFINE([RPM_VENDOR_MANDRIVA], 1, Vendor is Mandriva)
+		    DISTRO_MACROS=""
 		    ;;
 	    "ark")
 		    AC_DEFINE([RPM_VENDOR_ARK], 1, Vendor is Ark)
@@ -2237,6 +2241,7 @@ AC_ARG_WITH(
 	    AC_MSG_RESULT(no)
     fi]
 )
+AC_SUBST(DISTRO_MACROS)
 
 testdir="`pwd`/tests"
 AC_SUBST(testdir)
@@ -2263,8 +2268,9 @@ AC_CONFIG_FILES([ po/Makefile.in
     scripts/Makefile
     rpmdb/DB_CONFIG
     macros/macros macros/macros.rpmbuild
-    macros/java macros/libtool macros/mono macros/perl 
-    macros/pkgconfig macros/php macros/python macros/selinux
+    macros/cmake macros/java macros/libtool macros/mandriva macros/mono
+    macros/perl macros/pkgconfig macros/php macros/python macros/ruby
+    macros/selinux macros/tcl
     doc/Makefile
     doc/manual/Makefile doc/fr/Makefile doc/ja/Makefile doc/ko/Makefile
     doc/pl/Makefile doc/ru/Makefile doc/sk/Makefile

@@ -21,7 +21,7 @@
 #include <beecrypt/mp.h>
 #include <beecrypt/rsa.h>
 #include <beecrypt/rsapk.h>
-#include "beecrypt/elgamal.h"
+#include <beecrypt/elgamal.h>
 #include <beecrypt/ripemd128.h>
 #include <beecrypt/ripemd160.h>
 #include <beecrypt/ripemd256.h>

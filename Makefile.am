@@ -61,6 +61,7 @@ SUBDIRS += \
 endif
 SUBDIRS += \
 	@WITH_DB_SUBDIR@ \
+	@WITH_POPT_SUBDIR@ \
 	@WITH_ZLIB_SUBDIR@ \
 	@WITH_PCRE_SUBDIR@ \
 	@WITH_LUA_SUBDIR@ \
@@ -103,6 +104,7 @@ AM_CPPFLAGS = \
 	@WITH_LUA_CPPFLAGS@ \
 	@WITH_FILE_CPPFLAGS@ \
 	@WITH_PCRE_CPPFLAGS@ \
+	@WITH_POPT_CPPFLAGS@ \
 	@WITH_XAR_CPPFLAGS@ \
 	@WITH_XZ_CPPFLAGS@
 
@@ -134,8 +136,9 @@ pkgbin_SCRIPTS = install-sh mkinstalldirs
 
 pkgcfgdir =	$(pkglibdir)/macros.d
 pkgcfg_DATA = \
-	macros/java macros/libtool macros/mono macros/perl \
-	macros/pkgconfig macros/php macros/python macros/selinux
+	macros/cmake macros/java macros/libtool macros/mandriva macros/mono \
+	macros/perl macros/pkgconfig macros/php macros/python macros/ruby \
+	macros/selinux macros/tcl
 
 noinst_HEADERS = build.h debug.h system.h
 

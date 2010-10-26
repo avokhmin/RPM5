@@ -6,7 +6,6 @@
  * Structures used for an "rpmte" transaction element.
  */
 #include <rpmfi.h>
-#include <rpmal.h>	/* XXX alKey */
 
 /**
  */

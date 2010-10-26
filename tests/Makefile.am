@@ -20,11 +20,13 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/rpmdb \
 	-I$(top_srcdir)/rpmio \
 	-I$(top_srcdir)/misc \
+	@WITH_BEECRYPT_CPPFLAGS@ \
 	@WITH_DB_CPPFLAGS@ \
 	@WITH_ZLIB_CPPFLAGS@ \
 	@WITH_LUA_CPPFLAGS@ \
 	@WITH_FILE_CPPFLAGS@ \
 	@WITH_PCRE_CPPFLAGS@ \
+	@WITH_POPT_CPPFLAGS@ \
 	@WITH_SYCK_CPPFLAGS@ \
 	@WITH_XAR_CPPFLAGS@
 
@@ -43,12 +45,12 @@ RPM_LDADD = \
 	$(RPMDB_LDADD)
 
 macros =	$(abs_top_builddir)/macros/macros:$(testdir)/macros
-#XXX rpmpopt =	$(abs_top_builddir)/rpmpopt
+rpmpopt =	$(abs_top_builddir)/rpmpopt
 
-rpm =		$(abs_top_builddir)/rpm --macros $(macros)
-rpmbuild =	$(abs_top_builddir)/rpmbuild  --macros $(macros)
+rpm =		$(abs_top_builddir)/rpm --rpmpopt=$(rpmpopt) --macros $(macros)
+rpmbuild =	$(abs_top_builddir)/rpmbuild --rpmpopt=$(rpmpopt) --macros $(macros)
 rpm2cpio =	$(abs_top_builddir)/tools/rpm2cpio
-rpmcache =	$(abs_top_builddir)/tools/rpmcache --macros $(macros)
+rpmcache =	$(abs_top_builddir)/tools/rpmcache --rpmpopt=$(rpmpopt) --macros $(macros)
 rpmdigest =	$(abs_top_builddir)/tools/rpmdigest
 rpmrepo =	$(abs_top_builddir)/tools/rpmrepo
 rpmsql =	$(abs_top_builddir)/tools/sqlite3
@@ -57,7 +59,7 @@ rpmsolverB =	${rpm} -i -D '_dbpath %{_solve_B}' --justdb --nodeps
 
 tdsa =		./tdsa
 tecdsa =	./tecdsa
-thkp =		./thkp
+thkp =		./thkp -H localhost
 tkey =		./tkey
 tpgp =		./tpgp --macros $(macros)
 trsa =		./trsa
@@ -133,7 +135,8 @@ gpg =		@__GPG@
 gsr =		@__GSR@
 mkdir =		@__MKDIR@
 mongo =		@__MONGO@
-mongoserver =	198.178.231.189		# XXX mongo.rpm5.org
+# XXX mongo.rpm5.org
+mongoserver =	198.178.231.189
 mv =		@__MV@
 rm =		@__RM@
 sqlite3 =	@__SQLITE3@
@@ -456,10 +459,11 @@ MDV20101_uri =	$(MDV_mirror)/2010.1/i586/media/main/release/
 MDV20101_manifest = $(testdir)/ref/Mandriva2010.1-bash.i586.manifest
 # MEEGO -- MeeGo
 # XXX lt-find: rpmdav.c:1331: htmlParse: Assertion `he > h' failed.
-#MEEGO_mirror =	http://repo.meego.com/MeeGo/builds/trunk/1.0.90.3.20100921.1
-#MEEGO_uri =	$(MEEGO_mirror)/core/repos/ia32/packages/i586/ \
-#		$(MEEGO_mirror)/core/repos/ia32/packages/i686/ \
-#		$(MEEGO_mirror)/core/repos/ia32/packages/noarch/
+MEEGO_mirror =	http://repo.meego.com/MeeGo/builds/1.0.99/daily/
+MEEGO_uri =	$(MEEGO_mirror)/core/repos/ia32/packages/i586/ \
+		$(MEEGO_mirror)/core/repos/ia32/packages/i686/ \
+		$(MEEGO_mirror)/core/repos/ia32/packages/noarch/
+MEEGO_manifest = $(testdir)/ref/MeeGo-everything.manifest
 # MOBLIN -- Moblin
 MOBLIN_mirror =	http://mirrors.kernel.org/moblin/releases
 MOBLIN21_uri =	$(MOBLIN_mirror)/2.1/ia32/os/i586/ \
@@ -513,6 +517,9 @@ YDL_mirror =	http://ydl.oregonstate.edu/releases
 YDL61_uri =	$(YDL_mirror)/yellowdog-6.1/os/YellowDog/
 YDL62_uri =	$(YDL_mirror)/yellowdog-6.2/os/YellowDog/
 # YL -- Yoper Linux
+YL_mirror =	http://ftp.yoper-linux.org/pub/yoper/pkg
+YL_uri =	$(YL_mirror)/RPMS.rocketfuel/
+#YLDYNA_uri =   $(YL_mirror)/RPMS.dynamite/
 
 DISTROS = \
 	ALT51 \
@@ -529,7 +536,8 @@ DISTROS = \
 	SL55 SL54 SL53 SL52 SL51 SL50 \
 	SLES11_3 SLES11_2 SLES11_1  \
 	UL \
-	YDL62 YDL61
+	YDL62 YDL61 \
+	YL
 
 now =	date -u --rfc-3339=seconds
 
@@ -571,8 +579,20 @@ manifests:
 	  then ${find} $< -name '*.rpm' | sort -u > $@; \
 	fi
 
+.PRECIOUS: %/json
+%/json: %/RPMS
+	@echo "=== $@ ==="
+	@rm -f ${@D}/export
+	@echo "`${now}` ==> ${@D}: Exporting ..." | tee -a ${@D}/export
+	for F in $</*.rpm; do \
+	  echo "--> $$F"; \
+	  ${rpm} -qp --nosignature --json $$F | tee -a $@ | ${mongo} ${mongoserver}/${@D}; \
+	done
+	@echo "`${now}` <== ${@D}: Exported." | tee -a ${@D}/export
+
 .PRECIOUS: %/repodata
 %/repodata: %/RPMS
+	@echo "=== $@ ==="
 	@rm -f ${@D}/generate
 #	-rm -f ${@D}/repodata
 	@echo "`${now}` ==> ${@D}: Generating ..." | tee -a ${@D}/generate
@@ -581,8 +601,10 @@ manifests:
 	@echo "`${now}` <== ${@D}: Generated." | tee -a ${@D}/generate
 
 #	  -D '_dbi_tags Packages:Name:Nvra:Providename:Dirnames:Basenames:Filepaths'
+
 .PRECIOUS: %/solve
 %/solve: %/todo
+	@echo "=== $@ ==="
 	@rm -f ${@D}/import
 	@echo "`${now}` ==> ${@D}: Creating ..." | tee -a ${@D}/import
 	@mkdir -p $@/log $@/tmp
@@ -590,6 +612,7 @@ manifests:
 	@echo "`${now}` <== ${@D}: Created." | tee -a ${@D}/import
 	@echo "`${now}` ==> ${@D}: Importing ..." | tee -a ${@D}/import
 	@-${rpm} -i -D '_dbpath ${@D}/solve' --justdb --stats \
+	  -D '_hrmib_path %{nil}' \
 	  -D '__dbi_txn create nofsync lock log mpool txn auto_commit thread thread_count=64' \
 	  --noaid --ignoresize --nodeps --noorder --nosignature \
 	  $< \
@@ -607,6 +630,7 @@ Install-%: %/solve
 	@-${sudo} ${rpm} -Uvh --nofdigests --stats \
 	  -r $(testdir)/$(<D)/ROOT \
 	  -D '_dbpath /var/lib/rpm' \
+	  -D '_hrmib_path /var/cache/hrmib/%{___NVRA}' \
 	  -D '_solve_A $(<D)/solve' \
 	  --noparentdirs --nolinktos --nosignature \
 	  $(<D)/todo 2>&1 | tee -a $(<D)/install
@@ -703,18 +727,18 @@ check-rpmv3:
 
 check-verify:
 	@echo "=== $@ ==="
-	@${rpm} -e probes devtool-sanity
+	@-${rpm} -e probes devtool-sanity
 	@-${rpm} -U --justdb --nodeps tmp/manifest
 	@-${rpm} -V probes devtool-sanity > /dev/null
 	@-${rpm} -Va > /dev/null
 #XXX	@-${rpm} -Vp tmp/manifest
-	@${rpm} -e --noscripts --notriggers --allmatches '^triggers-.*'
-	@${rpm} -e car engine wheel door tyre window glass
-	@${rpm} -e battery bicycle electric-engine gasoline-engine
-	@${rpm} -e solar-collector tire turbo
+	@-${rpm} -e --noscripts --notriggers --allmatches '^triggers-.*'
+	@-${rpm} -e car engine wheel door tyre window glass
+	@-${rpm} -e battery bicycle electric-engine gasoline-engine
+	@-${rpm} -e solar-collector tire turbo
 	@-${rpm} -e --justdb popt
-	@${rpm} -e probes
-	@${rpm} -e devtool-sanity
+	@-${rpm} -e probes
+	@-${rpm} -e devtool-sanity
 
 check-tools:
 	@echo "=== $@ ==="
