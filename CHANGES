@@ -1,4 +1,16 @@
-5.3.4 -> 5.4a1:
+5.3.5 -> 5.4a1:
+    - jbj: stub-in a disabler for "FILE ACID".
+    - jbj: put the rpm -qf 1-liner under #ifdef RPM_VENDOR_MANDRIVA for now.
+    - proyvind: fix issue with 'rpm -qf' on unowned file not being
+	reported. (launchpad #669130)
+    - proyvind: fix assert failure with Fadvise() on non-existing files.
+    - proyvind: mandriva: fix 'Conflicts: dependencies without release
+	misfire'. (mdvbz#55810)
+    - proyvind: make sure to expand %buildroot from main package.
+    - jbj: devtool: don't distribute internal pcre.
+    - proyvind: filetriggers: don't bother w unneeded chroot.
+
+5.3.4 -> 5.3.5:
     - proyvind: ditch %gem_unpack macro and make %setup automatically handle
 	ruby gem extraction in stead.
     - jbj: sqlite: fix: permit building without sqlite, <db51/dbsql.h> instead.
