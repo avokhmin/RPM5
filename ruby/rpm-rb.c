@@ -10,17 +10,24 @@
  */
 
 
-#pragma GCC diagnostic ignored "-Wstrict-prototypes"
-#include <ruby.h>
-#pragma GCC diagnostic warning "-Wstrict-prototypes"
-
 #include "system.h"
+#include "debug.h"
 
 #include "rpm-rb.h"
+
 #include "rpmts-rb.h"
 #include "spec-rb.h"
+#include "package-rb.h"
+#include "rpmds-rb.h"
+#include "rpmmc-rb.h"
 
-#include "debug.h"
+#include <rpmrc.h>
+#include <rpmcb.h>
+
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
+#include <stdio.h>
 
 
 VALUE rpmModule;
@@ -28,10 +35,25 @@ VALUE rpmModule;
 
 void Init_rpm(void)
 {
-    /* The "RPM" Ruby module. */
+    rpmIncreaseVerbosity();
+    rpmIncreaseVerbosity();
+    rpmIncreaseVerbosity();
+    (void)rpmReadConfigFiles(NULL, NULL);
+
     rpmModule = rb_define_module("RPM");
 
     Init_rpmts();
     Init_spec();
+    Init_Package();
+    Init_rpmmc();
+    Init_rpmds();
 }
 
+
+void rpm_rb_raise(rpmRC error, char *message)
+{
+    rb_require("rpmexceptions");
+    char *rb;
+    int i = asprintf(&rb, "raise RPM::Error.new(%i), '%s'", error, message);
+    if(i) rb_eval_string(rb);
+}

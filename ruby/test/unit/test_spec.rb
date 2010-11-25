@@ -1,24 +1,28 @@
 require 'test/unit'
 require 'rpm'
+require 'fileutils'
 
 class TestSpec < Test::Unit::TestCase
   def setup
     @ts = RPM::Ts.new
-  end
+    @fixture_path = File.expand_path(File.dirname(__FILE__) + '/../fixtures')
+    @macros = [
+      File.expand_path(File.dirname(__FILE__) + '/../../../macros/macros') ]
 
-  def test_parse_spec
-    s = @ts.parse_spec 'mock.spec'
-    assert s, 'Must return a valid RPM::Spec object'
+    RPM::Mc.init_macros(@macros.join ':')
+    @spec = @ts.parse_spec(File.expand_path @fixture_path + '/mock.spec')
   end
 
   def test_get_sources
-    s = @ts.parse_spec 'mock.spec'
-    src = s.sources
+    src = @spec.sources
     
     assert src, 'Must return a sources array'
     assert src.length == 3, 'Must return all three defined sources'
-    puts src
     assert src == %w(barsource1 Foo-1.0 foosource1),
       'Must return the exactly defined source names'
+  end
+
+  def test_prep
+    @spec.prep
   end
 end

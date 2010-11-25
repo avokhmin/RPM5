@@ -4,8 +4,8 @@
  */
 
 #include "system.h"
-
 #include "rpm-rb.h"
+
 #include "rpmds-rb.h"
 
 #ifdef	NOTYET
@@ -13,11 +13,18 @@
 #include <mire.h>
 #endif
 
+#define _RPMDS_INTERNAL
+#include <rpmtag.h>
+#include <rpmtypes.h>
+#include <rpmtag.h>
+#include <rpmio.h>
 #include <rpmds.h>
 
 #include "../debug.h"
 
+
 VALUE rpmdsClass;
+
 
 /*@unchecked@*/
 static int _debug = 0;
@@ -253,7 +260,7 @@ fprintf(stderr, "==> %s(%p[%d], 0x%lx) mi %p\n", __FUNCTION__, argv, argc, s, ds
 void
 Init_rpmds(void)
 {
-    rpmdsClass = rb_define_class("Ds", rb_cObject);
+    rpmdsClass = rb_define_class_under(rpmModule, "Ds", rb_cObject);
 if (_debug)
 fprintf(stderr, "==> %s() rpmdsClass 0x%lx\n", __FUNCTION__, rpmdsClass);
 #ifdef  NOTYET

@@ -3,7 +3,6 @@
  */
 
 #include "system.h"
-
 #include "rpm-rb.h"
 #include "rpmmc-rb.h"
 
@@ -24,12 +23,15 @@ static int _debug = 0;
 
 /* --- helpers */
 
-static void *
-rpmmc_ptr(VALUE s)
+/**
+ * Returns the wrapped C structure ::MacroContext_s.
+ */
+static rpmmc
+_rpmmc_get_mc(VALUE self)
 {
-    void *ptr;
-    Data_Get_Struct(s, void, ptr);
-    return ptr;
+    rpmmc mc;
+    Data_Get_Struct(self, struct MacroContext_s, mc);
+    return mc;
 }
 
 
@@ -52,7 +54,7 @@ rpmmc_add(VALUE s, VALUE v)
 
     rpmmc mc = NULL;
     if(TYPE(s) == T_DATA)
-        mc = rpmmc_ptr(s);
+        mc = _rpmmc_get_mc(s);
     int lvl = 0;
     
     if (_debug)
@@ -80,7 +82,7 @@ rpmmc_del(VALUE s, VALUE v)
 
     rpmmc mc = NULL;
     if(TYPE(s) == T_DATA)
-        mc = rpmmc_ptr(s);
+        mc = _rpmmc_get_mc(s);
     
     if (_debug)
         fprintf(stderr, "==> %s(0x%lx, 0x%lx) ptr %p\n",
@@ -96,6 +98,7 @@ rpmmc_del(VALUE s, VALUE v)
  *
  * call-seq:
  *  RPM::Mc#list() -> Array
+ *  RPM::Mc.list() -> Array
  *
  * @return  A list of all macro definitions in form of an array of arrays,
  *  where each nested arry contains the macro's name, arguments (or an empty
@@ -106,7 +109,7 @@ rpmmc_list(VALUE s)
 {
     rpmmc mc = NULL;
     if(TYPE(s) == T_DATA)
-        mc = rpmmc_ptr(s);
+        mc = _rpmmc_get_mc(s);
 
     void * _mire = NULL;
     VALUE v = rb_ary_new();
@@ -155,6 +158,7 @@ rpmmc_list(VALUE s)
  *
  * call-seq:
  *  RPM::Mc#expand(macro) -> String
+ *  RPM::Mc.expand(macro) -> String
  *
  * @param macro The macro name (with leading % sign)
  * @return      The result of the expansion
@@ -164,13 +168,65 @@ rpmmc_expand(VALUE s, VALUE v)
 {
     rpmmc mc = NULL;
     if(TYPE(s) == T_DATA)
-        mc = rpmmc_ptr(s);
+        mc = _rpmmc_get_mc(s);
     char *vstr = StringValueCStr(v);
 
     if (_debug)
         fprintf(stderr, "==> %s(0x%lx, 0x%lx) ptr %p \"%s\"\n",
             __FUNCTION__, s, v, mc, vstr);
     return rb_str_new2(rpmMCExpand(mc, vstr, NULL));
+}
+
+
+/**
+ * Loads a macro file.
+ *
+ * call-seq:
+ *  RPM::Mc#load_macro_file(fn, nesting) -> RPM::Mc
+ *  RPM::Mc.load_macro_file(fn, nesting) -> nil
+ *
+ * @param fn        The path of the macro file
+ * @param nesting   Maximum recursion depth; 0 disables recursion
+ * @return          The RPM::Mc instance (or nill when called as class method)
+ * @see             rpmLoadMacroFile()
+ */
+static VALUE
+rpmmc_load_macro_file(VALUE self, VALUE fn_v, VALUE nesting_v)
+{
+    rpmmc mc = NULL;
+    if(TYPE(self) == T_DATA)
+        mc = _rpmmc_get_mc(self);
+
+    Check_Type(fn_v, T_STRING);
+    Check_Type(nesting_v, T_FIXNUM);
+
+    (void)rpmLoadMacroFile(mc, RSTRING_PTR(fn_v), FIX2INT(nesting_v));
+    return (TYPE(self) == T_DATA ? self : Qnil);
+}
+
+
+/**
+ * Initializes a macro context from a list of files
+ *
+ * call-seq:
+ *  RPM::Mc#init_macros(files) -> RPM::Mc
+ *  RPM::Mc.init_macros(files) -> nil
+ *
+ * @param files A list of files to add, separated by colons
+ * @return      The RPM::Mc instance (or nill when called as class method)
+ * @see         rpmInitMacros()
+ */
+static VALUE
+rpmmc_init_macros(VALUE self, VALUE macrofiles_v)
+{
+    Check_Type(macrofiles_v, T_STRING);
+
+    rpmmc mc = NULL;
+    if(TYPE(self) == T_DATA)
+        mc = _rpmmc_get_mc(self);
+
+    rpmInitMacros(mc, RSTRING_PTR(macrofiles_v));
+    return (TYPE(self) == T_DATA ? self : Qnil);
 }
 
 
@@ -185,6 +241,11 @@ initMethods(VALUE klass)
     rb_define_singleton_method(klass, "list", &rpmmc_list, 0);
     rb_define_method(klass, "expand", &rpmmc_expand, 1);
     rb_define_singleton_method(klass, "expand", &rpmmc_expand, 1);
+    rb_define_method(klass, "load_macro_file", &rpmmc_load_macro_file, 2);
+    rb_define_singleton_method(klass, "load_macro_file", 
+            &rpmmc_load_macro_file, 2);
+    rb_define_method(klass, "init_macros", &rpmmc_init_macros, 1);
+    rb_define_singleton_method(klass, "init_macros", &rpmmc_init_macros, 1);
 }
 
 
@@ -207,6 +268,14 @@ rpmmc_debug_get(VALUE s)
 }
 
 
+/**
+ * Set debugging log level
+ *
+ * call-seq:
+ *  RPM::Mc.debug = LEVEL -> Fixnum
+ *
+ * @return The new debug level
+ */
 static VALUE
 rpmmc_debug_set(VALUE s, VALUE v)
 {
@@ -239,11 +308,20 @@ rpmmc_free(rpmmc mc)
 }
 
 
+VALUE
+rpmmc_wrap(rpmmc mc)
+{
+    if (_debug)
+        fprintf(stderr, "==> %s(%p)\n", __FUNCTION__, mc);
+    return Data_Wrap_Struct(rpmmcClass, 0, rpmmc_free, mc);
+}
+
+
 static VALUE
 rpmmc_alloc(VALUE klass)
 {
     rpmmc mc = xcalloc(1, sizeof(*mc));
-    VALUE obj = Data_Wrap_Struct(klass, 0, rpmmc_free, mc);
+    VALUE obj = rpmmc_wrap(mc);
     if (_debug)
         fprintf(stderr, "==> %s(0x%lx) obj 0x%lx mc %p\n",
             __FUNCTION__, klass, obj, mc);

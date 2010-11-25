@@ -1,4 +1,11 @@
 5.3.5 -> 5.4a1:
+    - proyvind: perl: start on adding back some missing functionality from RPM4:
+	RPM::Sign, RPM::Transaction::importpubkey, RPM::Transaction::checkrpm.
+    - proyvind: add a first prototype scripts/dbconvert.sh for handling rpmdb
+	conversion during upgrades.
+    - jbj: rpmdb: double the defaults  for locking tunables.
+    - jbj: rpmdb: fix: don't bother excluding RPM_CHAR_TYPE sanity check.
+    - jbj: rpmdb: fix: don't bother converting to RPM_UINT8_TYPE.
     - jbj: stub-in a disabler for "FILE ACID".
     - jbj: put the rpm -qf 1-liner under #ifdef RPM_VENDOR_MANDRIVA for now.
     - proyvind: fix issue with 'rpm -qf' on unowned file not being
