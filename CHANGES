@@ -1,4 +1,14 @@
-5.3.5 -> 5.4a1:
+5.3.7 -> 5.4.0:
+    - jbj: check-in arbirtrarytag*.src.rpm for "make dist".
+    - jbj: rpm.spec: adjust to reality (popt needs to be in tarball, todo++).
+
+5.3.6 -> 5.3.7:
+    - proyvind: rpm4compat: add RPMTAG_FILENAMES
+    - proyvind: rpmconstant: update constants.
+    - proyvind: rpmconstant: fix rpmh2tbl to error out for constants not found.
+
+5.3.5 -> 5.3.6:
+    - jbj: i18n: update po files (Translation Project).
     - proyvind: perl: start on adding back some missing functionality from RPM4:
 	RPM::Sign, RPM::Transaction::importpubkey, RPM::Transaction::checkrpm.
     - proyvind: add a first prototype scripts/dbconvert.sh for handling rpmdb
