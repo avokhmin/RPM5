@@ -1380,6 +1380,8 @@ assert(mi->mi_rpmtag == _tag);
 	/* Set tagNum to the hash of the basename. */
 	for (i = 0; i < set->count; i++)
 	    set->recs[i].tagNum = tagNum;
+	if (mi->mi_set == NULL)
+	    mi->mi_set = xcalloc(1, sizeof(*mi->mi_set));
 	(void) dbiAppendSet(mi->mi_set, set->recs, set->count, sizeof(*set->recs), 0);
     }
     rc = 0;
@@ -2373,7 +2375,7 @@ rpmmi rpmmiInit(rpmdb db, rpmTag tag, const void * keyp, size_t keylen)
 #ifdef	NOTYET		/* XXX JS unit tests break. */
     case RPMTAG_NAME:
 #endif
-#ifdef	RPM_VENDOR_MANDRIVA	/* XXX rpm -qf /non/existent breaks */
+#ifdef	RPM_VENDOR_MANDRIVA_XXX	/* XXX rpm -qf /non/existent breaks */
     case RPMTAG_PROVIDENAME:
 #endif
     case RPMTAG_VERSION:

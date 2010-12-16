@@ -8,7 +8,7 @@ dnl ##
 
 AC_PREREQ(2.63)
 m4_define([PACKAGE_BUGREPORT_DEFAULT], [rpm-devel@rpm5.org])
-AC_INIT([rpm],[5.5.DEVEL],[PACKAGE_BUGREPORT_DEFAULT])
+AC_INIT([rpm],[5.4.DEVEL],[PACKAGE_BUGREPORT_DEFAULT])
 PACKAGE_TIMESTAMP="2010-09-18" dnl # YYYY[-MM[-DD[ HH[:MM]]]]
 AC_MSG_TITLE([RPM Package Manager (RPM)], [$PACKAGE_VERSION])
 
@@ -994,6 +994,9 @@ AC_ARG_WITH(libelf, AS_HELP_STRING([--with-libelf], [use libelf/gelf API]), [
                 AC_CHECK_LIB([elf], [gelf_getvernaux], [
                     AC_DEFINE(HAVE_GELF_GETVERNAUX, 1, [Define to 1 if you have the gelf_getvernaux() function.])
                 ])
+                AC_CHECK_LIB([elf], [gelf_getnote], [
+                    AC_DEFINE(HAVE_GELF_GETNOTE, 1, [Define to 1 if you have the gelf_getnote() function.])
+                ])
                 AC_DEFINE(HAVE_LIBELF, 1, [Define to 1 if you have ELF library])
                 WITH_LIBELF_DEBUGEDIT="debugedit"
                 LIBS="$LIBS -lelf"
@@ -1253,6 +1256,12 @@ RPM_CHECK_LIB(
     [crypto], [ERR_load_CRYPTO_strings], [openssl/crypto.h],
     [no,external:none], [],
     [ AC_DEFINE(WITH_SSL, 1, [Define if building with OpenSSL])
+      AC_CHECK_LIB([openssl], [RSA_generate_key_ex], [
+          AC_DEFINE(HAVE_RSA_GENERATE_KEY_EX, 1, [Define to 1 if you have the RSA_generate_key_ex() function.])
+      ])
+      AC_CHECK_LIB([openssl], [DSA_generate_parameters_ex], [
+          AC_DEFINE(HAVE_DSA_GENERATE_PARAMETERS_EX, 1, [Define to 1 if you have the DSA_generate_parameters_ex() function.])
+      ])
     ], [])
 
 dnl # TomCrypt
@@ -1511,18 +1520,15 @@ RPM_CHECK_LIB(
 
 dnl # Ruby
 WITH_RUBY_SUBDIR=""
-WITH_RUBY_CPPFLAGS=""
-WITH_RUBY_VENDORARCHDIR=""
 RPM_CHECK_LIB(
     [Ruby], [ruby],
     [ruby], [ruby_init], [ruby.h],
     [no,external:none], [],
-    [ AC_DEFINE(WITH_RUBYEMBED, 1, [Define to 1 if you want embedded Ruby])
-      WITH_RUBY_SUBDIR=ruby
+    [
+        AC_DEFINE(WITH_RUBYEMBED, 1, [Define to 1 if you want embedded Ruby])
+        WITH_RUBY_SUBDIR=ruby
     ], [])
-AC_SUBST(WITH_RUBY_CPPFLAGS)
 AC_SUBST(WITH_RUBY_SUBDIR)
-AC_SUBST(WITH_RUBY_VENDORARCHDIR)
 
 
 dnl # Squirrel
@@ -2276,6 +2282,7 @@ AC_CONFIG_FILES([ po/Makefile.in
     js/Makefile python/Makefile
     ruby/Makefile scripts/rpm.pc lib/rpmversion.h rpmconstant/Makefile
     tests/Makefile tests/macros tests/mongo/Makefile
+    ruby/rpmrb.profile.sh
 ])
 
 dnl # final step: generate output

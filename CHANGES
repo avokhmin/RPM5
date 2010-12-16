@@ -1,4 +1,22 @@
-5.3.5 -> 5.4a1:
+5.3.7 -> 5.4a1:
+
+5.3.6 -> 5.3.7:
+    - jbj: fix: %config handling broken while refactoring a loop.
+    - jbj: rpmmi: lazily instantiate the basenames header set.
+    - jbj: re-add the lazy creator avoiding self LOOP's in ordering pkgs
+	during installs using parentdir relations.
+    - proyvind: rpmts: don't default rootDir to "" if set to NULL, as it
+	confusing rpm checks on NULL & "/" only, without "", making ie.
+	%posttrans scriptlets fail where NULL is used (mdvbz#61696).
+    - jbj: fix memory leak on user lookup error.
+    - proyvind: rubygems: only add runtime dependencies (Rémy Clouard).
+    - proyvind: export rpmbf.h & rpmgi.h to public API.
+    - proyvind: rpm4compat: add RPMTAG_FILENAMES & RPMDBI_LABEL.
+    - proyvind: rpmconstant: update constants.
+    - proyvind: rpmconstant: fix rpmh2tbl to error out for constants not found.
+
+5.3.5 -> 5.3.6:
+    - jbj: i18n: update po files (Translation Project).
     - proyvind: perl: start on adding back some missing functionality from RPM4:
 	RPM::Sign, RPM::Transaction::importpubkey, RPM::Transaction::checkrpm.
     - proyvind: add a first prototype scripts/dbconvert.sh for handling rpmdb

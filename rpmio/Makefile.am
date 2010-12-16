@@ -51,7 +51,6 @@ AM_CPPFLAGS = \
 	@WITH_NEON_CPPFLAGS@ \
 	@WITH_PCRE_CPPFLAGS@ \
 	@WITH_POPT_CPPFLAGS@ \
-	@WITH_RUBY_CPPFLAGS@ \
 	@WITH_SYCK_CPPFLAGS@ \
 	@WITH_XAR_CPPFLAGS@ \
 	@WITH_XZ_CPPFLAGS@ \
@@ -74,14 +73,14 @@ RPM_LDADD_COMMON = \
 #pkglib_LTLIBRARIES = libsqlio.la
 
 pkgincdir = $(pkgincludedir)$(WITH_PATH_VERSIONED_SUFFIX)
-pkginc_HEADERS = mire.h rpmzlog.h yarn.h \
-	rpmcb.h rpmio.h rpmlog.h rpmiotypes.h rpmmacro.h rpmpgp.h rpmsw.h
+pkginc_HEADERS = argv.h mire.h rpmzlog.h yarn.h \
+	rpmbf.h rpmcb.h rpmio.h rpmlog.h rpmiotypes.h rpmmacro.h rpmpgp.h rpmsw.h
 noinst_HEADERS = \
-	argv.h ar.h bson.h cpio.h crc.h envvar.h fnmatch.h fts.h glob.h iosm.h \
+	ar.h bson.h cpio.h crc.h envvar.h fnmatch.h fts.h glob.h iosm.h \
 	arirang.h blake.h bmw.h chi.h cubehash.h echo.h edon-r.h fugue.h \
 	groestl.h hamsi.h jh.h keccak.h lane.h luffa.h md2.h md6.h mongo.h \
 	salsa10.h salsa20.h shabal.h shavite3.h simd.h skein.h tib3.h tiger.h \
-	poptIO.h rpmacl.h rpmasn.h rpmaug.h rpmbag.h rpmbc.h rpmbf.h rpmbz.h \
+	poptIO.h rpmacl.h rpmasn.h rpmaug.h rpmbag.h rpmbc.h rpmbz.h \
 	rpmcdsa.h rpmcudf.h rpmcvs.h rpmdav.h rpmdir.h rpmficl.h rpmgc.h rpmgit.h rpmhash.h \
 	rpmhkp.h rpmhook.h rpmio_internal.h rpmjs.h rpmjsio.h rpmkeyring.h \
 	rpmku.h rpmltc.h rpmlua.h rpmmg.h rpmnix.h rpmnss.h \

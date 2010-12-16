@@ -24,6 +24,8 @@
 #include <rpmrc.h>
 #include <rpmcb.h>
 
+#include <mire.h>
+
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
 #endif
@@ -33,12 +35,10 @@
 VALUE rpmModule;
 
 
-void Init_rpm(void)
+void Init_librpmrb(void)
 {
-    rpmIncreaseVerbosity();
-    rpmIncreaseVerbosity();
-    rpmIncreaseVerbosity();
-    (void)rpmReadConfigFiles(NULL, NULL);
+    if(rpmReadConfigFiles(NULL, NULL) != 0)
+        rpm_rb_raise(1, "Reading config files failed");
 
     rpmModule = rb_define_module("RPM");
 

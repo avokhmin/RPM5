@@ -32,6 +32,16 @@ VALUE specClass;
 
 
 /**
+ * C destructor for the Spec class.
+ */
+static void
+_spec_free(Spec spec)
+{
+    freeSpec(spec);
+}
+
+
+/**
  * Returns the wrapped Spec structure.
  */
 static Spec
@@ -72,25 +82,6 @@ _spec_get_sources(VALUE self, int flags)
             rb_ary_push(ary, rb_str_new2(src->fullSource));
 
     return ary;
-}
-
-
-/**
- * Does the actual call to buildSpec.
- */
-static rpmRC
-_spec_build(VALUE argc, VALUE *argv, VALUE self, int flag)
-{
-    VALUE test_v;
-    rb_scan_args(argc, argv, "01", &test_v);
-
-    int test = 0;
-    if(TYPE(test_v) == T_TRUE) test = 1;
-
-    rpmts ts = _spec_get_ts(self);
-    Spec spec = _spec_get_spec(self);
-
-    return buildSpec(ts, spec, flag, test);
 }
 
 
@@ -167,134 +158,58 @@ spec_get_macros(VALUE self)
 
 
 /**
- * Run the %prep section of the spec file.
+ * Builds a part of the spec file.
+ *
+ * This method will call buildSpec() to build parts of the spec file. Its mode
+ * of operation is determined by the constants in ::rpmBuildFlags_e, which are
+ * mapped in the RPM Ruby module. Will throw an exception if the build fails.
  *
  * call-seq:
- *  RPM::Spec#prep(test = false) -> RPM::Spec
+ *  RPM::Spec#build(flags, test = false) -> RPM::Spec
  *
- * @param test  If set to true, the scriptlet won't actually be run
- * @return      The class instance itself for method chaining
- */
-static VALUE
-spec_prep(VALUE argc, VALUE *argv, VALUE self)
-{
-    rpmRC error = _spec_build(argc, argv, self, RPMBUILD_PREP);
-    if(error) rpm_rb_raise(error, "%prep failed");
-    return self;
-}
-
-
-/**
- * Run the %build section of the spec file.
- *
- * call-seq:
- *  RPM::Spec#build(test = false) -> RPM::Spec
- *
- * @param test  If set to true, the scriptlet won't actually be run
- * @return      The class instance itself for method chaining
+ * @param flags A combination of flags that control the build.
+ * @param test  If set to true, the scriptlets won't actually be run.
+ * @return      The RPM::Spec instance
+ * @see         buildSpec, ::rpmBuildFlags_e
  */
 static VALUE
 spec_build(VALUE argc, VALUE *argv, VALUE self)
 {
-    rpmRC error = _spec_build(argc, argv, self, RPMBUILD_BUILD);
-    if(error) rpm_rb_raise(error, "%build failed");
+    VALUE test_v = T_FALSE, flags_v;
+    rb_scan_args(argc, argv, "11", &flags_v, &test_v);
+
+    int test = 0;
+    switch(TYPE(test_v)) {
+        case T_TRUE:
+            test = 1;
+            break;
+        case T_NIL:
+        case T_FALSE:
+            test = 0;
+            break;
+        default:
+            rb_raise(rb_eTypeError,
+                "Value for test must be either true or false");
+            break;
+    }
+
+    Check_Type(flags_v, T_FIXNUM);
+    int flags = FIX2INT(flags_v);
+
+    rpmts ts = _spec_get_ts(self);
+    Spec spec = _spec_get_spec(self);
+
+    rpmRC error = buildSpec(ts, spec, flags, test);
+    if(error) rpm_rb_raise(error, "Building spec file failed");
+
     return self;
 }
-
-
-/**
- * Run the %install section of the spec file.
- *
- * call-seq:
- *  RPM::Spec#install(test = false) -> RPM::Spec
- *
- * @param test  If set to true, the scriptlet won't actually be run
- * @return      The class instance itself for method chaining
- */
-static VALUE
-spec_install(VALUE argc, VALUE *argv, VALUE self)
-{
-    rpmRC error = _spec_build(argc, argv, self, RPMBUILD_INSTALL);
-    if(error) rpm_rb_raise(error, "%install failed");
-    return self;
-}
-
-
-/**
- * Run the %check section of the spec file.
- *
- * call-seq:
- *  RPM::Spec#check(test = false) -> RPM::Spec
- *
- * @param test  If set to true, the scriptlet won't actually be run
- * @return      The class instance itself for method chaining
- */
-static VALUE
-spec_check(VALUE argc, VALUE *argv, VALUE self)
-{
-    rpmRC error = _spec_build(argc, argv, self, RPMBUILD_CHECK);
-    if(error) rpm_rb_raise(error, "%check failed");
-    return self;
-}
-
-
-/**
- * Runs the %clean section of the spec file
- *
- * call-seq:
- *  RPM::Spec#clean(test = false) -> RPM::Spec
- *
- * @param test  If set to true, the scriptlet won't actually be run
- * @return      The class instance itself for method chaining
- */
-static VALUE
-spec_clean(VALUE argc, VALUE *argv, VALUE self)
-{
-    rpmRC error = _spec_build(argc, argv, self, RPMBUILD_CLEAN);
-    if(error) rpm_rb_raise(error, "%clean failed");
-    return self;
-}
-
-
-/**
- * Create the binary packages specified in the spec file.
- *
- * call-seq:
- *  RPM::Spec#package_binaries -> RPM::Spec
- *
- * @return      The class instance itself for method chaining
- */
-static VALUE
-spec_package_binaries(VALUE self)
-{
-    rpmRC error = packageBinaries(_spec_get_spec(self));
-    if(error) rpm_rb_raise(error, "Packaging binaries from spec file failed");
-    return self;
-}
-
-
-/**
- * Create the source package associated with the spec file.
- *
- * call-seq:
- *  RPM::Spec#package_sources -> RPM::Spec
- *
- * @return      The class instance itself for method chaining
- */
-static VALUE
-spec_package_sources(VALUE self)
-{
-    rpmRC error = packageSources(_spec_get_spec(self));
-    if(error) rpm_rb_raise(error, "Packaging sources from spec file failed");
-    return self;
-}
-
 
 
 VALUE
 spec_wrap(Spec spec)
 {
-    return Data_Wrap_Struct(specClass, 0, &closeSpec, spec);
+    return Data_Wrap_Struct(specClass, 0, &_spec_free, spec);
 }
 
 
@@ -307,11 +222,5 @@ Init_spec(void)
     rb_define_method(specClass, "patches", &spec_get_patches, 0);
     rb_define_method(specClass, "packages", &spec_get_packages, 0);
     rb_define_method(specClass, "macros", &spec_get_macros, 0);
-    rb_define_method(specClass, "prep", &spec_prep, -1);
     rb_define_method(specClass, "build", &spec_build, -1);
-    rb_define_method(specClass, "install", &spec_install, -1);
-    rb_define_method(specClass, "check", &spec_check, -1);
-    rb_define_method(specClass, "clean", &spec_clean, -1);
-    rb_define_method(specClass, "package_binaries", &spec_package_binaries, 0);
-    rb_define_method(specClass, "package_sources", &spec_package_sources, 0);
 }

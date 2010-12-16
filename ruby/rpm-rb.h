@@ -13,6 +13,9 @@
 
 #include <rpmiotypes.h> 
 
+#include <rpmtypes.h>
+#include <rpmtag.h>
+
 
 /**
  * The "RPM" Ruby module.
@@ -28,7 +31,7 @@ extern "C" {
 /**
  * Defines the "RPM" Ruby module and makes it known to the Interpreter.
  */
-void Init_rpm(void);
+void Init_librpmrb(void);
 
 
 /**

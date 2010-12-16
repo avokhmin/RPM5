@@ -24,12 +24,6 @@ sub new {
         passphrase => undef,
 
         password_file => undef,
-
-        log => sub {
-            my ($m, @v) = @_;
-            printf STDERR "$m\n", @v;
-        },
-
     };
 
     foreach (keys %$Sign) {
@@ -69,16 +63,16 @@ sub adjustmacro {
 sub restoremacro {
     my ($self) = @_;
 
-    if (defined($self->{_signature})) { RPM::del_macro('_signature'); }
+    if (defined($self->{_signature})) { RPM::delete_macro('_signature'); }
     
     if (defined($self->{name})) {
-        RPM::del_macro('_gpg_name');
-        RPM::del_macro('_pgp_name');
+        RPM::delete_macro('_gpg_name');
+        RPM::delete_macro('_pgp_name');
     }
 
     if (defined($self->{path})) {
-        RPM::del_macro('_gpg_path');
-        RPM::del_macro('_pgp_path');
+        RPM::delete_macro('_gpg_path');
+        RPM::delete_macro('_pgp_path');
     }
 }
 
@@ -116,7 +110,7 @@ sub rpmsign {
     
     if ($need > 0) {
         $self->adjustmacro();
-        rpmresign($self->{passphrase}, $rpm) and $need = -1;
+        RPM::resign($self->{passphrase}, $rpm) and $need = -1;
         $self->restoremacro();
     }
 
@@ -125,21 +119,18 @@ sub rpmsign {
 
 sub rpmssign {
     my ($self, @rpms) = @_;
-
-    RPM::parserpms(
-        rpms => [ @rpms ],
-        checkrpms => $self->{checkrpms},
-        callback => sub {
-            my (%arg) = @_;
-            defined($arg{header}) or do {
-                $self->{log}->("bad rpm %s", $arg{rpm});
-                return;
-            };
-            my $res = $self->rpmsign($arg{rpm}, $arg{header});
-            if ($res > 0) { $self->{log}->("%s has been resigned", $arg{rpm}); 
-            } elsif ($res < 0) { $self->{log}->("Can't resign %s", $arg{rpm}); }
-        },
-    );
+    my $ts = RPM::Transaction->new();
+    $ts->vsflags("NOSIGNATURES");
+    foreach my $rpm (@rpms) {
+	my $header = $ts->readheader($rpm);
+	defined($header) or do {
+	    RPM::rpmlog("ERR", "bad rpm $rpm");
+	    return;
+	};
+	my $res = $self->rpmsign($rpm, $header);
+	if ($res > 0) { RPM::rpmlog("INFO", "$rpm has been resigned");
+	} elsif ($res < 0) { RPM::rpmlog("ERR", "Can't resign $rpm"); }
+    }
 }
 
 1;

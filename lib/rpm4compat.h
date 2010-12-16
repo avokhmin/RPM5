@@ -33,12 +33,17 @@
 #define	RPMBUILD_ISICON		RPMFILE_ICON
 #define	RPMBUILD_ISNO		RPMFILE_MISSINGOK
 
+#define	RPMTAG_FILENAMES	RPMTAG_FILEPATHS
+#define	RPMDBI_LABEL		RPMTAG_NVRA
+
 #define buildRestrictions       sourceHeader
 
 #include <fcntl.h>
 #include <unistd.h>
 #include <stdio.h>
 
+#define	WITH_DB
+#define _RPMDB_INTERNAL
 #define _RPMTAG_INTERNAL
 #define _RPMEVR_INTERNAL
 #define _RPMPS_INTERNAL
