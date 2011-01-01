@@ -327,12 +327,14 @@ const char * rpmteR(rpmte te)
     return (te != NULL ? te->release : NULL);
 }
 
-#ifdef	RPM_VENDOR_MANDRIVA
 const char * rpmteD(rpmte te)
 {
+#ifdef	RPM_VENDOR_MANDRIVA
     return (te != NULL ? te->distepoch : NULL);
-}
+#else
+    return NULL;
 #endif
+}
 
 const char * rpmteA(rpmte te)
 {
@@ -775,7 +777,9 @@ static rpmtsi rpmtsiGetPool(/*@null@*/ rpmioPool pool)
 			NULL, NULL, rpmtsiFini);/* XXX _rpmtsi_debug? */
 	pool = _rpmtsiPool;
     }
-    return (rpmtsi) rpmioGetPool(pool, sizeof(*tsi));
+    tsi = (rpmtsi) rpmioGetPool(pool, sizeof(*tsi));
+    memset(((char *)tsi)+sizeof(tsi->_item), 0, sizeof(*tsi)-sizeof(tsi->_item));
+    return tsi;
 }
 
 rpmtsi XrpmtsiInit(rpmts ts, const char * fn, unsigned int ln)
