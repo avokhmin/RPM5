@@ -416,7 +416,6 @@ const char * rpmdsNewN(rpmds ds)
     const char * Name = ds->N[ds->i];
     int xx;
 
-    memset(ns, 0, sizeof(*ns));
     xx = rpmnsParse(Name, ns);
 
 /*@-compdef -usereleased@*/ /* FIX: correct annotations for ds->ns shadow */
@@ -2991,6 +2990,7 @@ fprintf(stderr, "*** rpmdsELF(%s, %d, %p, %p)\n", fn, flags, (void *)add, contex
 	    continue;
 	    /*@notreached@*/ /*@switchbreak@*/ break;
 	case SHT_NOTE:
+#if defined(HAVE_GELF_GETNOTE)	/* XXX OpenIndiana & older elfutils haven't. */
 	    if (!(shdr->sh_flags & SHF_ALLOC))
 		continue;
 	    data = NULL;
@@ -3034,6 +3034,7 @@ fprintf(stderr, "*** rpmdsELF(%s, %d, %p, %p)\n", fn, flags, (void *)add, contex
 		    }
 		}
 	    }
+#endif	/* defined(HAVE_GELF_GETNOTE) */
 	    /*@switchbreak@*/ break;
 	case SHT_GNU_verdef:
 	    data = NULL;
