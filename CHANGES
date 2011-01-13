@@ -1,4 +1,56 @@
-5.3.7 -> 5.4a1:
+5.4.0 -> 5.4.1:
+    - proyvind: rpmdb: set and create default log directory so that it doesn't
+	get changed ie. when installing to a fresh chroot and no DB_CONFIG
+	exists, with transaction logs ending up in a path that changes later.
+    - proyvind: perl: fix typo breaking RPM::Transaction->problems().
+    - devzero2000: Fix null requirement produced by mono-find-requires
+      by Silvan Calarco
+    - proyvind: fix noarch sub-packages not having it's corresponding platform
+	tag (mdvbz#61746).
+    - proyvind: lookup3: fix runtime valgrind check and make it local.
+    - eveith: rb: Make Ruby classes participate in GC process
+    - jbj: omp: use a thread team solely for file digests to avoid overhead.
+    - jbj: rpmns: use binary search for name space lookup.
+    - jbj: rpmns: optimize out strlen() calls on depsolver fast path.
+    - jbj: drd: disable digest/libelf races for now. todo++.
+    - jbj: drd: disable path/tag data races for now. todo++.
+    - jbj: ugid: use the re-entrant user/group lookups.
+    - jbj: valgrind: empty macros for *everything* to see the namespace.
+    - jbj: mongo: stub-in mongo:// and mongodb:// URI's.
+    - jbj: verify: overlap header-only signature/digest with file digests.
+    - jbj: prelink: thread-safe helper instantiation for valgrind drd.
+    - jbj: consistent calloc-like behavior for memory pool items.
+    - jbj: omp: include <omp.h> everywhere.
+    - jbj: drd: attempt mempool annotations for valgrind drd.
+    - jbj: omp: avoid thread overhead for a single digest.
+    - jbj: rpmal: add a memory pool.
+    - jbj: rpmal: rip-out the dir/file bsearch-able store.
+    - jbj: rpmal: stub-in the rpmfiFNBF() replacement.
+    - jbj: revert lookup3.c+valgrind because gcc version dependent.
+
+5.3.7 -> 5.4.0:
+    - jbj: remove markReplacedFiles.
+    - jbj: build: rescusictate the ISPRAS markup.
+    - jbj: rpmlib: rescusictate the ISPRAS markup.
+    - jbj: rpmdb: rescusictate the ISPRAS markup.
+    - jbj: rpmio: add a queue link pointer to all rpm objects.
+    - jbj: i18n: update po files (Translation Project).
+    - jbj: rpmio: rescusitate the ISPRAS markup.
+    - proyvind: lookup3: fix valgrind #ifdef and perform runtime check for
+	valgrind in stead.
+    - jbj: ispras: upgrade to abi-compliance-checker-1.21.9.
+    - jbj: ispras: upgrade to api-sanity-autotest-1.11.
+    - jbj: rpmdb: disable Depcache, --install and "make test" todo++.
+    - jbj: distcheck: tests: move target from "check" to "test".
+    - jbj: distcheck: no globs, only explict lists, for EXTRA_DIST.
+    - jbj: distcheck: make internal neon "opt-in", avoid GSS-API wrestling.
+    - jbj: verify: fix: NULL fnpyKey caused doubled parentdir/linkto check.
+    - jbj: rpmal: add common exit point to control flow.
+    - jbj: rpmdb: use Depchache store by default again.
+    - jbj: db3: fix: avoid non-root EPERM with temp Depcache close.
+    - jbj: db3: adjust event debugging, add DB->cursor() open flags.
+    - jbj: rpmdb: rename the dependency cache pseudo-tag.
+    - jbj: verify: re-add digest/signature checks.
 
 5.3.6 -> 5.3.7:
     - jbj: fix: %config handling broken while refactoring a loop.

@@ -685,7 +685,7 @@ int rpmdbOpenAll(rpmdb db)
 	case RPMDBI_AVAILABLE:
 	case RPMDBI_ADDED:
 	case RPMDBI_REMOVED:
-	case RPMDBI_DEPENDS:
+	case RPMDBI_DEPCACHE:
 	case RPMDBI_BTREE:
 	case RPMDBI_HASH:
 	case RPMDBI_QUEUE:
@@ -838,11 +838,12 @@ xx = xx;
     case URL_IS_UNKNOWN:
 	fn = xstrdup(av[0]);
 	break;
-    case URL_IS_HTTPS:
-    case URL_IS_HTTP:
-    case URL_IS_FTP:
-    case URL_IS_HKP:
     case URL_IS_DASH:
+    case URL_IS_HKP:
+    case URL_IS_FTP:
+    case URL_IS_HTTP:
+    case URL_IS_HTTPS:
+    case URL_IS_MONGO:	/* XXX FIXME */
     default:
 	/* HACK: strip the URI prefix for these schemes. */
 	fn = rpmGetPath(fn, NULL);
@@ -1005,7 +1006,7 @@ static int rpmdbOpenDatabase(/*@null@*/ const char * prefix,
 	    case RPMDBI_AVAILABLE:
 	    case RPMDBI_ADDED:
 	    case RPMDBI_REMOVED:
-	    case RPMDBI_DEPENDS:
+	    case RPMDBI_DEPCACHE:
 		continue;
 		/*@notreached@*/ /*@switchbreak@*/ break;
 	    default:
@@ -2452,7 +2453,7 @@ assert(keylen == sizeof(hdrNum));
 	}
     }
     else if (dbi && dbi->dbi_primary != NULL) {
-	/* XXX Special case #5: secondary ndex associated with primary table. */
+	/* XXX Special case #5: secondary index associated w primary table. */
     }
     else {
 	/* Common case: retrieve join keys. */
@@ -2606,7 +2607,7 @@ int rpmdbRemove(rpmdb db, /*@unused@*/ int rid, uint32_t hdrNum,
 	case RPMDBI_AVAILABLE:	/* Filter out temporary databases */
 	case RPMDBI_ADDED:
 	case RPMDBI_REMOVED:
-	case RPMDBI_DEPENDS:
+	case RPMDBI_DEPCACHE:
 	case RPMDBI_SEQNO:
 	    /*@switchbreak@*/ break;
 	case RPMDBI_PACKAGES:
@@ -2742,7 +2743,7 @@ assert(hdrNum == headerGetInstance(h));
 	case RPMDBI_AVAILABLE:	/* Filter out temporary databases */
 	case RPMDBI_ADDED:
 	case RPMDBI_REMOVED:
-	case RPMDBI_DEPENDS:
+	case RPMDBI_DEPCACHE:
 	case RPMDBI_SEQNO:
 	    /*@switchbreak@*/ break;
 	case RPMDBI_PACKAGES:

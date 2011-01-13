@@ -94,11 +94,11 @@ static int removePackage(rpmts ts, Header h, uint32_t hdrNum,
     }
 
     if (ts->rbf == NULL) {
-	static size_t nRemoves = 8192;	/* XXX population estimate */
+	static size_t n = 10000;	/* XXX population estimate */
 	static double e = 1.0e-4;
 	size_t m = 0;
 	size_t k = 0;
-	rpmbfParams(nRemoves, e, &m, &k);
+	rpmbfParams(n, e, &m, &k);
 	ts->rbf = rpmbfNew(m, k, 0);
     }
 
@@ -593,6 +593,18 @@ int rpmtsAddInstallElement(rpmts ts, Header h,
 	    platform = rpmExpand(arch, "-unknown-", os, NULL);
 
 	rc = rpmPlatformScore(platform, platpat, nplatpat);
+#if defined(RPM_VENDOR_MANDRIVA)
+	/*
+	 * If no match on platform tag, we'll try again with arch tag
+	 * in case platform tag is inconsistent with it, which is the case
+	 * for older noarch sub-packages built (mdvbz#61746).
+	 */
+	if(xx && rc <= 0) {
+	    platform = _free(platform);
+	    platform = rpmExpand(arch, "-unknown-", os, NULL);
+	    rc = rpmPlatformScore(platform, platpat, nplatpat);
+	}
+#endif
 	if (rc <= 0) {
 	    rpmps ps = rpmtsProblems(ts);
 	    he->tag = RPMTAG_NVRA;
@@ -883,7 +895,7 @@ static int unsatisfiedDepend(rpmts ts, rpmds dep, int adding)
      */
     if (_cacheDependsRC) {
 	dbiIndex dbi;
-	dbi = dbiOpen(rpmtsGetRdb(ts), RPMDBI_DEPENDS, 0);
+	dbi = dbiOpen(rpmtsGetRdb(ts), RPMDBI_DEPCACHE, 0);
 	if (dbi == NULL)
 	    _cacheDependsRC = 0;
 	else {
@@ -1432,8 +1444,6 @@ retry:
 	    goto exit;
 	}
 	if (Name[0] == '/') {
-	    /* depFlags better be 0! */
-
 	    mi = rpmtsInitIterator(ts, RPMTAG_BASENAMES, Name, 0);
 	    (void) rpmmiPrune(mi,
 			ts->removedPackages, ts->numRemovedPackages, 1);
@@ -1493,7 +1503,7 @@ exit:
 #if defined(CACHE_DEPENDENCY_RESULT)
     if (_cacheDependsRC && _cacheThisRC) {
 	dbiIndex dbi;
-	dbi = dbiOpen(rpmtsGetRdb(ts), RPMDBI_DEPENDS, 0);
+	dbi = dbiOpen(rpmtsGetRdb(ts), RPMDBI_DEPCACHE, 0);
 	if (dbi == NULL) {
 	    _cacheDependsRC = 0;
 	} else {
@@ -2030,7 +2040,7 @@ exit:
 	xx = rpmtsCloseDB(ts);
 #if defined(CACHE_DEPENDENCY_RESULT)
     else if (_cacheDependsRC)
-	xx = rpmdbCloseDBI(rpmtsGetRdb(ts), RPMDBI_DEPENDS);
+	xx = rpmdbCloseDBI(rpmtsGetRdb(ts), RPMDBI_DEPCACHE);
 #endif
 
 #ifdef	NOTYET

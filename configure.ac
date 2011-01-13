@@ -9,7 +9,7 @@ dnl ##
 AC_PREREQ(2.63)
 m4_define([PACKAGE_BUGREPORT_DEFAULT], [rpm-devel@rpm5.org])
 AC_INIT([rpm],[5.4.DEVEL],[PACKAGE_BUGREPORT_DEFAULT])
-PACKAGE_TIMESTAMP="2010-09-18" dnl # YYYY[-MM[-DD[ HH[:MM]]]]
+PACKAGE_TIMESTAMP="2010-12-29" dnl # YYYY[-MM[-DD[ HH[:MM]]]]
 AC_MSG_TITLE([RPM Package Manager (RPM)], [$PACKAGE_VERSION])
 
 AC_MSG_HEADER([INITIALIZATION])
@@ -43,7 +43,7 @@ dnl # Interfaces changed/added/removed:   CURRENT++       REVISION=0
 dnl # Interfaces added:                             AGE++
 dnl # Interfaces removed:                           AGE=0
 AC_SUBST(LT_CURRENT,  5)
-AC_SUBST(LT_REVISION, 3)
+AC_SUBST(LT_REVISION, 4)
 AC_SUBST(LT_AGE,      0)
 
 dnl # provide RPM exported version
@@ -1364,7 +1364,7 @@ dnl # Neon
 RPM_CHECK_LIB(
     [Neon], [neon],
     [neon], [ne_session_create], [ne_session.h],
-    [yes,internal:external:none], [neon:src:src],
+    [no,internal:external:none], [neon:src:src],
     [ if test ".$RPM_CHECK_LIB_LOCATION" = .internal; then
               AC_DEFINE(HAVE_NEON_NE_GET_RESPONSE_HEADER, 1,
                     [Define to 1 if you have ne_get_response_header() in libneon.])

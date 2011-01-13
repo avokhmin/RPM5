@@ -52,7 +52,7 @@ typedef enum nsType_e {
     RPMNS_TYPE_VCHECK	=  (1 << 26),	/*!< vcheck(foo) */
     RPMNS_TYPE_SIGNATURE=  (1 << 27),	/*!< signature(/text:/sig) = /pub:id */
     RPMNS_TYPE_VERIFY	=  (1 << 28),	/*!< verify(N) = E:V-R */
-    RPMNS_TYPE_CONFIG	=  (1 << 29),	/*!< config(N) = E:V-R */
+    RPMNS_TYPE_CONFIG	=  (1 << 29)	/*!< config(N) = E:V-R */
 } nsType;
 
 #if defined(_RPMNS_INTERNAL)
@@ -87,23 +87,25 @@ nsType rpmnsArch(const char * str)
 
 /** \ingroup rpmds
  * Is string a known probe namespace?
- * @param str		string
+ * @param s		string
+ * @param slen		string length (0 uses strlen(s))
  * @return		nsType if known probe, else RPMNS_TYPE_UNKNOWN
  */
-nsType rpmnsProbe(const char * str)
+nsType rpmnsProbe(const char * s, size_t slen)
 	/*@*/;
 
 /** \ingroup rpmds
  * Classify a string as a dependency type.
- * @param str		string like "bing(bang).boom"
+ * @param s		string like "bing(bang).boom"
+ * @param slen		string length (0 uses strlen(s))
  * @return		dependency type
  */
-nsType rpmnsClassify(const char * str)
+nsType rpmnsClassify(const char * s, size_t slen)
 	/*@*/;
 
 /** \ingroup rpmds
- * Split NS string into namespace, name and arch components.
- * @param str		string like "bing(bang).boom"
+ * Expand and split NS(N).A string into namespace, name and arch components.
+ * @param s		string like "bing(bang).boom"
  * @retval *ns		parse results
  * @return		0 always
  */
