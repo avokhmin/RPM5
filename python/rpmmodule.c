@@ -256,6 +256,10 @@ static PyMethodDef rpmModuleMethods[] = {
 	NULL },
     { "labelCompare", (PyCFunction) labelCompare, METH_VARARGS|METH_KEYWORDS,
 	NULL },
+    { "evrCompare", (PyCFunction) evrCompare, METH_VARARGS|METH_KEYWORDS,
+	NULL },
+    { "evrSplit", (PyCFunction) evrSplit, METH_VARARGS|METH_KEYWORDS,
+	NULL },
     { "setVerbosity", (PyCFunction) setVerbosity, METH_VARARGS|METH_KEYWORDS,
 	NULL },
     { "setEpochPromote", (PyCFunction) setEpochPromote, METH_VARARGS|METH_KEYWORDS,
@@ -487,6 +491,13 @@ void init_rpm(void)
     REGISTER_ENUM(RPMSENSE_EQUAL);
     REGISTER_ENUM(RPMSENSE_NOTEQUAL);
     REGISTER_ENUM(RPMSENSE_FIND_REQUIRES);
+#if defined(RPM_VENDOR_MANDRIVA)
+    REGISTER_ENUM(RPMSENSE_PREREQ);
+    REGISTER_ENUM(RPMSENSE_SCRIPT_PRE);
+    REGISTER_ENUM(RPMSENSE_SCRIPT_POST);
+    REGISTER_ENUM(RPMSENSE_SCRIPT_PREUN);
+    REGISTER_ENUM(RPMSENSE_SCRIPT_POSTUN)
+#endif
 
     REGISTER_ENUM(RPMDEPS_FLAG_NOUPGRADE);
     REGISTER_ENUM(RPMDEPS_FLAG_NOREQUIRES);
