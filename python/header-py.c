@@ -343,7 +343,7 @@ static long hdr_hash(PyObject * h)
 static void hdr_dealloc(hdrObject * s)
 	/*@*/
 {
-    if (s->h) headerFree(s->h);
+    if (s->h) (void)headerFree(s->h);
     s->h = NULL;
     PyObject_Del(s);
 }
@@ -967,4 +967,42 @@ PyObject * labelCompare (PyObject * self, PyObject * args)
     b = rpmEVRfree(b);
 
     return Py_BuildValue("i", rc);
+}
+
+PyObject * evrCompare (PyObject * self, PyObject * args,
+		PyObject * kwds)
+{
+    EVR_t lEVR = rpmEVRnew(RPMSENSE_EQUAL, 0),
+	  rEVR = rpmEVRnew(RPMSENSE_EQUAL, 0);
+    int rc;
+    char * evr1, * evr2;
+    char * kwlist[] = {"evr0", "evr1", NULL};
+
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "ss", kwlist, &evr1, &evr2))
+	return NULL;
+
+    rpmEVRparse(evr1, lEVR);
+    rpmEVRparse(evr2, rEVR);
+    rc = rpmEVRcompare(lEVR, rEVR);
+    lEVR = rpmEVRfree(lEVR);
+    rEVR = rpmEVRfree(rEVR);
+
+    return PyLong_FromLong(rc);
+}
+
+PyObject * evrSplit (PyObject * self, PyObject * args, PyObject * kwds)
+{
+    EVR_t EVR = rpmEVRnew(RPMSENSE_EQUAL, 0);
+    char * evr;
+    char * kwlist[] = {"evr", NULL};
+    PyObject * tuple;
+
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "s", kwlist, &evr))
+	return NULL;
+
+    rpmEVRparse(evr, EVR);
+    tuple = Py_BuildValue("(Isss)", EVR->F[RPMEVR_E] ? atoi(EVR->F[RPMEVR_E]) : 0, EVR->F[RPMEVR_V], EVR->F[RPMEVR_R], EVR->F[RPMEVR_D]);
+    EVR = rpmEVRfree(EVR);
+
+    return tuple;
 }
