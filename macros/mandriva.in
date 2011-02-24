@@ -46,10 +46,8 @@ Provides: %{1} = %{EVRD}
 %_default_patch_flags	-s -U
 %_default_patch_fuzz	0
 
-# FIXME: will break if spec file is ever differently named, shouldn't parse
-# the spec file itself...
 %apply_patches %{lua:\
-f = io.open(rpm.expand("%{_specdir}/%{name}.spec"))\
+f = io.open(rpm.expand("%{_specfile}"))\
 if f then\
   for l in f:lines() do\
     match,b,num = string.find(string.lower(l), "^%s*patch(%d+)%s*:.*$")\
@@ -62,6 +60,13 @@ end\
 
 %make			%{__make} %{_smp_mflags}
 %makeinstall_std	make DESTDIR=%{?buildroot:%{buildroot}} install
+
+# mdvbz#62322
+%__grep			/bin/grep
+%__gzip			/bin/gzip
+%__lua			%{_bindir}/lua
+%__rc			%{_bindir}/rc
+%__xar			%{_bindir}/xar
 
 # mdvbz#61851
 %__tar_wildcards   --wildcards
