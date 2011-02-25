@@ -1,4 +1,7 @@
 5.1.8 -> 5.1.9:
+    - devzero2000: permit in configure phase to enable the optional-dirname-and-symlink-deps
+      used by Mandriva and Ark today
+      (ref https://blueprints.launchpad.net/rpm/+spec/rpm-split-vendor-config-in-autofu)
     - rse: fix release tarball rolling after recent addition of local copies of XZ, PCRE and Syck
 
 5.1.7 -> 5.1.8:
