@@ -508,6 +508,7 @@ AC_PATH_PROG(__FILE, file, %{_bindir}/file, $MYPATH)
 AC_PATH_PROG(__GIT, git, %{_bindir}/git, $MYPATH)
 AC_PATH_PROG(__GPG, gpg2, %{_bindir}/gpg2, $MYPATH)
 AC_PATH_PROG(__GSR, gsr, %{_bindir}/gsr, $MYPATH)
+AC_PATH_PROG(__GST_INSPECT, gst-inspect-0.10, %{_bindir}/gst-inspect-0.10, $MYPATH)
 AC_PATH_PROG(__GZIP, gzip, /bin/gzip, $MYPATH)
 AC_PATH_PROG(__HG, hg, %{_bindir}/hg, $MYPATH)
 AC_PATH_PROG(__ID, id, /usr/bin/id, $MYPATH)
@@ -1751,8 +1752,12 @@ RPM_CHECK_LIB(
 
 dnl # OSSP uuid
 dnl XXX hack-o-round typedef __darwin_uuid_t uuid_t; in Mac OS X <unistd.h>
+case "$host" in
+    *-*-darwin* )
 mv confdefs.h confdefs.h-SAVE
 grep -v 'define HAVE_UNISTD_H' confdefs.h-SAVE > confdefs.h
+;;
+esac
 RPM_CHECK_LIB(
     [OSSP uuid], [uuid],
     [ossp-uuid uuid], [uuid_import], [uuid.h],
@@ -1762,7 +1767,10 @@ RPM_CHECK_LIB(
           WITH_LUA_SUBDIR_DEF="$WITH_LUA_SUBDIR_DEF -DLUA_USE_UUID"
       fi
     ], [])
-mv confdefs.h-SAVE confdefs.h
+case "$host" in
+    *-*-darwin* )
+mv confdefs.h-SAVE confdefs.h;;
+esac
 
 dnl # Syck
 RPM_CHECK_LIB(
@@ -2299,8 +2307,8 @@ AC_CONFIG_FILES([ po/Makefile.in
     scripts/Makefile
     rpmdb/DB_CONFIG
     macros/macros macros/macros.rpmbuild
-    macros/cmake macros/java macros/libtool macros/mandriva macros/mono
-    macros/perl macros/pkgconfig macros/php macros/python macros/ruby
+    macros/cmake macros/gstreamer macros/java macros/libtool macros/mandriva
+    macros/mono macros/perl macros/pkgconfig macros/php macros/python macros/ruby
     macros/selinux macros/tcl
     doc/Makefile
     doc/manual/Makefile doc/fr/Makefile doc/ja/Makefile doc/ko/Makefile

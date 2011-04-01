@@ -298,7 +298,8 @@ $_arbitrary_tags_tests	Foo:Bar
 #==================================================
 
 # Use Berkeley DB transaction logging for rpmdb ACID behavior.
-%__dbi_txn      create lock log mpool txn auto_commit thread thread_count=64
+# XXX the %{?__nofsync} is passed from the --nofsync popt alias on the rpm cli.
+%__dbi_txn      create %{?__nofsync:nofsync} lock log mpool txn auto_commit thread thread_count=64
 
 %__dbi_other			%{?_tmppath:tmpdir=%{_tmppath}} %{?__dbi_txn}
 
@@ -865,8 +866,9 @@ $_arbitrary_tags_tests	Foo:Bar
 %_mandir		%{_datarootdir}/man
 %_localedir		%{_datarootdir}/locale
 %_lispdir		%{_datarootdir}/emacs/site-lisp
-
-%_initrddir		%{_sysconfdir}/rc.d/init.d
+%_initddir		%{_sysconfdir}/rc.d/init.d
+# This is a deprecated misspelling, present for backwards compatibility.
+%_initrddir             %{_initddir}
 
 #---------------------------------------------------------------------
 #   Multilibs
@@ -903,6 +905,22 @@ $_arbitrary_tags_tests	Foo:Bar
 #end\
 #}1}%{rpm_license_check}
 
+#-------------------------------------------------------------------------
+# Permit disabling parentdir and/or linkto dependencies
+#-------------------------------------------------------------------------
+# Parentdir dependencies: Every file implicitly requires its parent directory.
+# Linkto    dependencies: Every symlink requires its target end-point
+#-------------------------------------------------------------------------
+#These macros exists only for some specific vendors or if this feature is 
+#enabled during the configure phase
+# Possible values:
+# 0 : disable the corrispondent dependency
+# 1 : enable  the corrispondent dependency
+# The default behavior is to enable these types of dependencies being
+# very important in every rpm based distribution.
+#%_check_symlink_deps    0
+#%_check_dirname_deps    0
+#
 #------------------------------------------------------------------------
 # executable(...) configuration.
 #
@@ -948,6 +966,10 @@ $_arbitrary_tags_tests	Foo:Bar
 #------------------------------------------------------------------------
 # cmake(...) configuration
 %{load:%{_usrlibrpm}/macros.d/cmake}
+
+#------------------------------------------------------------------------
+# gstreamer(...) configuration.
+%{load:%{_usrlibrpm}/macros.d/gstreamer}
 
 #------------------------------------------------------------------------
 # perl(...) configuration

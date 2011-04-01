@@ -1,3 +1,7 @@
+%distribution		Mandriva Linux
+%vendor			Mandriva
+%bugurl			http://qa.mandriva.com
+
 # This macro will disable the transaction lock on /var/lib/rpm/__db.*.
 # This lock is of no use to us and will also result in errors when trying to
 # install src.rpms as regular user.
@@ -14,7 +18,7 @@
 %_buildrootdir          %{_topdir}/BUILDROOT
 
 # Build root path, where %install installs the package during build.
-%buildroot              %{_buildrootdir}/%{name}-%{version}-%{release}%{?disttag:-%{disttag}%{?distepoch:%{distepoch}}}.%{_arch}-buildroot
+%buildroot              %{_buildrootdir}/%{name}-%{version}-%{release}%{?disttag:-%{disttag}%{?distepoch:%{distepoch}}}.%{_target_cpu}-buildroot
 
 # Path to top of build area.
 %_topdir                %(echo $HOME)/rpmbuild
@@ -31,7 +35,7 @@
 # %release with such.
 %evr_tuple_select	1234
 %evr_tuple_order	EVRD
-%disttag		mdv
+%disttag		%{!?distsuffix:mdv}%{?distsuffix}
 %distepoch		%(sed -e 's#.*release\\ \\(\\S*\\).*#\\1#' /etc/release)
 
 # Dynamic EVRD tags macro for use with versioned provides/requires in place of
@@ -70,5 +74,22 @@ end\
 
 # mdvbz#61851
 %__tar_wildcards   --wildcards
+
+%_loop_detection_loglevel 3
+
+# mdvbz#62741
+# standard systemd directories
+%_systemdrootdir	/lib/systemd
+%_systemunitdir		%{_systemdrootdir}/system
+%_systemgeneratordir	%{_systemdrootdir}/system-generators
+%_systemshutdowndir	%{_systemdrootdir}/system-shutdown
+
+%_systemddatadir	%{_datadir}/systemd
+%_userunitdir		%{_systemddatadir}/user
+
+%_systemdlibexecdir	%{_libexecdir}/systemd
+%_usergeneratordir	%{_systemdlibexecdir}/user-generators
+
+%_systemdconfdir	%{_sysconfdir}/systemd
 
 %{load:/etc/rpm/macros.d/*.macros}
