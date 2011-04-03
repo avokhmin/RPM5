@@ -14,7 +14,6 @@ AM_CPPFLAGS = -I. \
 	-I$(top_srcdir)/misc \
 	@WITH_DB_CPPFLAGS@ \
 	@WITH_FILE_CPPFLAGS@ \
-	@WITH_JS_CPPFLAGS@ \
 	@WITH_LUA_CPPFLAGS@ \
 	@WITH_SYCK_CPPFLAGS@ \
 	@WITH_XAR_CPPFLAGS@ \
@@ -81,5 +80,5 @@ lint:
 .PHONY:	check-local
 check-local:
 	-(cd test; rake test; cd ..)
-	-./trb
+#-./trb
 
