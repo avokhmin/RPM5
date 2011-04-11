@@ -1,4 +1,31 @@
 5.4.0 -> 5.4.1:
+    - jbj: mongo: templating diddle-ups, use new Date(...) in other.mongo.
+    - jbj: mongo: wire-up a per-spewage macro expansion, more todo++.
+    - jbj: mongo: fix: iconv_open("UTF-8", "UTF-8//IGNORE") zero tolerance
+	transform for encoding randomness, particularly in ancient %changelog's.
+    - jbj: mongo: fix: JSON has no escaped single quote or vertical tab.
+    - devzero2000: add more gpg keys to thkp.c test program
+    - jbj: move multiarch* to mandriva.in.
+    - jbj: put "devel(libfoo)" deps under RPM_VENDOR_MANDRIVA.
+    - proyvind: merge multiarch-utils from mandriva.
+    - proyvind: macros: sync with updated python macros from mandriva.
+    - proyvind: rpmfc: add internel dep generator helper for kernel modules.
+    - provyind: kmod-deps.sh: add dependency extractor from mandriva.
+    - proyvind: rpmds: implement devel(libfoo) symlink dependencies from
+	Mandriva, but with proper ELF SONAME checking.
+    - jbj: mongo: stub-in a /usr/lib/rpm/bin mongo shell wrapper.
+    - jbj: spewage: fix: rework sql/json markup to use the EVRD parser.
+    - jbj: build: fix: resurrect %description -l XY yet again.
+    - jbj: build: fix: attempt arbitrary '%foo' tag iff '%' is seen.
+    - jbj: mongo: drag-in the test suite. grdfs/replica_sets todo++.
+    - jbj: mongo: and re-export the mongo-c-driver through librpmio.vers.
+    - jbj: mongo: pull in the gridfs methods from the mongo-c-driver too.
+    - jbj: mongo: update mongo-c-driver code, gridfs stil todo++.
+    - jbj: mongo: stub-in a configurable mongodb:// %_mongodb URI.
+    - jbj: autofu: fix: remove --with-js remnants.
+    - jbj: autofu: drop --with-js=internal now that JS 1.8.5 is available.
+    - jbj: fix: reduce false positives checking for duplicate keys (#62822).
+    - proyvind: rpmjs: port to SpiderMonkey 1.8.5 API.
     - proyvind: mandriva: filter overlapping depencies.
     - proyvind: rubygems.rb: add/provide ruby(abi) dependencies for non-gems.
     - proyvind: rpmfc: add classifiers for gstreamer plugins & dep generator.

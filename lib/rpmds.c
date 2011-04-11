@@ -3238,6 +3238,222 @@ exit:
 }
 /*@=moduncon =noeffectuncon @*/
 
+
+#if defined(RPM_VENDOR_MANDRIVA)
+/**
+ * Return a soname dependency constructed from an elf string, Mandriva-style.
+ * @retval t		soname dependency
+ * @param s		elf string (NULL uses "")
+ * @param isElf64	is this an ELF64 symbol?
+ */
+#if defined(HAVE_GELF_H) && defined(HAVE_LIBELF) && !defined(__FreeBSD__)
+static char * mdvSonameDep(/*@returned@*/ char * t, const char * s, int isElf64, int devel)
+	/*@modifies t @*/
+{
+    char *tmp = t;
+    *t = '\0';
+    if (devel) {
+	tmp = stpcpy(t, "devel(");
+    }
+#if !defined(__alpha__) && !defined(__sun)
+    if (!isElf64) {
+	/* XXX: eehhk, would've been nice with consistency, mandriva legacy... :| */
+	if (!devel && s[strlen(s)-1] != ')')
+	(void) stpcpy( stpcpy(tmp, s), "()(64bit)");
+    else {
+	    tmp = stpcpy(tmp, s);
+	    if (devel)
+		tmp = strstr(t, ".so");
+	    tmp = stpcpy(tmp, "(64bit)");
+        }
+    }else
+#endif
+	tmp = stpcpy(tmp, s);
+    if (devel) {
+	char *suffix = strstr(t, ".so");
+	if (suffix)
+	    tmp = suffix;
+	tmp = stpcpy(tmp, ")");
+    }
+
+    return t;
+}
+#endif
+
+/** \ingroup rpmds
+ * Extract dependencies from a symlink.
+ * XXX Prototype added to keep GCC quiet and avoid adding a symbol.
+ * @param fn		file name
+ * @param flags		1: skip provides 2: skip requires
+ * @param *add		add(arg, ds) saves next provide/require symlink dependency.
+ * @param context	add() callback context
+ * @return		0 on success
+ */
+int rpmdsSymlink(const char * fn, int flags,
+		int (*add) (void * context, rpmds ds), void * context)
+	/*@globals rpmGlobalMacroContext, h_errno, fileSystem, internalState @*/
+	/*@modifies rpmGlobalMacroContext, fileSystem, internalState @*/;
+int rpmdsSymlink(const char * fn, int flags,
+		int (*add) (void * context, rpmds ds), void * context)
+{
+#if defined(HAVE_GELF_H) && defined(HAVE_LIBELF) && !defined(__FreeBSD__)
+    Elf * elf;
+    Elf_Scn * scn;
+    Elf_Data * data;
+    GElf_Ehdr ehdr_mem, * ehdr;
+    GElf_Shdr shdr_mem, * shdr;
+    GElf_Dyn dyn_mem, * dyn;
+    int fdno;
+    int cnt;
+    int i;
+    char buf[BUFSIZ];
+    const char * s;
+    int is_executable;
+    const char * soname = NULL;
+    rpmds ds;
+    int xx;
+    int isElf64;
+    int gotSONAME = 0;
+    int skipP = (flags & RPMELF_FLAG_SKIPPROVIDES);
+    int skipR = (flags & RPMELF_FLAG_SKIPREQUIRES);
+    int lnklen;
+    char path[MAXPATHLEN];
+    /*
+     * We filter out these as they come with glibc, making dependencies on
+     * them rather redundant.
+     */
+    const char *filterRequires[] = {"ld-linux", "ld64-linux" "libBrokenLocale.so",
+	"libanl.so", "libc.so", "libcidn.so", "libcrypt.so", "libdl.so", "libm.so",
+	"libnsl.so", "libnss_compat.so", "libnss_dns.so", "libnss_files.so",
+	"libnss_hesiod.so", "libnss_nis.so", "libnss_nisplus.so", "libpthread.so",
+	"libresolv.so", "librt.so", "libutil.so", "libthread_db.so"};
+    ARGV_t deps = NULL;
+
+    /* Filename must end with ".so" to be devel(...) dependency. */
+    if ((s = strrchr(fn, '.')) && strcmp(s, ".so"))
+	return 0;
+
+    if ((lnklen = readlink(fn, path, MAXPATHLEN - 1)) == -1) {
+	warn("%s", fn);
+	return -1;
+    }
+    path[lnklen] = '\0';
+
+/*@-castfcnptr@*/
+if (_rpmds_debug < 0)
+fprintf(stderr, "*** rpmdsELF(%s, %d, %p, %p)\n", fn, flags, (void *)add, context);
+/*@=castfcnptr@*/
+
+    /* Extract dependencies only from files with executable bit set. */
+    {	struct stat sb, * st = &sb;
+	if (lstat(fn, st) != 0)
+	    return -1;
+	is_executable = (int)(st->st_mode & (S_IXUSR|S_IXGRP|S_IXOTH));
+    }
+
+    fdno = open(fn, O_RDONLY);
+    if (fdno < 0)
+	return fdno;
+
+    (void) elf_version(EV_CURRENT);
+
+/*@-evalorder@*/
+    elf = NULL;
+    if ((elf = elf_begin (fdno, ELF_C_READ, NULL)) == NULL
+     || elf_kind(elf) != ELF_K_ELF
+     || (ehdr = gelf_getehdr(elf, &ehdr_mem)) == NULL
+     || !(ehdr->e_type == ET_DYN || ehdr->e_type == ET_EXEC))
+	goto exit;
+/*@=evalorder@*/
+
+    isElf64 = ehdr->e_ident[EI_CLASS] == ELFCLASS64;
+
+    /*@-uniondef @*/
+    scn = NULL;
+    while ((scn = elf_nextscn(elf, scn)) != NULL) {
+	shdr = gelf_getshdr(scn, &shdr_mem);
+	if (shdr == NULL)
+	    break;
+
+	soname = _free(soname);
+	switch (shdr->sh_type) {
+	default:
+	    continue;
+	    /*@notreached@*/ /*@switchbreak@*/ break;
+	case SHT_DYNAMIC:
+	    data = NULL;
+	    while ((data = elf_getdata (scn, data)) != NULL) {
+		for (cnt = 0; cnt < (int)(shdr->sh_size / shdr->sh_entsize); ++cnt) {
+		    dyn = gelf_getdyn (data, cnt, &dyn_mem);
+		    if (dyn == NULL)
+			/*@innerbreak@*/ break;
+		    s = NULL;
+		    switch (dyn->d_tag) {
+		    default:
+			/*@innercontinue@*/ continue;
+			/*@notreached@*/ /*@switchbreak@*/ break;
+		    case DT_NEEDED:
+			/* Only from files with executable bit set. */
+			if (skipR || !is_executable)
+			    /*@innercontinue@*/ continue;
+			/* Add next require dependency. */
+			s = elf_strptr(elf, shdr->sh_link, dyn->d_un.d_val);
+assert(s != NULL);
+			buf[0] = '\0';
+
+			for (i = 0; i < (int)(sizeof(filterRequires)/sizeof(filterRequires[0])); i++)
+			    if (!strncmp(s, filterRequires[i], strlen(filterRequires[i])))
+				break;
+
+			if (sizeof(filterRequires)/sizeof(filterRequires[0]) == i)
+			    argvAdd(&deps, s);
+			/*@switchbreak@*/ break;
+		    case DT_SONAME:
+			gotSONAME = 1;
+			s = elf_strptr(elf, shdr->sh_link, dyn->d_un.d_val);
+assert(s != NULL);
+			/* Add next provide dependency. */
+			buf[0] = '\0';
+
+			if (!skipP) {
+			    ds = rpmdsSingle(RPMTAG_PROVIDENAME,
+				    mdvSonameDep(buf, s, isElf64, 1),
+				    "", RPMSENSE_FIND_PROVIDES);
+			    xx = add(context, ds);
+			    (void)rpmdsFree(ds);
+			    ds = NULL;
+			}
+			/*@switchbreak@*/ break;
+		    }
+		}
+	    }
+	    /*@switchbreak@*/ break;
+	}
+    }
+    /*@=uniondef @*/
+
+exit:
+    if (gotSONAME && !skipR)
+	for (i = 0, cnt = argvCount(deps); i < cnt; i++) {
+	    ds = rpmdsSingle(RPMTAG_REQUIRENAME,
+		    mdvSonameDep(buf, deps[i], isElf64, 1),
+		    "", RPMSENSE_FIND_REQUIRES);
+	    xx = add(context, ds);
+	    (void)rpmdsFree(ds);
+	    ds = NULL;
+	}
+
+    deps = argvFree(deps);
+    if (elf) (void) elf_end(elf);
+    if (fdno > 0)
+	xx = close(fdno);
+    return 0;
+#else
+    return -1;
+#endif
+}
+#endif	/* RPM_VENDOR_MANDRIVA */
+
 #define	_SBIN_LDCONFIG_P	"/sbin/ldconfig -p"
 /*@unchecked@*/ /*@observer@*/ /*@owned@*/ /*@relnull@*/
 static const char * _ldconfig_cmd = _SBIN_LDCONFIG_P;

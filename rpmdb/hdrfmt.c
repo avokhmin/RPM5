@@ -482,12 +482,12 @@ static size_t jsonstrlen(const char * s, /*@unused@*/ int lvl)
 	case '\b':
 	case '\t':
 	case '\n':
-	case '\v':
 	case '\f':
 	case '\r':
-	case '\"':
-	case '\'':	len += 1;			/*@fallthrough@*/
+	case '"':
+	case '\\':	len += 1;			/*@fallthrough@*/
 	default:	len += 1;			/*@switchbreak@*/ break;
+	/* XXX todo: emit \u1234 here somehow */
 	}
     }
     return len;
@@ -512,12 +512,12 @@ static char * jsonstrcpy(/*@returned@*/ char * t, const char * s,
 	case '\b':	*te++ = '\\'; *te++ = 'b';	/*@switchbreak@*/ break;
 	case '\t':	*te++ = '\\'; *te++ = 't';	/*@switchbreak@*/ break;
 	case '\n':	*te++ = '\\'; *te++ = 'n';	/*@switchbreak@*/ break;
-	case '\v':	*te++ = '\\'; *te++ = 'v';	/*@switchbreak@*/ break;
 	case '\f':	*te++ = '\\'; *te++ = 'f';	/*@switchbreak@*/ break;
 	case '\r':	*te++ = '\\'; *te++ = 'r';	/*@switchbreak@*/ break;
-	case '\"':	*te++ = '\\'; *te++ = '"';	/*@switchbreak@*/ break;
-	case '\'':	*te++ = '\\'; *te++ = '\'';	/*@switchbreak@*/ break;
+	case '"':	*te++ = '\\'; *te++ = '"';	/*@switchbreak@*/ break;
+	case '\\':	*te++ = '\\'; *te++ = '\\';	/*@switchbreak@*/ break;
 	default:	*te++ = (char) c;		/*@switchbreak@*/ break;
+	/* XXX todo: emit \u1234 here somehow */
 	}
     }
     *te = '\0';
@@ -527,7 +527,8 @@ static char * jsonstrcpy(/*@returned@*/ char * t, const char * s,
 /*@unchecked@*/ /*@observer@*/ 
 static const struct spew_s _json_spew = {
     .spew_name		= "json",
-    .spew_init		= "db.Packages.save({\n",
+    /* XXX non-functional atm, /usr/lib/rpm/qf *.mongo template for now. */
+    .spew_init		= "db.%{?__mongodb_collection}%{!?__mongodb_collection:packages}.save({\n",
     .spew_fini		= "});\n",
     .spew_strlen	= jsonstrlen,
     .spew_strcpy	= jsonstrcpy
@@ -857,21 +858,36 @@ exit:
 
 /*====================================================================*/
 
+#if defined(__GLIBC__)	/* XXX todo: find where iconv(3) was implemented. */
+/* XXX using "//TRANSLIT" instead assumes known fromcode? */
+/*@unchecked@*/
+static const char * _iconv_tocode = "UTF-8//IGNORE";
+/*@unchecked@*/
+static const char * _iconv_fromcode = "UTF-8";
+#else
+/*@unchecked@*/
+static const char * _iconv_tocode = "UTF-8";
+/*@unchecked@*/
+static const char * _iconv_fromcode = NULL;
+#endif
+
 static /*@only@*/ /*@null@*/ char *
 strdup_locale_convert (/*@null@*/ const char * buffer,
 		/*@null@*/ const char * tocode)
 	/*@*/
 {
-    char *dest_str;
+    char *dest_str = NULL;
 #if defined(HAVE_ICONV)
-    char *fromcode = NULL;
+    char *fromcode = _iconv_fromcode;
     iconv_t fd;
+    int is_error = 0;
+    int done = 0;
 
     if (buffer == NULL)
-	return NULL;
+	goto exit;
 
     if (tocode == NULL)
-	tocode = "UTF-8";
+	tocode = _iconv_tocode;
 
 #ifdef HAVE_LANGINFO_H
     fromcode = nl_langinfo (CODESET);
@@ -883,8 +899,6 @@ strdup_locale_convert (/*@null@*/ const char * buffer,
 	const char *pin = buffer;
 	char *pout = NULL;
 	size_t ib, ob, dest_size;
-	int done;
-	int is_error;
 	size_t err;
 	const char *shift_pin = NULL;
 	int xx;
@@ -894,7 +908,6 @@ strdup_locale_convert (/*@null@*/ const char * buffer,
 	dest_str = pout = malloc((dest_size + 1) * sizeof(*dest_str));
 	if (dest_str)
 	    *dest_str = '\0';
-	done = is_error = 0;
 	if (pout != NULL)
 	while (done == 0 && is_error == 0) {
 	    err = iconv(fd, (char **)&pin, &ib, &pout, &ob);
@@ -943,6 +956,7 @@ strdup_locale_convert (/*@null@*/ const char * buffer,
 	dest_str = xstrdup((buffer ? buffer : ""));
     }
 
+exit:
     return dest_str;
 }
 
@@ -1030,20 +1044,12 @@ assert(ix == 0);
 assert(he->t == RPM_STRING_TYPE || he->t == RPM_UINT64_TYPE || he->t == RPM_BIN_TYPE);
     switch (he->t) {
     case RPM_STRING_ARRAY_TYPE:	/* XXX currently never happens */
-	s = he->p.argv[ix];
-	xtag = "string";
-	/* XXX Force utf8 strings. */
-	s = xstrdup(s);
-	s = xstrtolocale(s);
-	freeit = 1;
-	break;
     case RPM_I18NSTRING_TYPE:	/* XXX currently never happens */
+assert(0);
     case RPM_STRING_TYPE:
-	s = he->p.str;
 	xtag = "string";
 	/* XXX Force utf8 strings. */
-	s = xstrdup(s);
-	s = xstrtolocale(s);
+	s = strdup_locale_convert(he->p.str, (av ? av[0] : NULL));
 	freeit = 1;
 	break;
     case RPM_BIN_TYPE:
@@ -1190,8 +1196,7 @@ assert(he->t == RPM_STRING_TYPE || he->t == RPM_UINT64_TYPE || he->t == RPM_BIN_
 	}
 
 	/* XXX Force utf8 strings. */
-	s = xstrdup(he->p.str);
-	s = xstrtolocale(s);
+	s = strdup_locale_convert(he->p.str, (av ? av[0] : NULL));
 	freeit = 1;
 	break;
     case RPM_BIN_TYPE:
@@ -1300,11 +1305,10 @@ assert(he->t == RPM_STRING_TYPE || he->t == RPM_UINT64_TYPE || he->t == RPM_BIN_
     switch (he->t) {
     case RPM_STRING_ARRAY_TYPE:	/* XXX currently never happens */
     case RPM_I18NSTRING_TYPE:	/* XXX currently never happens */
+assert(0);
     case RPM_STRING_TYPE:
-	s = (he->t == RPM_STRING_ARRAY_TYPE ? he->p.argv[ix] : he->p.str);
 	/* XXX Force utf8 strings. */
-	s = xstrdup(he->p.str);
-	s = xstrtolocale(s);
+	s = strdup_locale_convert(he->p.str, (av ? av[0] : NULL));
 	freeit = 1;
 	break;
     case RPM_BIN_TYPE:
@@ -1345,7 +1349,7 @@ assert(he->t == RPM_STRING_TYPE || he->t == RPM_UINT64_TYPE || he->t == RPM_BIN_
 	s = t;
 	c = '\0';
     } else
-	c = '\'';
+	c = '"';
 
     nb = spew->spew_strlen(s, lvl);
     if (c != '\0')
@@ -3284,19 +3288,20 @@ exit:
 }
 
 static int PRCOSkip(rpmTag tag, rpmTagData N, rpmTagData EVR, rpmTagData F,
-		rpmuint32_t i)
+		uint32_t i)
 	/*@*/
 {
     int a = -2, b = -2;
+    int rc = 0;
 
-    if (N.argv[i] == NULL || *N.argv[i] == '\0')
-	return 1;
+assert(N.argv[i] != NULL && *N.argv[i] != '\0');
+
     if (tag == RPMTAG_REQUIRENAME && i > 0
      && !(a=strcmp(N.argv[i], N.argv[i-1]))
      && !(b=strcmp(EVR.argv[i], EVR.argv[i-1]))
      && (F.ui32p[i] & 0x4e) == ((F.ui32p[i-1] & 0x4e)))
-	return 1;
-    return 0;
+	rc = 1;
+    return rc;
 }
 
 static int PRCOxmlTag(Header h, HE_t he, rpmTag EVRtag, rpmTag Ftag)
@@ -3308,9 +3313,9 @@ static int PRCOxmlTag(Header h, HE_t he, rpmTag EVRtag, rpmTag Ftag)
     rpmTagData EVR = { .ptr = NULL };
     rpmTagData F = { .ptr = NULL };
     size_t nb;
-    rpmuint32_t ac;
-    rpmuint32_t c;
-    rpmuint32_t i;
+    uint32_t ac;
+    uint32_t c;
+    uint32_t i;
     char *t;
     int rc = 1;		/* assume failure */
     int xx;
@@ -3514,16 +3519,17 @@ static int PRCOsqlTag(Header h, HE_t he, rpmTag EVRtag, rpmTag Ftag)
 	/*@globals internalState @*/
 	/*@modifies he, internalState @*/
 {
+    static char q = '"';
     rpmTag tag = he->tag;
     rpmTagData N = { .ptr = NULL };
     rpmTagData EVR = { .ptr = NULL };
     rpmTagData F = { .ptr = NULL };
     char instance[64];
     size_t nb;
-    rpmuint32_t ac;
-    rpmuint32_t c;
-    rpmuint32_t i;
-    char *t;
+    uint32_t ac;
+    uint32_t c;
+    uint32_t i;
+    char *te;
     int rc = 1;		/* assume failure */
     int xx;
 
@@ -3544,7 +3550,7 @@ static int PRCOsqlTag(Header h, HE_t he, rpmTag EVRtag, rpmTag Ftag)
     F.ui32p = he->p.ui32p;
 
     xx = snprintf(instance, sizeof(instance), "'%u'", (unsigned)headerGetInstance(h));
-    nb = sizeof(*he->p.argv);
+    nb = 0;
     ac = 0;
     for (i = 0; i < c; i++) {
 /*@-nullstate@*/	/* EVR.argv might be NULL */
@@ -3552,63 +3558,99 @@ static int PRCOsqlTag(Header h, HE_t he, rpmTag EVRtag, rpmTag Ftag)
 	    continue;
 /*@=nullstate@*/
 	ac++;
-	nb += sizeof(*he->p.argv);
-	nb += strlen(instance) + sizeof(", '', '', '', '', ''");
+	nb += strlen(instance) + sizeof(", '', '', '', '', ''") - 1;
 	if (tag == RPMTAG_REQUIRENAME)
 	    nb += sizeof(", ''") - 1;
 	nb += strlen(N.argv[i]);
 	if (EVR.argv != NULL && EVR.argv[i] != NULL && *EVR.argv[i] != '\0') {
-	    nb += strlen(EVR.argv[i]);
-	    nb += sizeof("EQ0") - 1;
+	    uint32_t Fx = ((F.ui32p[i] >> 1) & 0x7);
+	    EVR_t Revr = rpmEVRnew(Fx, 1);
+	    int xx = rpmEVRparse(xstrdup(EVR.argv[i]), Revr);
+	    const char * E = Revr->F[RPMEVR_E];
+	    const char * V = Revr->F[RPMEVR_V];
+	    const char * R = Revr->F[RPMEVR_R];
+#ifdef	NOTYET	/* XXX turning this on breaks rpmrepo */
+	    const char * D = Revr->F[RPMEVR_D];
+#endif
+	    xx = xx;
+	    nb += (sizeof(", 'EQ'")-1);
+	    nb += (sizeof(", ''")-1) + strlen(E);
+	    nb += (sizeof(", ''")-1) + strlen(V);
+	    nb += (sizeof(", ''")-1) + strlen(R);
+#ifdef	NOTYET	/* XXX turning this on breaks rpmrepo */
+	    nb += (sizeof(", ''")-1) + strlen(D);
+#endif
+	    Revr = rpmEVRfree(Revr);
 	}
 #ifdef	NOTNOW
 	if (tag == RPMTAG_REQUIRENAME && (F.ui32p[i] & 0x40))
 	    nb += sizeof("1") - 1;
 #endif
+	nb++;
     }
+
+    nb += (ac + 1) * sizeof(*he->p.argv);
 
     he->t = RPM_STRING_ARRAY_TYPE;
     he->c = ac;
     he->freeData = 1;
-    he->p.argv = xmalloc(nb + BUFSIZ);	/* XXX hack: leave slop */
-    t = (char *) &he->p.argv[he->c + 1];
+    he->p.argv = xmalloc(nb);
+    te = (char *) &he->p.argv[ac + 1];
+    *te = '\0';
     ac = 0;
     for (i = 0; i < c; i++) {
 /*@-nullstate@*/	/* EVR.argv might be NULL */
 	if (PRCOSkip(tag, N, EVR, F, i))
 	    continue;
 /*@=nullstate@*/
-	he->p.argv[ac++] = t;
-	t = stpcpy(t, instance);
-	t = stpcpy( stpcpy( stpcpy(t, ", '"), N.argv[i]), "'");
+	he->p.argv[ac++] = te;
+	te = stpcpy(te, instance);
+	*te++ = ',';	*te++ = ' ';
+	*te++ = q;	te = stpcpy(te, N.argv[i]);	*te++ = q;
 /*@-readonlytrans@*/
 	if (EVR.argv != NULL && EVR.argv[i] != NULL && *EVR.argv[i] != '\0') {
-	    static char *Fstr[] = { "?0","LT","GT","?3","EQ","LE","GE","?7" };
-	    rpmuint32_t Fx = ((F.ui32p[i] >> 1) & 0x7);
-	    const char *E, *V, *R;
-	    char *f, *fe;
-	    t = stpcpy( stpcpy( stpcpy(t, ", '"), Fstr[Fx]), "'");
-	    f = (char *) EVR.argv[i];
-	    for (fe = f; *fe != '\0' && *fe >= '0' && *fe <= '9'; fe++)
-		{};
-	    if (*fe == ':') { *fe++ = '\0'; E = f; f = fe; } else E = NULL;
-	    V = f;
-	    for (fe = f; *fe != '\0' && *fe != '-'; fe++)
-		{};
-	    if (*fe == '-') { *fe++ = '\0'; R = fe; } else R = NULL;
-	    t = stpcpy( stpcpy( stpcpy(t, ", '"), (E && *E ? E : "0")), "'");
-	    t = stpcpy( stpcpy( stpcpy(t, ", '"), V), "'");
-	    t = stpcpy( stpcpy( stpcpy(t, ", '"), (R ? R : "")), "'");
-	} else
-	    t = stpcpy(t, ", '', '', '', ''");
+	    static const char *Fstr[] = { "?0","LT","GT","?3","EQ","LE","GE","?7" };
+	    uint32_t Fx = ((F.ui32p[i] >> 1) & 0x7);
+	    EVR_t Revr = rpmEVRnew(Fx, 1);
+	    int xx = rpmEVRparse(xstrdup(EVR.argv[i]), Revr);
+	    const char * E = Revr->F[RPMEVR_E];
+	    const char * V = Revr->F[RPMEVR_V];
+	    const char * R = Revr->F[RPMEVR_R];
+#ifdef	NOTYET	/* XXX turning this on breaks rpmrepo */
+	    const char * D = Revr->F[RPMEVR_D];
+#endif
+	    xx = xx;
+	    *te++ = ',';	*te++ = ' ';
+	    *te++ = q;	te = stpcpy(te, Fstr[Fx]);	*te++ = q;
+	    *te++ = ',';	*te++ = ' ';
+	    *te++ = q;	te = stpcpy(te, E);	*te++ = q;
+	    *te++ = ',';	*te++ = ' ';
+	    *te++ = q;	te = stpcpy(te, V);	*te++ = q;
+	    *te++ = ',';	*te++ = ' ';
+	    *te++ = q;	te = stpcpy(te, R);	*te++ = q;
+#ifdef	NOTYET	/* XXX turning this on breaks rpmrepo */
+	    *te++ = ',';	*te++ = ' ';
+	    *te++ = q;	te = stpcpy(te, D);	*te++ = q;
+#endif
+	    Revr = rpmEVRfree(Revr);
+	} else {
+	    *te++ = ',';	*te++ = ' ';
+	    *te++ = q;		*te++ = q;
+	    *te++ = ',';	*te++ = ' ';
+	    *te++ = q;		*te++ = q;
+	    *te++ = ',';	*te++ = ' ';
+	    *te++ = q;		*te++ = q;
+	    *te++ = ',';	*te++ = ' ';
+	    *te++ = q;		*te++ = q;
+	}
 /*@=readonlytrans@*/
 #ifdef	NOTNOW
 	if (tag == RPMTAG_REQUIRENAME)
-	    t = stpcpy(stpcpy(stpcpy(t, ", '"),(F.ui32p[i] & 0x40) ? "1" : "0"), "'");
+	    te = stpcpy(stpcpy(stpcpy(te, ", '"),(F.ui32p[i] & 0x40) ? "1" : "0"), "'");
 #endif
-	*t++ = '\0';
+	*te++ = '\0';
     }
-    he->p.argv[he->c] = NULL;
+    he->p.argv[ac] = NULL;
 /*@=compmempass@*/
     rc = 0;
 
@@ -6570,7 +6612,7 @@ char * headerSprintf(Header h, const char * fmt,
     sprintfToken nextfmt;
     sprintfTag tag;
     char * t, * te;
-    int need;
+    size_t need;
 spew_t spew = NULL;
 
 /*@-modfilesys@*/
@@ -6622,10 +6664,12 @@ spew = NULL;
 	spew = &_json_spew;
 
     if (spew && spew->spew_init && spew->spew_init[0]) {
-	need = strlen(spew->spew_init);
+	char * spew_init = rpmExpand(spew->spew_init, NULL);
+	need = strlen(spew_init);
 	t = hsaReserve(hsa, need);
-	te = stpcpy(t, spew->spew_init);
+	te = stpcpy(t, spew_init);
 	hsa->vallen += (te - t);
+	spew_init = _free(spew_init);
     }
 
     hsa = hsaInit(hsa);
@@ -6641,10 +6685,12 @@ spew = NULL;
     hsa = hsaFini(hsa);
 
     if (spew && spew->spew_fini && spew->spew_fini[0]) {
-	need = strlen(spew->spew_fini);
+	char * spew_fini = rpmExpand(spew->spew_fini, NULL);
+	need = strlen(spew_fini);
 	t = hsaReserve(hsa, need);
-	te = stpcpy(t, spew->spew_fini);
+	te = stpcpy(t, spew_fini);
 	hsa->vallen += (te - t);
+	spew_fini = _free(spew_fini);
     }
 
     if (hsa->val != NULL && hsa->vallen < hsa->alloced)
