@@ -1,4 +1,6 @@
 5.4.0 -> 5.4.1:
+    - jbj: mongo: adjust --json spewage to accomodate mongo syntax.
+    - devzero2000: get rid of rindex everywhere: use SUSv3 strrchr instead
     - jbj: mongo: templating diddle-ups, use new Date(...) in other.mongo.
     - jbj: mongo: wire-up a per-spewage macro expansion, more todo++.
     - jbj: mongo: fix: iconv_open("UTF-8", "UTF-8//IGNORE") zero tolerance
@@ -71,8 +73,8 @@
 	iterator (mdvbz#62279)
     - devzero2000: update INSTALL.developer with some jbj consideration 
       on how to use multiple rpm version.
-    - devzero2000: permit in configure phase to enable the
-      optional-dirname-and-symlink-deps used by Mandriva and Ark today
+    - devzero2000: permit in configure phase to disable (via --disable-dirname-and-symlink-deps) 
+      the optional-dirname-and-symlink-deps used by Mandriva and Ark today
       (ref https://blueprints.launchpad.net/rpm/+spec/rpm-split-vendor-config-in-autofu)
     - proyvind: python: export rpmEVRparse() & rpmEVRcompare() in evrSplit() &
 	evrCompare().
