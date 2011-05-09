@@ -1,4 +1,22 @@
 5.4.0 -> 5.4.1:
+    - devzero2000: update the arbitrary tags description in the spec manual  
+    - devzero2000: fix the arbitrarytag toy test spec 
+    - devzero2000: Give the right name to the security arbitrary tags
+    - devzero2000: document arbitrary tags in the spec manual
+    - devzero2000: added arbitrary tag for security description and reference.
+      Fix a typo in arbitrary_tag_tests also.
+    - devzero2000: fix typo, add more info to per_transaction_dependecies doc.
+      Distribuite it also.
+    - devzero2000: add a preliminary docs on per_transaction_dependecies,
+      achieved by putting together what is already written on the subject over the years.
+    - mdawkins: applied vendor Openmamba patches
+    - devzero2000: add preliminary change for momonga buildboot
+    - devzero2000: in configure.ac distinguish properly redhat from fedora
+    - devzero2000: update devtool.conf with lovelock. Add another autofu
+      switch (--enable-rpm-lua-extensions-based-on-rpmlib) where appropiate
+    - devzero2000: update devtool.conf with the new autofu switch
+      for splitting vendor config in autofu as appropiate, for my
+      knownledge. Add also some apparently missing --with-vendor switch.
     - devzero2000: permit in configure phase to 
       --enable-rpmvercmp-digits-beat-alpha for reverting to the old rpmvercmp 
       behavior where digits beat alpha as used by Mandriva, Fedora, Suse 
