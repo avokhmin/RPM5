@@ -245,6 +245,18 @@ static char * dayFormat(HE_t he, /*@null@*/ const char ** av)
 }
 
 /**
+ * Return isodate (ISO-8601) formatted data.
+ * @param he		tag container
+ * @param av		parameter list (or NULL)
+ * @return		formatted string
+ */
+static char * isodateFormat(HE_t he, /*@null@*/ const char ** av)
+	/*@*/
+{
+    return realDateFormat(he, av, _("%Y-%m-%dT%H:%M:%S"));
+}
+
+/**
  * Return shell escape formatted data.
  * @param he		tag container
  * @param av		parameter list (or NULL)
@@ -315,6 +327,8 @@ static struct headerSprintfExtension_s _headerDefaultFormats[] = {
 	{ .fmtFunction = dateFormat } },
     { HEADER_EXT_FORMAT, "day",
 	{ .fmtFunction = dayFormat } },
+    { HEADER_EXT_FORMAT, "isodate",
+	{ .fmtFunction = isodateFormat } },
     { HEADER_EXT_FORMAT, "shescape",
 	{ .fmtFunction = shescapeFormat } },
     { HEADER_EXT_LAST, NULL, { NULL } }
@@ -1115,6 +1129,9 @@ static /*@only@*/ char * yamlFormat(HE_t he, /*@unused@*/ /*@null@*/ const char 
 int lvl = 0;
 spew_t spew = &_yaml_spew;
 
+    if (he->tag == RPMTAG_CHANGELOGNAME || he->tag == RPMTAG_CHANGELOGTEXT)
+        element = -1; /* changelog entries should be presented as values */
+
 assert(ix == 0);
 assert(he->t == RPM_STRING_TYPE || he->t == RPM_UINT64_TYPE || he->t == RPM_BIN_TYPE);
 
@@ -1153,7 +1170,7 @@ assert(he->t == RPM_STRING_TYPE || he->t == RPM_UINT64_TYPE || he->t == RPM_BIN_
 		    sprintf((char *)xtag, "- |%d-\n", lvl);
 		} else {
 		    lvl = 2;
-		    if (he->ix < 0) lvl++;  /* XXX extra indent for array[1] */
+		    if (element < 0) lvl++;  /* XXX extra indent for array[1] */
 		    sprintf((char *)xtag, "|%d-\n", lvl);
 		}
 	    } else {
@@ -1163,7 +1180,7 @@ assert(he->t == RPM_STRING_TYPE || he->t == RPM_UINT64_TYPE || he->t == RPM_BIN_
 		} else {
 		    xtag = "|-\n";
 		    lvl = 2;
-		    if (he->ix < 0) lvl++;  /* XXX extra indent for array[1] */
+		    if (element < 0) lvl++;  /* XXX extra indent for array[1] */
 		}
 	    }
 	} else {
@@ -3324,6 +3341,10 @@ spew_t spew = &_xml_spew;
 		nb -= 2;
 	    if (strchr(EVR.argv[i], '-') != NULL)
 		nb += sizeof(" rel=\"\"") - 2;
+#ifdef	NOTYET
+	    if (strchr(EVR.argv[i], ':') != NULL)
+		nb += sizeof(" distepoch=\"\"") - 2;
+#endif
 	}
 #ifdef	NOTNOW
 	if (tag == RPMTAG_REQUIRENAME && (F.ui32p[i] & 0x40))
@@ -3354,13 +3375,16 @@ spew_t spew = &_xml_spew;
 	if (EVR.argv != NULL && EVR.argv[i] != NULL && *EVR.argv[i] != '\0') {
 	    static char *Fstr[] = { "?0","LT","GT","?3","EQ","LE","GE","?7" };
 	    rpmuint32_t Fx = ((F.ui32p[i] >> 1) & 0x7);
-	    const char *E, *V, *R;
+	    const char *E, *V, *R, *D;
 	    char *f, *fe;
 	    t = stpcpy( stpcpy( stpcpy(t, " flags=\""), Fstr[Fx]), "\"");
 	    f = (char *) EVR.argv[i];
 	    for (fe = f; *fe != '\0' && *fe >= '0' && *fe <= '9'; fe++)
 		{};
 	    if (*fe == ':') { *fe++ = '\0'; E = f; f = fe; } else E = NULL;
+	    for (fe = f + strlen(f); fe != f && *fe != ':'; fe--)
+		{};
+	    if (*fe == ':') { *fe++ = '\0'; D = fe; } else D = NULL;
 	    V = f;
 	    for (fe = f; *fe != '\0' && *fe != '-'; fe++)
 		{};
@@ -3369,6 +3393,10 @@ spew_t spew = &_xml_spew;
 	    t = stpcpy( stpcpy( stpcpy(t, " ver=\""), V), "\"");
 	    if (R != NULL)
 		t = stpcpy( stpcpy( stpcpy(t, " rel=\""), R), "\"");
+#ifdef	NOTYET
+	    if (D != NULL)
+		t = stpcpy( stpcpy( stpcpy(t, " distepoch=\""), D), "\"");
+#endif
 	}
 /*@=readonlytrans@*/
 #ifdef	NOTNOW

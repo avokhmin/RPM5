@@ -1,6 +1,6 @@
 "\
-Other:\
-\n  Id:      %|HDRID?{%{HDRID}}:{XXX}|\
+-\
+\n  Id:      %|HDRID?{%{HDRID}}:{~}|\
 \n  Idtype:  sha\
 \n  Name:    %{NAME:yaml}\
 \n  Arch:    %{ARCH:yaml}\
@@ -11,9 +11,9 @@ Other:\
 %|changelogname?{\
 [\
 \n   -\
-\n    Author: %{CHANGELOGNAME}\
-\n    Date:   %{CHANGELOGTIME:date}\
-\n%{CHANGELOGTEXT:yaml}\
+\n    Author: %{CHANGELOGNAME:yaml}\
+\n    Date:   !!timestamp '%{CHANGELOGTIME:isodate}'\
+\n    Text:   %{CHANGELOGTEXT:yaml}\
 ]\
 }|\
 \n"
