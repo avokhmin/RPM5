@@ -1,9 +1,9 @@
 "\
 INSERT into packages values (\
-'%{DBINSTANCE}'\
+%{DBINSTANCE}\
 , '%|PACKAGEDIGEST?{%{PACKAGEDIGEST}}|'\
 );\
-%|basenames?{[\
+%|dirnames?{[\
 \nINSERT into filelist values (\
 %{filessqlentry2}\
 );\

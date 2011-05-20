@@ -195,7 +195,7 @@ static char * decFormat(HE_t he, /*@null@*/ const char ** av)
  * @return		formatted string
  */
 static char * realDateFormat(HE_t he, /*@unused@*/ /*@null@*/ const char ** av,
-		const char * strftimeFormat)
+		const char * strftimeFormat, int utc)
 	/*@*/
 {
     char * val;
@@ -208,7 +208,10 @@ static char * realDateFormat(HE_t he, /*@unused@*/ /*@null@*/ const char ** av,
 
 	/* this is important if sizeof(rpmuint64_t) ! sizeof(time_t) */
 	{   time_t dateint = he->p.ui64p[0];
-	    tstruct = localtime(&dateint);
+	    if (utc)
+		tstruct = gmtime(&dateint);
+	    else
+		tstruct = localtime(&dateint);
 	}
 	buf[0] = '\0';
 	if (tstruct)
@@ -229,7 +232,7 @@ static char * realDateFormat(HE_t he, /*@unused@*/ /*@null@*/ const char ** av,
 static char * dateFormat(HE_t he, /*@null@*/ const char ** av)
 	/*@*/
 {
-    return realDateFormat(he, av, _("%c"));
+    return realDateFormat(he, av, _("%c"), 0);
 }
 
 /**
@@ -241,7 +244,7 @@ static char * dateFormat(HE_t he, /*@null@*/ const char ** av)
 static char * dayFormat(HE_t he, /*@null@*/ const char ** av)
 	/*@*/
 {
-    return realDateFormat(he, av, _("%a %b %d %Y"));
+    return realDateFormat(he, av, _("%a %b %d %Y"), 0);
 }
 
 /**
@@ -253,7 +256,7 @@ static char * dayFormat(HE_t he, /*@null@*/ const char ** av)
 static char * isodateFormat(HE_t he, /*@null@*/ const char ** av)
 	/*@*/
 {
-    return realDateFormat(he, av, _("%Y-%m-%dT%H:%M:%S"));
+    return realDateFormat(he, av, "%Y-%m-%dT%H:%M:%SZ", 1);
 }
 
 /**
@@ -3346,10 +3349,8 @@ spew_t spew = &_xml_spew;
 		nb += sizeof(" distepoch=\"\"") - 2;
 #endif
 	}
-#ifdef	NOTNOW
 	if (tag == RPMTAG_REQUIRENAME && (F.ui32p[i] & 0x40))
 	    nb += sizeof(" pre=\"1\"") - 1;
-#endif
     }
 
     he->t = RPM_STRING_ARRAY_TYPE;
@@ -3399,10 +3400,8 @@ spew_t spew = &_xml_spew;
 #endif
 	}
 /*@=readonlytrans@*/
-#ifdef	NOTNOW
 	if (tag == RPMTAG_REQUIRENAME && (F.ui32p[i] & 0x40))
 	    t = stpcpy(t, " pre=\"1\"");
-#endif
 	t = stpcpy(t, "/>");
 	*t++ = '\0';
     }
@@ -3499,7 +3498,7 @@ static /*@only@*/ char * sqlescapeFormat(HE_t he, /*@null@*/ const char ** av)
 }
 
 /*@-compmempass -kepttrans -nullstate -usereleased @*/
-static int PRCOsqlTag(Header h, HE_t he, rpmTag EVRtag, rpmTag Ftag)
+static int PRCOsqlTag(Header h, HE_t he, rpmTag EVRtag, rpmTag Ftag, int json)
 	/*@globals internalState @*/
 	/*@modifies he, internalState @*/
 {
@@ -3533,7 +3532,10 @@ static int PRCOsqlTag(Header h, HE_t he, rpmTag EVRtag, rpmTag Ftag)
     if (xx == 0) goto exit;
     F.ui32p = he->p.ui32p;
 
-    xx = snprintf(instance, sizeof(instance), "'%u'", (unsigned)headerGetInstance(h));
+    if (!json)
+    xx = snprintf(instance, sizeof(instance), "%u", (unsigned)headerGetInstance(h));
+    else
+    *instance = '\0';
     nb = 0;
     ac = 0;
     for (i = 0; i < c; i++) {
@@ -3566,10 +3568,10 @@ static int PRCOsqlTag(Header h, HE_t he, rpmTag EVRtag, rpmTag Ftag)
 #endif
 	    Revr = rpmEVRfree(Revr);
 	}
-#ifdef	NOTNOW
+	if (!json) {
 	if (tag == RPMTAG_REQUIRENAME && (F.ui32p[i] & 0x40))
 	    nb += sizeof("1") - 1;
-#endif
+	}
 	nb++;
     }
 
@@ -3588,8 +3590,6 @@ static int PRCOsqlTag(Header h, HE_t he, rpmTag EVRtag, rpmTag Ftag)
 	    continue;
 /*@=nullstate@*/
 	he->p.argv[ac++] = te;
-	te = stpcpy(te, instance);
-	*te++ = ',';	*te++ = ' ';
 	*te++ = q;	te = stpcpy(te, N.argv[i]);	*te++ = q;
 /*@-readonlytrans@*/
 	if (EVR.argv != NULL && EVR.argv[i] != NULL && *EVR.argv[i] != '\0') {
@@ -3628,10 +3628,14 @@ static int PRCOsqlTag(Header h, HE_t he, rpmTag EVRtag, rpmTag Ftag)
 	    *te++ = q;		*te++ = q;
 	}
 /*@=readonlytrans@*/
-#ifdef	NOTNOW
+	if (*instance) {
+	*te++ = ',';	*te++ = ' ';
+	te = stpcpy(te, instance);
+	}
+	if (!json) {
 	if (tag == RPMTAG_REQUIRENAME)
 	    te = stpcpy(stpcpy(stpcpy(te, ", '"),(F.ui32p[i] & 0x40) ? "1" : "0"), "'");
-#endif
+	}
 	*te++ = '\0';
     }
     he->p.argv[ac] = NULL;
@@ -3654,7 +3658,7 @@ static int PsqlTag(Header h, HE_t he)
 	/*@modifies he, internalState @*/
 {
     he->tag = RPMTAG_PROVIDENAME;
-    return PRCOsqlTag(h, he, RPMTAG_PROVIDEVERSION, RPMTAG_PROVIDEFLAGS);
+    return PRCOsqlTag(h, he, RPMTAG_PROVIDEVERSION, RPMTAG_PROVIDEFLAGS, 0);
 }
 
 static int RsqlTag(Header h, HE_t he)
@@ -3662,7 +3666,7 @@ static int RsqlTag(Header h, HE_t he)
 	/*@modifies he, internalState @*/
 {
     he->tag = RPMTAG_REQUIRENAME;
-    return PRCOsqlTag(h, he, RPMTAG_REQUIREVERSION, RPMTAG_REQUIREFLAGS);
+    return PRCOsqlTag(h, he, RPMTAG_REQUIREVERSION, RPMTAG_REQUIREFLAGS, 0);
 }
 
 static int CsqlTag(Header h, HE_t he)
@@ -3670,7 +3674,7 @@ static int CsqlTag(Header h, HE_t he)
 	/*@modifies he, internalState @*/
 {
     he->tag = RPMTAG_CONFLICTNAME;
-    return PRCOsqlTag(h, he, RPMTAG_CONFLICTVERSION, RPMTAG_CONFLICTFLAGS);
+    return PRCOsqlTag(h, he, RPMTAG_CONFLICTVERSION, RPMTAG_CONFLICTFLAGS, 0);
 }
 
 static int OsqlTag(Header h, HE_t he)
@@ -3678,7 +3682,39 @@ static int OsqlTag(Header h, HE_t he)
 	/*@modifies he, internalState @*/
 {
     he->tag = RPMTAG_OBSOLETENAME;
-    return PRCOsqlTag(h, he, RPMTAG_OBSOLETEVERSION, RPMTAG_OBSOLETEFLAGS);
+    return PRCOsqlTag(h, he, RPMTAG_OBSOLETEVERSION, RPMTAG_OBSOLETEFLAGS, 0);
+}
+
+static int PjsonTag(Header h, HE_t he)
+	/*@globals internalState @*/
+	/*@modifies he, internalState @*/
+{
+    he->tag = RPMTAG_PROVIDENAME;
+    return PRCOsqlTag(h, he, RPMTAG_PROVIDEVERSION, RPMTAG_PROVIDEFLAGS, 1);
+}
+
+static int RjsonTag(Header h, HE_t he)
+	/*@globals internalState @*/
+	/*@modifies he, internalState @*/
+{
+    he->tag = RPMTAG_REQUIRENAME;
+    return PRCOsqlTag(h, he, RPMTAG_REQUIREVERSION, RPMTAG_REQUIREFLAGS, 1);
+}
+
+static int CjsonTag(Header h, HE_t he)
+	/*@globals internalState @*/
+	/*@modifies he, internalState @*/
+{
+    he->tag = RPMTAG_CONFLICTNAME;
+    return PRCOsqlTag(h, he, RPMTAG_CONFLICTVERSION, RPMTAG_CONFLICTFLAGS, 1);
+}
+
+static int OjsonTag(Header h, HE_t he)
+	/*@globals internalState @*/
+	/*@modifies he, internalState @*/
+{
+    he->tag = RPMTAG_OBSOLETENAME;
+    return PRCOsqlTag(h, he, RPMTAG_OBSOLETEVERSION, RPMTAG_OBSOLETEFLAGS, 1);
 }
 
 static int PRCOyamlTag(Header h, HE_t he, rpmTag EVRtag, rpmTag Ftag)
@@ -3990,7 +4026,7 @@ static int F2xmlTag(Header h, HE_t he)
     return FDGxmlTag(h, he, 2);
 }
 
-static int FDGsqlTag(Header h, HE_t he, int lvl)
+static int FDGsqlTag(Header h, HE_t he, int lvl, int json)
 	/*@globals internalState @*/
 	/*@modifies he, internalState @*/
 {
@@ -4000,11 +4036,16 @@ static int FDGsqlTag(Header h, HE_t he, int lvl)
     rpmTagData FMODES = { .ptr = NULL };
     rpmTagData FFLAGS = { .ptr = NULL };
     char instance[64];
+    char *filetypes;
     size_t nb;
     rpmuint32_t ac;
     rpmuint32_t c;
+    rpmuint32_t d;
+    rpmuint32_t n;
     rpmuint32_t i;
+    rpmuint32_t j;
     char *t;
+    char *f;
     int rc = 1;		/* assume failure */
     int xx;
 
@@ -4019,6 +4060,7 @@ static int FDGsqlTag(Header h, HE_t he, int lvl)
     xx = headerGet(h, he, 0);
     if (xx == 0) goto exit;
     DN.argv = he->p.argv;
+    d = he->c;
 
     he->tag = RPMTAG_DIRINDEXES;
     xx = headerGet(h, he, 0);
@@ -4035,9 +4077,13 @@ static int FDGsqlTag(Header h, HE_t he, int lvl)
     if (xx == 0) goto exit;
     FFLAGS.ui32p = he->p.ui32p;
 
-    xx = snprintf(instance, sizeof(instance), "'%u'", (unsigned)headerGetInstance(h));
+    if (!json)
+    xx = snprintf(instance, sizeof(instance), "%u", (unsigned)headerGetInstance(h));
+    else
+    *instance = '\0';
     nb = sizeof(*he->p.argv);
     ac = 0;
+    if (lvl == 1 || json) {
     for (i = 0; i < c; i++) {
 	if (lvl > 0 && FDGSkip(DN, BN, DI, i) != lvl)
 	    continue;
@@ -4056,6 +4102,37 @@ static int FDGsqlTag(Header h, HE_t he, int lvl)
 	} else
 	    nb += sizeof("file") - 1;
     }
+    } else if (lvl == 2 && !json) {
+    for (j = 0; j < d; j++) {
+    n = 0;
+    for (i = 0; i < c; i++) {
+	if (DI.ui32p[i] != j)
+	    continue;
+	if (lvl > 0 && FDGSkip(DN, BN, DI, i) != lvl)
+	    continue;
+	n++;
+    }
+    if (!n)
+        continue;
+    ac++;
+    nb += sizeof(*he->p.argv);
+    nb += strlen(instance) + sizeof(", '', ''");
+    nb += strlen(DN.argv[j]);
+    n = 0;
+    for (i = 0; i < c; i++) {
+	if (DI.ui32p[i] != j)
+	    continue;
+	if (lvl > 0 && FDGSkip(DN, BN, DI, i) != lvl)
+	    continue;
+	if (n)
+	    nb++;
+	n++;
+	nb += strlen(BN.argv[i]);
+	nb++;
+    }
+    nb += sizeof(", ''") - 1;
+    }
+    } /* lvl */
 
     he->t = RPM_STRING_ARRAY_TYPE;
     he->c = ac;
@@ -4063,6 +4140,7 @@ static int FDGsqlTag(Header h, HE_t he, int lvl)
     he->p.argv = xmalloc(nb);
     t = (char *) &he->p.argv[he->c + 1];
     ac = 0;
+    if (lvl == 1 || json) {
     /* FIXME: Files, then dirs, finally ghosts breaks sort order.  */
     for (i = 0; i < c; i++) {
 	if (lvl > 0 && FDGSkip(DN, BN, DI, i) != lvl)
@@ -4072,10 +4150,14 @@ static int FDGsqlTag(Header h, HE_t he, int lvl)
 	if (S_ISDIR(FMODES.ui16p[i]))
 	    continue;
 	he->p.argv[ac++] = t;
-	t = stpcpy( stpcpy(t, instance), ", '");
+	if (*instance && lvl == 2)
+	t = stpcpy( stpcpy(t, instance), ", ");
+	*t++ = '\'';
 	t = strcpy(t, DN.argv[DI.ui32p[i]]);	t += strlen(t);
 	t = strcpy(t, BN.argv[i]);		t += strlen(t);
 	t = stpcpy(t, "', 'file'");
+	if (*instance && lvl == 1)
+	t = stpcpy( stpcpy(t, ", "), instance);
 	*t++ = '\0';
     }
     for (i = 0; i < c; i++) {
@@ -4086,7 +4168,9 @@ static int FDGsqlTag(Header h, HE_t he, int lvl)
 	if (!S_ISDIR(FMODES.ui16p[i]))
 	    continue;
 	he->p.argv[ac++] = t;
-	t = stpcpy( stpcpy(t, instance), ", '");
+	if (*instance && lvl == 2)
+	t = stpcpy( stpcpy(t, instance), ", ");
+	*t++ = '\'';
 	t = strcpy(t, DN.argv[DI.ui32p[i]]);	t += strlen(t);
 	t = strcpy(t, BN.argv[i]);		t += strlen(t);
 #ifdef	NOTYET
@@ -4095,6 +4179,8 @@ static int FDGsqlTag(Header h, HE_t he, int lvl)
 	    t = stpcpy(t, "/");
 #endif
 	t = stpcpy(t, "', 'dir'");
+	if (*instance && lvl == 1)
+	t = stpcpy( stpcpy(t, ", "), instance);
 	*t++ = '\0';
     }
     for (i = 0; i < c; i++) {
@@ -4103,12 +4189,62 @@ static int FDGsqlTag(Header h, HE_t he, int lvl)
 	if (!(FFLAGS.ui32p[i] & 0x40))	/* XXX RPMFILE_GHOST */
 	    continue;
 	he->p.argv[ac++] = t;
-	t = stpcpy( stpcpy(t, instance), ", '");
+	if (*instance && lvl == 2)
+	t = stpcpy( stpcpy(t, instance), ", ");
+	*t++ = '\'';
 	t = strcpy(t, DN.argv[DI.ui32p[i]]);	t += strlen(t);
 	t = strcpy(t, BN.argv[i]);		t += strlen(t);
 	t = stpcpy(t, "', 'ghost'");
+	if (*instance && lvl == 1)
+	t = stpcpy( stpcpy(t, ", "), instance);
 	*t++ = '\0';
     }
+    } else if (lvl == 2 && !json) {
+    /* Dirs, with slash-joined basenames and single-letter filetypes. */
+    for (j = 0; j < d; j++) {
+    n = 0;
+    for (i = 0; i < c; i++) {
+	if (DI.ui32p[i] != j)
+	    continue;
+	if (lvl > 0 && FDGSkip(DN, BN, DI, i) != lvl)
+	    continue;
+	n++;
+    }
+    if (!n)
+        continue;
+    he->p.argv[ac++] = t;
+    if (*instance && lvl == 2)
+    t = stpcpy( stpcpy(t, instance), ", ");
+    *t++ = '\'';
+    t = strcpy(t, DN.argv[j]);	t += strlen(t);
+    if (t[-1] == '/')
+        t--;
+    t = stpcpy(t, "', '");
+    f = filetypes = xmalloc(c + 1);
+    n = 0;
+    for (i = 0; i < c; i++) {
+	if (DI.ui32p[i] != j)
+	    continue;
+	if (lvl > 0 && FDGSkip(DN, BN, DI, i) != lvl)
+	    continue;
+	if (n)
+	    *t++ = '/';
+	n++;
+	t = strcpy(t, BN.argv[i]);		t += strlen(t);
+	if (FFLAGS.ui32p[i] & 0x40)	/* XXX RPMFILE_GHOST */
+	    *f++ = 'g';
+	else if (S_ISDIR(FMODES.ui16p[i]))
+	    *f++ = 'd';
+	else
+	    *f++ = 'f';
+    }
+    *f++ = '\0';
+    t = stpcpy(stpcpy(t, "', '"), filetypes);
+    *t++ = '\'';
+    filetypes = _free(filetypes);
+    *t++ = '\0';
+    }
+    } /* lvl */
 
     he->p.argv[he->c] = NULL;
 /*@=compmempass@*/
@@ -4134,15 +4270,31 @@ static int F1sqlTag(Header h, HE_t he)
 	/*@modifies he, internalState @*/
 {
     he->tag = RPMTAG_BASENAMES;
-    return FDGsqlTag(h, he, 1);
+    return FDGsqlTag(h, he, 1, 0);
 }
 
 static int F2sqlTag(Header h, HE_t he)
 	/*@globals internalState @*/
 	/*@modifies he, internalState @*/
 {
+    he->tag = RPMTAG_DIRNAMES; /* use dirnames, not basenames */
+    return FDGsqlTag(h, he, 2, 0);
+}
+
+static int F1jsonTag(Header h, HE_t he)
+	/*@globals internalState @*/
+	/*@modifies he, internalState @*/
+{
     he->tag = RPMTAG_BASENAMES;
-    return FDGsqlTag(h, he, 2);
+    return FDGsqlTag(h, he, 1, 1);
+}
+
+static int F2jsonTag(Header h, HE_t he)
+	/*@globals internalState @*/
+	/*@modifies he, internalState @*/
+{
+    he->tag = RPMTAG_BASENAMES;
+    return FDGsqlTag(h, he, 2, 1);
 }
 
 static int FDGyamlTag(Header h, HE_t he, int lvl)
@@ -5080,6 +5232,18 @@ static struct headerSprintfExtension_s _headerCompoundFormats[] = {
 	{ .tagFunction = F1sqlTag } },
     { HEADER_EXT_TAG, "RPMTAG_FILESSQLENTRY2",
 	{ .tagFunction = F2sqlTag } },
+    { HEADER_EXT_TAG, "RPMTAG_PROVIDEJSONENTRY",
+	{ .tagFunction = PjsonTag } },
+    { HEADER_EXT_TAG, "RPMTAG_REQUIREJSONENTRY",
+	{ .tagFunction = RjsonTag } },
+    { HEADER_EXT_TAG, "RPMTAG_CONFLICTJSONENTRY",
+	{ .tagFunction = CjsonTag } },
+    { HEADER_EXT_TAG, "RPMTAG_OBSOLETEJSONENTRY",
+	{ .tagFunction = OjsonTag } },
+    { HEADER_EXT_TAG, "RPMTAG_FILESJSONENTRY1",
+	{ .tagFunction = F1jsonTag } },
+    { HEADER_EXT_TAG, "RPMTAG_FILESJSONENTRY2",
+	{ .tagFunction = F2jsonTag } },
     { HEADER_EXT_TAG, "RPMTAG_DEBCONFLICTS",
 	{ .tagFunction = debconflictsTag } },
     { HEADER_EXT_TAG, "RPMTAG_DEBDEPENDS",
