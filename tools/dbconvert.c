@@ -114,7 +114,7 @@ rpmdb_convert(const char *prefix, int dbtype, int swap, int rebuild)
 	     "create mpool txn thread thread_count=64 nofsync", -1);
 
     /* (ugly) clear any existing locks */
-    fn = rpmGetPath(prefix[0] ? prefix : "", dbpath, "/", "__db.*", NULL);
+    fn = rpmGetPath(prefix && prefix[0] ? prefix : "", dbpath, "/", "__db.*", NULL);
     xx = Glob(fn, 0, NULL, &gl);
     for (i = 0; i < (int) gl.gl_pathc; i++)
 	xx = Unlink(gl.gl_pathv[i]);
@@ -377,7 +377,7 @@ rpmdb_convert(const char *prefix, int dbtype, int swap, int rebuild)
     fn = _free(fn);
 
     /* clear locks */
-    fn = rpmGetPath(prefix[0] ? prefix : "", dbpath, "/", "__db.*", NULL);
+    fn = rpmGetPath(prefix && prefix[0] ? prefix : "", dbpath, "/", "__db.*", NULL);
     xx = Glob(fn, 0, NULL, &gl);
     for (i = 0; i < (int) gl.gl_pathc; i++)
 	xx = Unlink(gl.gl_pathv[i]);
@@ -414,9 +414,9 @@ static struct poptOption optionsTable[] = {
 	"rpm root path", "path"},
 
   { "btree", 'b', POPT_ARG_VAL,			&dbType, 0,
-	"swap indexes to big endian", NULL},
+	"convert database type to btree", NULL},
   { "hash", 'h', POPT_ARG_VAL,			&dbType, 1,
-	"swap indexes to little endian", NULL},
+	"convert database type to hash", NULL},
 
   { "bigendian", 'B', POPT_ARG_VAL,		&byteOrder, 1,
 	"swap indexes to big endian", NULL},

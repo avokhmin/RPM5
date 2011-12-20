@@ -2,7 +2,7 @@
 #find-debuginfo.sh - automagically generate debug info and file list
 #for inclusion in an rpm spec file.
 #
-# Usage: find-debuginfo.sh [--strict-build-id] [-g]
+# Usage: find-debuginfo.sh [--strict-build-id] [-g] [-r]
 #	 		   [-o debugfiles.list]
 #			   [[-l filelist]... [-p 'pattern'] -o debuginfo.list]
 #			   [builddir]
@@ -18,12 +18,16 @@
 # the -l filelist file, or whose names match the -p pattern.
 # The -p argument is an egrep-style regexp matching the a file name,
 # and must not use anchors (^ or $).
+# The -r flag says to use eu-strip --reloc-debug-sections.
 #
 # All file names in switches are relative to builddir (. if not given).
 #
 
 # With -g arg, pass it to strip on libraries.
 strip_g=false
+# with -r arg, pass --reloc-debug-sections to eu-strip.
+strip_r=false
+
 
 # Barf on missing build IDs.
 strict=false
@@ -38,6 +42,9 @@ while [ $# -gt 0 ]; do
     ;;
   -g)
     strip_g=true
+    ;;
+  -r)
+    strip_r=true
     ;;
   -o)
     if [ -z "${lists[$nout]}" -a -z "${ptns[$nout]}" ]; then
@@ -89,11 +96,12 @@ debugdir="${RPM_BUILD_ROOT}/usr/lib/debug"
 strip_to_debug()
 {
   local g=
+  $strip_r && r=--reloc-debug-sections
   $strip_g && case "$(file -bi "$2")" in
-  application/x-sharedlib,*) g=-g ;;
+  application/x-sharedlib*) g=-g ;;
   esac
-  eu-strip --remove-comment $g -f "$1" "$2" || exit
-  chmod 444 "$1" || exit
+  eu-strip --remove-comment $r $g $([ -n "$DISABLE_DEBUG" ] || echo -f "$1") "$2" || exit  
+  [ -n "$DISABLE_DEBUG" ] || chmod 444 "$1" || exit
 }
 
 # Make a relative symlink to $1 called $3$2
@@ -173,6 +181,12 @@ set -o pipefail
 strict_error=ERROR
 $strict || strict_error=WARNING
 
+[[ -n "$EXCLUDE_FROM_STRIP" ]] && \
+EXCLUDE_REGEXP=`perl -e 'print "(", join("|", @ARGV), ")"' $EXCLUDE_FROM_STRIP`
+[[ -n "$EXCLUDE_FROM_FULL_STRIP" ]] && \
+EXCLUDE_FULL_REGEXP=`perl -e 'print "(", join("|", @ARGV), ")"' $EXCLUDE_FROM_FULL_STRIP`
+
+echo $EXCLUDE_REGEXP
 # Strip ELF binaries
 find "$RPM_BUILD_ROOT" ! -path "${debugdir}/*.debug" -type f \
      		     \( -perm -0100 -or -perm -0010 -or -perm -0001 \) \
@@ -180,6 +194,10 @@ find "$RPM_BUILD_ROOT" ! -path "${debugdir}/*.debug" -type f \
 file -N -f - | sed -n -e 's/^\(.*\):[ 	]*.*ELF.*, not stripped/\1/p' |
 xargs --no-run-if-empty stat -c '%h %D_%i %n' |
 while read nlinks inum f; do
+  [ -n "$EXCLUDE_REGEXP" ] && grep -E -q "$EXCLUDE_REGEXP" <<< "$f" && \
+  continue
+  [ -n "$DISABLE_DEBUG" ] && strip_to_debug "" "$f" && continue
+
   get_debugfn "$f"
   [ -f "${debugfn}" ] && continue
 

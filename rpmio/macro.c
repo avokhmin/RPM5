@@ -1237,6 +1237,7 @@ doFoo(MacroBuf mb, int negate, const char * f, size_t fn,
     char * buf = alloca(bufn);
     char *b = NULL, *be;
     int c;
+    mode_t mode;
 
     buf[0] = '\0';
     if (g != NULL) {
@@ -1353,6 +1354,12 @@ doFoo(MacroBuf mb, int negate, const char * f, size_t fn,
 	case 6:	/* COMPRESSED_XZ */
 	    sprintf(be, "%%__xz -dc '%s'", b);
 	    break;
+	case 7: /* COMPRESSED_LRZIP */
+	    sprintf(be, "%%__lrzip -dqo- %s", b);
+	    break;
+	case 8:	/* COMPRESSED_LZIP */
+	    sprintf(be, "%%__lzip -dc %s", b);
+	    break;
 	}
 	b = be;
     } else if (STREQ("mkstemp", f, fn)) {
@@ -1364,7 +1371,9 @@ doFoo(MacroBuf mb, int negate, const char * f, size_t fn,
 	    be++;
 /*@=globs@*/
 #if defined(HAVE_MKSTEMP)
+        mode = umask(0077);
 	(void) close(mkstemp(b));
+        (void) umask(mode);
 #else
 	(void) mktemp(b);
 #endif
@@ -3033,6 +3042,12 @@ int isCompressed(const char * file, rpmCompressedMagic * compressed)
     if (magic[0] == (unsigned char) 0xFD && magic[1] == 0x37 &&	magic[2] == 0x7A
      && magic[3] == 0x58 && magic[4] == 0x5A && magic[5] == 0x00)		/* xz */
 	*compressed = COMPRESSED_XZ;
+     else if ((magic[0] == 'L') && (magic[1] == 'Z') &&
+	       (magic[2] == 'I') && (magic[3] == 'P'))	/* lzip */
+	*compressed = COMPRESSED_LZIP;
+    else if ((magic[0] == 'L') && (magic[1] == 'R') &&
+	       (magic[2] == 'Z') && (magic[3] == 'I')) 		/* lrzip */
+	*compressed = COMPRESSED_LRZIP;
     else
     if ((magic[0] == (unsigned char) 0037 && magic[1] == (unsigned char) 0213)	/* gzip */
      ||	(magic[0] == (unsigned char) 0037 && magic[1] == (unsigned char) 0236)	/* old gzip */

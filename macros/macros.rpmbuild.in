@@ -21,6 +21,7 @@
 %__ranlib		@RANLIB@
 %__remsh		%{__rsh}
 %__strip		@__STRIP@
+%__eu_strip             @__EU_STRIP@
 
 # XXX avoid failures if tools are not installed when rpm is built.
 %__libtoolize		@LIBTOOLIZE@
@@ -633,16 +634,16 @@ done \
 %efi %{ix86} x86_64 ia64
 
 # same thing for arm
-%arm    arm armv3 armv3l armv3b armv4 armv4l armv4b armv5 armv5l armv5b armv5te armv5tel armv5teb xscale armv6 armv6l
+%arm    arm armv3 armv3l armv3b armv4 armv4l armv4b armv5 armv5l armv5b armv5te armv5tel armv5teb xscale armv6 armv6l armv7l
 
 # same for alpha
 %alpha  alpha alphaev56 alphaev6 alphaev67
 
 # and sparc
-%sparc sun4 sun4m sun4c sun4d sun4u sparcv9b sparcv9v2 %{sparcx}
+%sparc sun4 sun4m sun4c sun4d sun4u sparc sparcv8 sparcv9 sparcv9b sparc9v sparcv9v2
 
 # add alternative sparc architectures macro (bugzilla #455972 patch)
-%sparcx sparc sparcv8 sparcv9 sparcv9v sparc64 sparc64v
+%sparcx %sparc sparc64 sparc64v sparc64v2
 
 # also for mips
 %mips mips mips2 mips3 mips4 octeon

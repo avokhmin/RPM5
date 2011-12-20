@@ -37,7 +37,7 @@ class bdist_rpm5(bdist_rpm):
             '',
             'Name:\t\tpython-' + module,
             'Version:\t' + version,
-            'Release:\t%mkrel ' + release,
+            'Release:\t' + release,
             'Summary:\t' + summary,
             'Source0:\thttp://pypi.python.org/packages/source/%c/%%{oname}/%%{oname}-%%{version}.tar' % name[0],
             ])
@@ -51,7 +51,14 @@ class bdist_rpm5(bdist_rpm):
         else:
             spec_file[-1] += '.gz'
 
-        license = self.distribution.get_license().replace("GPL ", "GPLv").strip()
+        license = self.distribution.get_license()
+        if license == "UNKNOWN":
+                classifiers = self.distribution.get_classifiers()
+                for classifier in classifiers:
+                        values = classifier.split(" :: ")
+                        if values[0] == "License":
+                                license = values[-1]
+        license.replace("GPL ", "GPLv").strip()
         spec_file.extend([
             'License:\t' + license,
             'Group:\t\t' + self.group,])
@@ -151,7 +158,6 @@ class bdist_rpm5(bdist_rpm):
              ("python setup.py install "
               "--root=%{buildroot}")),
             ('check', 'verify_script', verify_script),
-            ('clean', 'clean_script', "rm -rf %{buildroot}"),
             ('pre', 'pre_install', None),
             ('post', 'post_install', None),
             ('preun', 'pre_uninstall', None),

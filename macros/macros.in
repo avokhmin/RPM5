@@ -91,6 +91,8 @@
 %__ldconfig		@__LDCONFIG@
 %__ln			@__LN@
 %__ln_s			@LN_S@
+%__lzip			@__LZIP@
+%__lrzip		@__LRZIP@
 %__lzma			@__LZMA@
 %__lzop			@__LZOP@
 %__make			@__MAKE@
@@ -520,7 +522,7 @@ package or when debugging this package.\
 
 # Horowitz Key Protocol server configuration
 #
-%_hkp_keyserver         hkp://keys.rpm5.org
+%_hkp_keyserver         hkp://keys.n3npq.net
 %_hkp_keyserver_query   %{_hkp_keyserver}/pks/lookup?op=get&search=
 
 
@@ -940,7 +942,7 @@ package or when debugging this package.\
 # helpers are also used by %{_rpmhome}/rpmdeps {--provides|--requires}.
 #%__executable_provides	%{_rpmhome}/executabledeps.sh --provides
 #%__executable_requires	%{_rpmhome}/executabledeps.sh --requires
-%__scriptlet_requires	%{__bash} --rpm-requires
+%__scriptlet_requires  %{__bash} --rpm-requires
 
 #==============================================================================
 # XXX Caveat:

@@ -297,19 +297,62 @@ AC_ARG_ENABLE(build-static,
 ])
 AC_SUBST(LDFLAGS_STATIC)
 
-dnl # use ld_version scripts on platforms known to support it.
-have_ld_version_script=no
-case "${host}" in
-    *-*-linux* ) have_ld_version_script=yes ;;
-    *-*-gnu*   ) have_ld_version_script=yes ;;
-esac
-AC_ARG_ENABLE(
-    [build-versionscript],
-    AS_HELP_STRING([--enable-build-versionscript],[enable/disable use of GNU ld(1) version script (default is system dependent)]),
-    [have_ld_version_script=$enableval], [:])
-AM_CONDITIONAL(
-    [HAVE_LD_VERSION_SCRIPT],
-    [test ".$have_ld_version_script" = .yes])
+dnl check for version script support in the linker (GNU ld, or Solaris ld style)
+AC_ARG_ENABLE([build-versionscript],
+              AS_HELP_STRING([--enable-build-versionscript],[enable/disable use of linker version script.
+                              (default is system dependent)]),
+              [have_ld_version_script=$enableval],
+              [have_ld_version_script=yes] )
+
+AS_IF([test "x$have_ld_version_script" = xyes],
+  [ 
+    AC_MSG_CHECKING([if ld version-script works - GNU ld, Solaris ld])
+    cat > conftest.map <<EOF
+RELEASE
+{
+	global:
+		rpm_*;
+	local:
+		*;
+};
+PRIVATE
+{
+	global:
+		rpmi_*;
+	local:
+		*;
+};
+EOF
+    save_LDFLAGS="$LDFLAGS"
+    LDFLAGS="$LDFLAGS -Wl,--version-script=conftest.map"
+    AC_LINK_IFELSE([AC_LANG_PROGRAM([[
+                   void rpm_symbol1(void) {}
+                   void rpmi_symbol2(void) {}
+                   ]], [])],
+                   [have_ld_version_script=yes], [have_ld_version_script=no])
+    LDFLAGS="$save_LDFLAGS"
+    if test x$have_ld_version_script != xyes
+    then
+    	save_LDFLAGS="$LDFLAGS"
+    	LDFLAGS="$LDFLAGS -Wl,-M,conftest.map"
+        AC_LINK_IFELSE([AC_LANG_PROGRAM([[
+                   void rpm_symbol1(void) {}
+                   void rpmi_symbol2(void) {}
+                   ]], [])],
+                   [have_ld_version_script=yes], [have_ld_version_script=no])
+    	LDFLAGS="$save_LDFLAGS"
+    	if test x$have_ld_version_script = xyes
+    	then
+		LD_VERSION_SCRIPT_FLAG=-M
+    	fi
+    else
+      LD_VERSION_SCRIPT_FLAG=--version-script
+    fi
+    AC_MSG_RESULT($have_ld_version_script)
+    rm -f conftest.map conftest.c
+])
+AC_SUBST([LD_VERSION_SCRIPT_FLAG])
+AM_CONDITIONAL([HAVE_LD_VERSION_SCRIPT],[test "$have_ld_version_script" = "yes"])
 
 dnl # support implicit internal library dependencies
 AC_ARG_ENABLE(
@@ -527,6 +570,8 @@ AC_PATH_PROG(__GZIP, gzip, /bin/gzip, $MYPATH)
 AC_PATH_PROG(__HG, hg, %{_bindir}/hg, $MYPATH)
 AC_PATH_PROG(__ID, id, /usr/bin/id, $MYPATH)
 AC_PATH_PROG(__INSTALL, install, /usr/bin/install, $MYPATH)
+AC_PATH_PROG(__LRZIP, lrzip, /usr/bin/lrzip, $MYPATH)
+AC_PATH_PROG(__LZIP, lzip, /usr/bin/lzip, $MYPATH)
 AC_PATH_PROG(__INSTALL_INFO, install-info, /sbin/install-info, $MYPATH)
 AC_PATH_PROG(__LDCONFIG, ldconfig, /sbin/ldconfig, $MYPATH)
 AC_PATH_PROG(__LN, ln, /bin/ln, $MYPATH)
@@ -563,6 +608,35 @@ AC_PATH_PROG(__STRIP, strip, %{_bindir}/strip, $MYPATH)
 
 AC_CHECK_PROGS(LIBTOOLIZE, libtoolize glibtoolize, libtoolize)
 AC_SUBST(LIBTOOLIZE)
+
+# check for elfutils eu-strip --reloc-debug_sections
+# elfutils-0.153 introduce the --reloc-debug-sections
+# This is a new option to eu-strip that strips
+# out/resolves relocations between .debug_* elf sections in ET_REL files.
+# This can save a lot of space for kernel module.
+# Use this option in find-debuginfo if supported
+# Check also for the eu_strip path and AC_SUBST it if found
+# not used really today
+old_PATH=$PATH
+PATH=$MYPATH
+AC_CACHE_CHECK([whether eu-strip supports --reloc-debug-sections], [ac_cv_path_EU_STRIP],
+  [AC_PATH_PROGS_FEATURE_CHECK([EU_STRIP], [eu-strip strip],
+    [[eu_stripout=`$ac_path_EU_STRIP --help | grep "\--reloc-debug-sections"`
+      test "x$eu_stripout" != x \
+      && ac_cv_path_EU_STRIP=$ac_path_EU_STRIP debuginfo_eu_strip_reloc_debug_sections="-r"]],
+    [[   debuginfo_eu_strip_reloc_debug_sections="" ]] 
+)])
+PATH=$old_PATH
+AC_SUBST([debuginfo_eu_strip_reloc_debug_sections])
+AS_IF([test "x$ac_cv_path_EU_STRIP" != x], [
+	AC_SUBST([EU_STRIP], [$ac_cv_path_EU_STRIP])
+], [
+	AC_SUBST([EU_STRIP], [:])
+	AC_MSG_RESULT([no])
+])
+
+
+
 
 dnl # check for id -u
 AC_MSG_CHECKING(whether id supports -u)
@@ -2281,7 +2355,7 @@ dnl # determine whether to build using a specific vendor's changes or not
 AC_MSG_CHECKING([if building for a specfic vendor])
 AC_ARG_WITH(
     [vendor],
-    AS_HELP_STRING([--with-vendor=VENDOR], [build with a supported vendor's specific set of changes: mandriva, ark, fedora, openmamba]),
+    AS_HELP_STRING([--with-vendor=VENDOR], [build with a supported vendor's specific set of changes: mandriva, ark, fedora, openmamba,suse]),
     [if test ".$withval" != .no; then
 	    case "$withval" in
 	    "mandriva")
@@ -2296,6 +2370,9 @@ AC_ARG_WITH(
 		    ;;
 	    "openmamba")
 		    AC_DEFINE([RPM_VENDOR_OPENMAMBA], 1, Vendor is openmamba)
+		    ;;
+	    "suse")
+		    AC_DEFINE([RPM_VENDOR_SUSE], 1, Vendor is suse)
 		    ;;
 	    esac
 	    AC_MSG_RESULT([$withval])
@@ -2331,7 +2408,7 @@ AC_CONFIG_FILES([ po/Makefile.in
     rpmdb/DB_CONFIG
     macros/macros macros/macros.rpmbuild
     macros/cmake macros/gstreamer macros/java macros/kernel macros/libtool
-    macros/mandriva macros/mono macros/perl macros/pkgconfig macros/php
+    macros/mandriva macros/suse macros/fedora macros/mono macros/perl macros/pkgconfig macros/php
     macros/python macros/ruby macros/selinux macros/tcl
     doc/Makefile
     doc/manual/Makefile doc/fr/Makefile doc/ja/Makefile doc/ko/Makefile
