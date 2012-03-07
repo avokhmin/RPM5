@@ -8,7 +8,6 @@ benchmark
 bson
 bson_subobject
 count_delete
-cursors
 endian_swap
 errors
 examples
