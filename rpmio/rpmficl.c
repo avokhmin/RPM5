@@ -33,7 +33,7 @@ static void rpmficlFini(void * _ficl)
         /*@globals fileSystem @*/
         /*@modifies *_ficl, fileSystem @*/
 {
-    rpmficl ficl = _ficl;
+    rpmficl ficl = (rpmficl) _ficl;
 
 #if defined(WITH_FICL)
     ficlSystem * sys = ficl->sys;
@@ -87,7 +87,7 @@ rpmficl rpmficlNew(char ** av, uint32_t flags)
     int xx;
 
     if (av == NULL) av = _av;
-    ac = argvCount(av);
+    ac = argvCount((ARGV_t)av);
 
     ficlSystemInformationInitialize(&fsi);
     fsi.context = (void *)ficl;
