@@ -213,6 +213,10 @@ struct rpmtsi_s {
 #endif
 };
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 int rpmteClose(rpmte te, rpmts ts, int reset_fi)
 	/*@modifies te, ts @*/;
 Header rpmteDBHeader(rpmts ts, uint32_t rec)
@@ -232,6 +236,10 @@ int rpmteFailed(rpmte te)
 
 int rpmteHaveTransScript(rpmte te, rpmTag tag)
 	/*@*/;
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif	/* _RPMTE_INTERNAL */
 
@@ -332,7 +340,6 @@ extern const char * rpmteV(rpmte te)
 extern const char * rpmteR(rpmte te)
 	/*@*/;
 
-#ifdef	RPM_VENDOR_MANDRIVA
 /** \ingroup rpmte
  * Retrieve distepoch string of transaction element.
  * @param te		transaction element
@@ -341,7 +348,6 @@ extern const char * rpmteR(rpmte te)
 /*@observer@*/ /*@null@*/
 extern const char * rpmteD(rpmte te)
 	/*@*/;
-#endif
 
 /** \ingroup rpmte
  * Retrieve arch string of transaction element.
